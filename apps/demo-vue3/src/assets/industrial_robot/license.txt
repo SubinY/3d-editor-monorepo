@@ -1,0 +1,11 @@
+Model Information:
+* title:	Industrial Robot
+* source:	https://sketchfab.com/3d-models/industrial-robot-e5e6703e7788417e9761eb4dc516de5a
+* author:	jacuo777 (https://sketchfab.com/jacuo777)
+
+Model License:
+* license type:	CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
+* requirements:	Author must be credited. Commercial use is allowed.
+
+If you use this 3D model in your project be sure to copy paste this credit wherever you share it:
+This work is based on "Industrial Robot" (https://sketchfab.com/3d-models/industrial-robot-e5e6703e7788417e9761eb4dc516de5a) by jacuo777 (https://sketchfab.com/jacuo777) licensed under CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)

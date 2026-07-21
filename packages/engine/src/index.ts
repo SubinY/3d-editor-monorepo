@@ -1,0 +1,36 @@
+// Runtime core
+export * from './runtime/CoreContext'
+export * from './runtime/Renderer'
+export * from './runtime/RenderLoop'
+export * from './runtime/CameraManager'
+export * from './runtime/EventBus'
+export * from './runtime/PluginManager'
+export * from './runtime/PresetManager'
+export * from './runtime/EditorActions'
+
+// Editing & interaction
+export * from './editing/controls/OrbitController'
+export * from './editing/controls/TransformController'
+export * from './editing/controls/ControlAdapter'
+export * from './editing/interaction/SelectionManager'
+export * from './editing/history/HistoryManager'
+export * from './editing/scene/SceneGraphManager'
+export * from './editing/tools/AlignmentTool'
+export * from './editing/helpers/HelperController'
+export * from './editing/helpers/AxisHelper'
+export * from './editing/effects/SelectionHighlight'
+
+// Assets & factories
+export * from './assets/AssetRegistry'
+export * from './assets/AssetLoader'
+export * from './assets/GeometryFactory'
+export * from './assets/MaterialFactory'
+export * from './assets/LightingFactory'
+
+// Other subsystems
+export * from './animation/AnimationSystem'
+export * from './io/SceneSerializer'
+export * from './dsl/schema'
+export * from './policies/EditorObjectPolicy'
+export * from './utils'
+export * from './types'

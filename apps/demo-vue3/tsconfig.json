@@ -1,0 +1,20 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "types": ["vite/client"],
+    "baseUrl": ".",
+    "paths": {
+      "@3d-editor/engine": ["../../packages/engine/src"],
+      "@3d-editor/extensions": ["../../packages/extensions/src"],
+      "@3d-editor/presets": ["../../packages/presets/src"]
+    }
+  },
+  "include": [
+    "src/**/*.ts",
+    "src/**/*.d.ts",
+    "src/**/*.vue",
+    "../../packages/engine/src/**/*.ts",
+    "../../packages/extensions/src/**/*.ts",
+    "../../packages/presets/src/**/*.ts"
+  ]
+}
