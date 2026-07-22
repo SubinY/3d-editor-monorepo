@@ -1,39 +1,50 @@
 # Repository Guidelines
 
-This monorepo contains the 3D editor engine and related apps.
+本 monorepo 为 3D 编辑器内核与演示应用。架构与阅读顺序以文档为准，勿依赖已删除的零散文档。
 
-## Project Structure & Modules
-- `apps/demo-vue3`: Example Vue 3 application consuming the engine.
-- `packages/engine`: Core rendering kernel and editor logic.
-- `packages/extensions`: Optional extensions / plugins to the core engine.
-- `docs`: Architecture notes, feature designs, and debug diaries.
+## 必读文档
+
+- `docs/architecture.md` — 架构设计
+- `docs/reading-guide.md` — 项目阅读指南
+
+## Project Structure
+
+- `packages/engine`：`@3d-editor/engine` 内核（CoreContext、编辑、Preset 机制、序列化）
+- `packages/extensions`：`@3d-editor/extensions` 插件（snap/timeline/performance）与 kit
+- `packages/presets`：`@3d-editor/presets` 场景装配（basic、factory 等）
+- `apps/demo-vue3`：主演示（工厂 / 通用编辑器）
+- `apps/demo-view`：视图向演示
+- `docs`：正式文档（仅上述两篇）
+
+依赖方向：`apps → presets → extensions → engine`（禁止反向）。
 
 ## Build, Test & Development
-- Install: `pnpm install` (Node ≥18, pnpm ≥8).
-- Dev (all apps): `pnpm dev` → runs `turbo run dev`.
-- Build: `pnpm build` → builds all packages/apps.
-- Test: `pnpm test` → runs `turbo run test` (Vitest in workspaces).
-- Lint: `pnpm lint` → ESLint over TypeScript/JavaScript.
-- Format: `pnpm format` → Prettier over `*.{ts,tsx,js,jsx,vue,md,json}`.
-- Docs: `pnpm docs:dev` / `pnpm docs:build` from the repo root.
+
+- Install: `pnpm install`（Node ≥18，pnpm ≥8）
+- Dev: `pnpm dev`
+- Build: `pnpm build`
+- Test: `pnpm test`（Vitest / turbo）
+- Lint: `pnpm lint`
+- Format: `pnpm format`
 
 ## Coding Style & Naming
-- Language: TypeScript-first; prefer strict types, avoid `any` where practical.
-- Formatting: Prettier config in `.prettierrc.js` (2 spaces, no semicolons, single quotes).
-- Linting: ESLint config in `.eslintrc.js`; fix warnings before submitting.
-- Naming: `camelCase` for variables/functions, `PascalCase` for types/classes/components, `kebab-case` for file and directory names in apps/components.
 
-## Testing Guidelines
-- Framework: Vitest per package/app; colocate tests near source or under a `tests` folder following local patterns.
-- Naming: Use `*.test.ts` / `*.spec.ts`.
-- Expectations: Add or update tests for new features and bug fixes; keep coverage roughly in line with surrounding code.
+- TypeScript 优先；避免不必要的 `any`
+- Prettier：2 空格、无分号、单引号（`.prettierrc.js`）
+- 命名：`camelCase` 变量/函数，`PascalCase` 类型/类/组件，文件目录 `kebab-case`
+- 编辑操作优先 `ctx.actions.*`；辅助物体使用 `userData.nonSelectable`
 
-## Commits & Pull Requests
-- Commits: Keep messages imperative and focused (e.g., `add transform controls`, `fix selection bounding box`).
-- PRs: Include a clear description, screenshots/GIFs for UI changes (especially in `apps/demo-vue3`), and reference related issues if applicable.
-- CI: Ensure `pnpm lint` and `pnpm test` pass before opening or merging PRs.
+## Testing
 
-## Agent-Specific Notes
-- Respect this file’s guidance for any changes under the repo root.
-- Prefer minimal, focused diffs and avoid mass formatting outside the scope of the task.
+- Vitest；`*.test.ts` / `*.spec.ts`
+- 新功能与修 bug 应补测；与周边覆盖大致对齐即可
 
+## Commits & PRs
+
+- 提交信息祈使、聚焦（如 `add transform controls`、`fix selection bounding box`）
+- PR 说明清晰；UI 变更附截图/GIF；确保 lint / test 通过
+
+## Agent Notes
+
+- 改架构认知时同步更新 `docs/architecture.md` / `docs/reading-guide.md`
+- 最小 diff；不做任务范围外的大规模格式化
