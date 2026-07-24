@@ -1,0 +1,220 @@
+/** 选择模式：点选、拖移、旋转手柄，写回 doc.commands */
+import type { EditorNodeJSON } from '../../../document/types'
+import type { AlignGuide } from '../utils/align-guides'
+import { snapWithAlignGuides } from '../utils/align-guides'
+import { computeNodeLayout } from '../utils/node-layout'
+import { hitTestNode, hitTestRotateHandle, hitTestWall } from '../utils/hit-test'
+import type { PlanePoint } from '../types'
+import type { PointerInteraction, Viewport2DHost } from './types'
+
+const SOURCE = 'viewport2d'
+
+/** 选择 / 平移 / 旋转手柄 */
+export class SelectInteraction implements PointerInteraction {
+  dragNodeId: string | null = null
+  dragGhost: PlanePoint | null = null
+  dragOffset: PlanePoint = { u: 0, v: 0 }
+  dragColliding = false
+  dragMoved = false
+  alignGuides: AlignGuide[] = []
+
+  rotateNodeId: string | null = null
+  rotateCenter: PlanePoint | null = null
+  rotateStartPointerAngle = 0
+  rotateBaseYaw = 0
+  rotateGhostYaw = 0
+  rotateMoved = false
+  rotateColliding = false
+
+  constructor(private host: Viewport2DHost) {}
+
+  reset(): void {
+    this.dragNodeId = null
+    this.dragGhost = null
+    this.dragColliding = false
+    this.dragMoved = false
+    this.alignGuides = []
+    this.rotateNodeId = null
+    this.rotateCenter = null
+    this.rotateMoved = false
+    this.rotateColliding = false
+  }
+
+  onPointerDown(event: PointerEvent, plane: PlanePoint): boolean {
+    if (this.host.readonly || event.button !== 0) return false
+    const { doc } = this.host
+
+    const selectedId = doc.selection.first()
+    if (selectedId) {
+      const selected = doc.getNode(selectedId)
+      if (selected && this.hitRotate(selected, plane.u, plane.v)) {
+        const layout = this.layoutFor(selected)
+        this.rotateNodeId = selected.id
+        this.rotateCenter = layout.center
+        this.rotateBaseYaw = layout.yaw
+        this.rotateGhostYaw = layout.yaw
+        this.rotateStartPointerAngle = Math.atan2(plane.v - layout.center.v, plane.u - layout.center.u)
+        this.rotateMoved = false
+        this.rotateColliding = false
+        this.host.requestRender()
+        return true
+      }
+    }
+
+    const hitNode = hitTestNode({
+      nodes: doc.getNodes(),
+      u: plane.u,
+      v: plane.v,
+      isElevation: this.host.isElevation,
+      planeFromPosition: p => this.host.planeFromPosition(p),
+      footprintSize: item => this.host.footprintSize(item),
+      itemFor: n => this.host.itemFor(n)
+    })
+    if (hitNode) {
+      doc.selection.set(hitNode.id)
+      const nodePlane = this.host.planeFromPosition(hitNode.transform.position)
+      this.dragNodeId = hitNode.id
+      this.dragOffset = { u: nodePlane.u - plane.u, v: nodePlane.v - plane.v }
+      this.dragGhost = { ...nodePlane }
+      this.dragColliding = false
+      this.dragMoved = false
+      this.host.requestRender()
+      return true
+    }
+
+    const hitWall = hitTestWall(plane.u, plane.v, doc.getWalls(), this.host.scale, this.host.isElevation)
+    if (hitWall) {
+      doc.selection.set(hitWall.id)
+      this.host.onWallSelect?.(hitWall)
+    } else {
+      doc.selection.clear()
+    }
+    this.host.requestRender()
+    return true
+  }
+
+  onPointerMove(_event: PointerEvent, plane: PlanePoint): boolean {
+    if (this.host.readonly) return false
+
+    if (this.rotateNodeId && this.rotateCenter) {
+      this.rotateMoved = true
+      const pointerAngle = Math.atan2(plane.v - this.rotateCenter.v, plane.u - this.rotateCenter.u)
+      const delta = pointerAngle - this.rotateStartPointerAngle
+      this.rotateGhostYaw = this.rotateBaseYaw + delta
+      const node = this.host.doc.getNode(this.rotateNodeId)
+      if (node) {
+        const rotation = this.host.yawToRotation(this.rotateGhostYaw, node.transform.rotation)
+        const hit = this.host.doc.checkCollision(
+          { position: node.transform.position, rotation, scale: node.transform.scale },
+          this.host.itemFor(node),
+          { excludeId: this.rotateNodeId, parentId: this.host.doc.getParentId(this.rotateNodeId) }
+        )
+        this.rotateColliding = Boolean(hit)
+      }
+      this.host.requestRender()
+      return true
+    }
+
+    if (this.dragNodeId) {
+      this.dragMoved = true
+      let next = { u: plane.u + this.dragOffset.u, v: plane.v + this.dragOffset.v }
+      const node = this.host.doc.getNode(this.dragNodeId)
+      if (node) {
+        const item = this.host.itemFor(node)
+        const { wu, wv } = this.host.footprintSize(item)
+        const targets = this.host.doc
+          .getNodes()
+          .filter(n => n.id !== this.dragNodeId)
+          .map(n => {
+            const fp = this.host.footprintSize(this.host.itemFor(n))
+            const p = this.host.planeFromPosition(n.transform.position)
+            const cu = p.u
+            const cv = this.host.isElevation ? p.v + fp.wv / 2 : p.v
+            return { u: cu, v: cv, wu: fp.wu, wv: fp.wv }
+          })
+        const centerV = this.host.isElevation ? next.v + wv / 2 : next.v
+        const snapped = snapWithAlignGuides({
+          moving: { u: next.u, v: centerV, wu, wv },
+          targets,
+          walls: this.host.isElevation ? [] : this.host.doc.getWalls(),
+          threshold: Math.max(0.08, 10 / this.host.scale)
+        })
+        this.alignGuides = snapped.guides
+        next = {
+          u: snapped.u,
+          v: this.host.isElevation ? snapped.v - wv / 2 : snapped.v
+        }
+        this.dragGhost = next
+        const nextPos = this.host.positionFromPlane(next.u, next.v, node.transform)
+        const hit = this.host.doc.checkCollision(
+          { position: nextPos, rotation: node.transform.rotation, scale: node.transform.scale },
+          item,
+          { excludeId: this.dragNodeId, parentId: this.host.doc.getParentId(this.dragNodeId) }
+        )
+        this.dragColliding = Boolean(hit)
+      } else {
+        this.dragGhost = next
+        this.alignGuides = []
+      }
+      this.host.requestRender()
+      return true
+    }
+
+    return false
+  }
+
+  onPointerUp(_event: PointerEvent): boolean {
+    if (this.host.readonly) {
+      this.reset()
+      return false
+    }
+
+    if (this.rotateNodeId && this.rotateMoved) {
+      const node = this.host.doc.getNode(this.rotateNodeId)
+      if (node) {
+        const result = this.host.doc.commands.transformNode(
+          this.rotateNodeId,
+          { rotation: this.host.yawToRotation(this.rotateGhostYaw, node.transform.rotation) },
+          { source: SOURCE }
+        )
+        if (!result.ok && result.denied) this.host.onDenied?.(result.denied)
+      }
+    }
+
+    if (this.dragNodeId && this.dragGhost && this.dragMoved) {
+      const node = this.host.doc.getNode(this.dragNodeId)
+      if (node) {
+        const result = this.host.doc.commands.transformNode(
+          this.dragNodeId,
+          { position: this.host.positionFromPlane(this.dragGhost.u, this.dragGhost.v, node.transform) },
+          { source: SOURCE }
+        )
+        if (!result.ok && result.denied) this.host.onDenied?.(result.denied)
+      }
+    }
+
+    this.reset()
+    this.host.requestRender()
+    return true
+  }
+
+  layoutFor(node: EditorNodeJSON) {
+    const item = this.host.itemFor(node)
+    const { wu, wv } = this.host.footprintSize(item)
+    let plane = this.host.planeFromPosition(node.transform.position)
+    if (node.id === this.dragNodeId && this.dragGhost) plane = this.dragGhost
+    const yaw =
+      node.id === this.rotateNodeId && this.rotateMoved ? this.rotateGhostYaw : this.host.nodeYaw(node)
+    return computeNodeLayout({
+      isElevation: this.host.isElevation,
+      plane,
+      yaw,
+      wu,
+      wv
+    })
+  }
+
+  private hitRotate(node: EditorNodeJSON, u: number, v: number): boolean {
+    return hitTestRotateHandle(this.layoutFor(node), u, v, this.host.scale)
+  }
+}

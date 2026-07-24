@@ -1,0 +1,1 @@
+{"version":3,"file":"RenderLoop.d.ts","sourceRoot":"","sources":["RenderLoop.ts"],"names":[],"mappings":"AAAA,KAAK,YAAY,GAAG,CAAC,KAAK,EAAE,MAAM,KAAK,IAAI,CAAA;AAE3C,qBAAa,UAAU;IACrB,OAAO,CAAC,KAAK,CAAsB;IACnC,OAAO,CAAC,QAAQ,CAAI;IAEpB,KAAK,CAAC,QAAQ,EAAE,YAAY,GAAG,IAAI;IAUnC,IAAI,IAAI,IAAI;CAOb"}

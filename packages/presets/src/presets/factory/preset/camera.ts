@@ -1,5 +1,5 @@
 import * as THREE from 'three'
-import type { CoreContext } from '@3d-editor/engine'
+import type { CoreContext } from '@3d-editor/editor'
 import type { FactoryPresetOptions } from './types'
 
 export function configureCamera(

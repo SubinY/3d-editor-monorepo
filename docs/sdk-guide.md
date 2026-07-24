@@ -1,0 +1,124 @@
+# `@3d-editor/editor` 内核架构与使用说明
+
+面向评审：讲清 **npm 必选包做什么 / 不做什么**、**怎么用**。实现细节以源码为准；定稿决策见 [architecture.md](./architecture.md)。
+
+---
+
+## 1. 一句话定位
+
+`@3d-editor/editor` 是 **与 UI 框架无关的 2D/3D 编辑器内核 SDK**：
+
+- 真相源是 **Document**（可序列化 `EditorDocumentJSON` + 运行时命令/历史/选中）
+- **推荐入口**是 `createEditor`（内部组装 Document + 可选 2D/3D Viewport）
+- 资产来自外部 **Catalog**（接口 + 内存实现）
+- **不提供**壳 UI、路由、落库——由 Host 自建；JSON 由 Host 存 DB / API（demo 可用 localStorage）
+
+```bash
+pnpm add @3d-editor/editor
+# peer: three >= 0.158
+```
+
+> `packages/engine`、`packages/presets`、`packages/extensions` 为 **legacy**，本轮起不再作为 editor 必选依赖或 re-export。
+
+---
+
+## 2. 包内结构
+
+```
+packages/editor/src/
+  core/           # createEditor / EditorSession
+  document/       # 合同类型 + 运行时门面（history/selection/events/serialize…）
+  catalog/
+  viewport/
+    canvas2d/     # 2D Canvas 投影（私有工厂）
+    three/        # 3D 投影 + 自维护 ThreeRuntime
+  utils/
+  index.ts        # 窄面公共导出
+```
+
+依赖方向：`Host → @3d-editor/editor`（`three` 为 peer）。
+
+---
+
+## 3. 统一用法（唯一推荐）
+
+```ts
+import {
+  createEditor,
+  createMemoryCatalog,
+  createEmptyDocumentJSON,
+  SCHEMA_VERSION,
+  CATALOG_ITEM_MIME,
+} from '@3d-editor/editor'
+import type {
+  EditorDocumentJSON,
+  CreateEditorOptions,
+  CatalogItem,
+} from '@3d-editor/editor'
+
+// 列表页：生成空合同 → Host 自行落库
+const draft = createEmptyDocumentJSON({
+  kind: 'scene',
+  name: '车间',
+  bounds: { width: 20, depth: 15, height: 3 },
+})
+await api.save(draft)
+
+// 打开编辑器
+const catalog = createMemoryCatalog(items)
+const editor = await createEditor({
+  catalog,
+  document: draft, // 或 DB 读出的 EditorDocumentJSON
+  mount: {
+    canvas2d: el2d,
+    canvas3d: el3d,
+  },
+  onDenied: reason => toast(reason),
+})
+
+editor.document.commands.placeItem(...)
+editor.document.history.undo()
+editor.viewport2d?.setTool('wall')
+const json = editor.document.toJSON()
+await api.save(json)
+editor.dispose()
+```
+
+- 只 2D / 只 3D / 双视图：由 `mount` 传哪些容器决定；双视图共享同一 `editor.document`。
+- 延迟挂载：`editor.mountCanvas2d(el)` / `mountCanvas3d(el)`。
+- 类型与值分条导入：`import type { ... }`。
+
+### EditorDocumentJSON 与落库
+
+| 形态 | 谁持久化 |
+|------|----------|
+| `EditorDocumentJSON` | **Host**（线上 API/DB；demo 可用 localStorage） |
+| `EditorDocument` 运行时 | 不落库；由 `createEditor` hydrate |
+
+内核**不**内置存储。
+
+---
+
+## 4. 公共导出 vs 不导出
+
+**导出（值）：** `createEditor`、`createMemoryCatalog`、`createEmptyDocumentJSON`、`SCHEMA_VERSION`、`CATALOG_ITEM_MIME`
+
+**导出（类型）：** `CreateEditorOptions`、`EditorSession`、合同类型、`CatalogItem`…、以及 `EditorDocument` / `Viewport2D` / `Viewport3D` **仅作类型标注**
+
+**不导出：** `createDocument`、`loadDocument`、`create2DViewport`、`create3DViewport`、`ThreeRuntime`、commands/collision 实现、约束注册 API 等。积木仅供 `createEditor` 内部使用。
+
+---
+
+## 5. Document / Catalog / Viewport（摘要）
+
+- **Document**：写操作走 `doc.commands.*`；历史 `doc.history`；选中 `doc.selection`。
+- **Catalog**：Host 注入 `CatalogItem[]`；`model` / `document` 两型。
+- **碰撞**：内建 AABB；`onDenied` 接收 `collision:…`。
+- **3D**：包内 `ThreeRuntime`（渲染/相机/orbit/gizmo/拾取/GLTF），不再依赖 `@3d-editor/engine`。
+
+---
+
+## 6. 相关文档
+
+- [architecture.md](./architecture.md)
+- [reading-guide.md](./reading-guide.md)

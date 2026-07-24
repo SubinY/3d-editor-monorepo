@@ -4,19 +4,20 @@
 
 ## 必读文档
 
-- `docs/architecture.md` — 架构设计
+- `docs/architecture.md` — 架构设计（定稿决策 / Schema）
+- `docs/sdk-guide.md` — 内核 npm 用法（`createEditor`）
 - `docs/reading-guide.md` — 项目阅读指南
 
 ## Project Structure
 
-- `packages/engine`：`@3d-editor/engine` 内核（CoreContext、编辑、Preset 机制、序列化）
-- `packages/extensions`：`@3d-editor/extensions` 插件（snap/timeline/performance）与 kit
-- `packages/presets`：`@3d-editor/presets` 场景装配（basic、factory 等）
-- `apps/demo-vue3`：主演示（工厂 / 通用编辑器）
+- `packages/editor`：`@3d-editor/editor` **对外唯一必选包**（`createEditor`、Document、Catalog、2D/3D Viewport、包内 ThreeRuntime）
+- `packages/engine` / `extensions` / `presets`：**legacy**（本轮不跟进新 editor API）
+- `apps/electrical-room`：电柜业务 Host 范例（待迁 `createEditor`）
+- `apps/demo-vue3`：旧演示（直连 engine）
 - `apps/demo-view`：视图向演示
-- `docs`：正式文档（仅上述两篇）
+- `docs`：正式文档（上述三篇）
 
-依赖方向：`apps → presets → extensions → engine`（禁止反向）。
+依赖方向：`apps → @3d-editor/editor`（peer `three`）；禁止反向。行业语义只能出现在 apps。
 
 ## Build, Test & Development
 
@@ -32,7 +33,9 @@
 - TypeScript 优先；避免不必要的 `any`
 - Prettier：2 空格、无分号、单引号（`.prettierrc.js`）
 - 命名：`camelCase` 变量/函数，`PascalCase` 类型/类/组件，文件目录 `kebab-case`
-- 编辑操作优先 `ctx.actions.*`；辅助物体使用 `userData.nonSelectable`
+- **类型导入**：`import type { Foo } from '...'`，与值导入分条；公共面用 `export type`
+- 编辑操作：一律 `doc.commands.*`（经 `createEditor` 获得 `editor.document`）
+- Document schema（`EditorDocumentJSON`）由 Host 落库；变更走 semver；breaking 升 editor major
 
 ## Testing
 

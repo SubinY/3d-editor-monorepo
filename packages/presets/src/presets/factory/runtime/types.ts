@@ -1,4 +1,4 @@
-import type { CoreContext } from '@3d-editor/engine'
+import type { CoreContext } from '@3d-editor/editor'
 import * as THREE from 'three'
 import type { FactoryPresetOptions } from '../preset/types'
 

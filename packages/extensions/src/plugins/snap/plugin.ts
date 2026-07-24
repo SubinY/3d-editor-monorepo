@@ -1,4 +1,4 @@
-﻿import type { CoreContext, EnginePlugin, TransformEvent } from '@3d-editor/engine'
+import type { CoreContext, EnginePlugin, TransformEvent } from '@3d-editor/editor'
 import { SnapSystem, type SnapOptions } from './SnapSystem'
 
 export const createSnapPlugin = (options: SnapOptions = {}): EnginePlugin => {

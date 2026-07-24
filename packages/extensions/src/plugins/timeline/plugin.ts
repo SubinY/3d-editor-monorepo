@@ -1,4 +1,4 @@
-import type { CoreContext, EnginePlugin } from "@3d-editor/engine"
+import type { CoreContext, EnginePlugin } from "@3d-editor/editor"
 import { Timeline } from "./Timeline"
 import { TimelinePlayer } from "./TimelinePlayer"
 
@@ -6,7 +6,7 @@ export interface TimelinePluginOptions {
   timeline?: Timeline
   autoPlay?: boolean
   onTick?: (time: number, timeline: Timeline) => void
-  /** 是否自动将时间轴数据写回场景对象属性 */
+  /** 锟角凤拷锟皆讹拷锟斤拷时锟斤拷锟斤拷锟斤拷锟斤拷写锟截筹拷锟斤拷锟斤拷锟斤拷锟斤拷锟斤拷 */
   autoApply?: boolean
 }
 

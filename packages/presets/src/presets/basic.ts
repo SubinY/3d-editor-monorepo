@@ -1,6 +1,6 @@
 import * as THREE from 'three'
 import { EXRLoader } from 'three/examples/jsm/loaders/EXRLoader.js'
-import { createAmbientLight, createDirectionalLight, type ScenePreset } from '@3d-editor/engine'
+import { createAmbientLight, createDirectionalLight, type ScenePreset } from '@3d-editor/editor'
 
 export interface BasicPresetOptions {
   background?: string
@@ -60,7 +60,9 @@ export const basicPreset: ScenePreset<BasicPresetOptions, BasicPresetState> = {
       pmrem.dispose()
       ctx.scene.environment = envMap
       const intensity = envOpts.intensity ?? 1.0
-      if (intensity !== 1.0) ctx.scene.environmentIntensity = intensity
+      if (intensity !== 1.0) {
+        ;(ctx.scene as THREE.Scene & { environmentIntensity?: number }).environmentIntensity = intensity
+      }
     }
 
     let grid: THREE.GridHelper | undefined

@@ -23,17 +23,18 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@3d-editor/engine": "workspace:*",
-    "@3d-editor/extensions": "workspace:*",
-    "three": "^0.160.0"
+    "@3d-editor/extensions": "workspace:*"
   },
   "devDependencies": {
+    "@3d-editor/editor": "workspace:*",
     "@types/three": "^0.160.0",
+    "three": "^0.160.0",
     "typescript": "^5.3.3",
     "vite": "^5.0.12",
     "vitest": "^1.2.0"
   },
   "peerDependencies": {
+    "@3d-editor/editor": "^0.1.0",
     "three": ">=0.158.0"
   }
 }

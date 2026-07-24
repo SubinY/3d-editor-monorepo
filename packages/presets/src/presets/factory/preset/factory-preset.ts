@@ -1,7 +1,7 @@
 import * as THREE from 'three'
 import { EXRLoader } from 'three/examples/jsm/loaders/EXRLoader.js'
 import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js'
-import type { CoreContext, ScenePreset } from '@3d-editor/engine'
+import type { CoreContext, ScenePreset } from '@3d-editor/editor'
 import type { FactoryPresetOptions, FactoryPresetState } from './types'
 import { configureRenderer } from './renderer'
 import { applyGradientBackground } from './background'
@@ -88,7 +88,9 @@ export const factoryPreset: ScenePreset<FactoryPresetOptions, FactoryPresetState
       pmrem.dispose()
       ctx.scene.environment = envMap
       const intensity = envOpts.intensity ?? 1.0
-      if (intensity !== 1.0) ctx.scene.environmentIntensity = intensity
+      if (intensity !== 1.0) {
+        ;(ctx.scene as THREE.Scene & { environmentIntensity?: number }).environmentIntensity = intensity
+      }
     }
     
     return {

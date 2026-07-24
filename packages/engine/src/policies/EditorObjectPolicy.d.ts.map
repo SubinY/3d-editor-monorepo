@@ -1,0 +1,1 @@
+{"version":3,"file":"EditorObjectPolicy.d.ts","sourceRoot":"","sources":["EditorObjectPolicy.ts"],"names":[],"mappings":"AAAA,OAAO,KAAK,KAAK,MAAM,OAAO,CAAA;AAgB9B;;GAEG;AACH,eAAO,MAAM,kBAAkB;qBACZ,KAAK,CAAC,QAAQ,GAAG,OAAO;yBASpB,KAAK,CAAC,QAAQ,GAAG,OAAO;2BAMtB,KAAK,CAAC,QAAQ,GAAG,OAAO;CAOhD,CAAA"}

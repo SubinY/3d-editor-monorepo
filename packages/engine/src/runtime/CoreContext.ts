@@ -27,6 +27,14 @@ export interface CoreContextOptions {
   }
   plugins?: EnginePlugin[]
   presets?: ScenePreset[]
+  history?: {
+    /**
+     * 拖拽结束后是否自动写入 engine 自身的 HistoryManager。
+     * 上层若以外部 Document 命令栈为唯一历史（如 @3d-editor/editor），应设为 false，
+     * engine 侧降级为执行器，仅继续派发 OBJECT_TRANSFORMED 事件。
+     */
+    autoRecordTransform?: boolean
+  }
 }
 
 export class CoreContext {
@@ -51,8 +59,10 @@ export class CoreContext {
   public presetManager: PresetManager
 
   private transformBefore?: TransformSchema
+  private autoRecordTransform: boolean
 
   constructor(options: CoreContextOptions) {
+    this.autoRecordTransform = options.history?.autoRecordTransform ?? true
     this.scene = new THREE.Scene()
     this.eventBus = new EventBus()
     this.pluginManager = new PluginManager()
@@ -193,7 +203,9 @@ export class CoreContext {
     const object = this.transform.controls.object as THREE.Object3D | null
     if (object && this.transformBefore) {
       const after = this.captureTransform(object)
-      this.history.recordTransform(object.uuid, this.transformBefore, after)
+      if (this.autoRecordTransform) {
+        this.history.recordTransform(object.uuid, this.transformBefore, after)
+      }
       this.eventBus.emit(EditorEvents.OBJECT_TRANSFORMED, {
         id: object.uuid,
         before: this.transformBefore,

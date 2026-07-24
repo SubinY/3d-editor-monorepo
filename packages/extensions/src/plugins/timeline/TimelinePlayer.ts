@@ -1,4 +1,4 @@
-import type { CoreContext, Track, Keyframe } from '@3d-editor/engine'
+import type { CoreContext, Track } from '@3d-editor/editor'
 import type { Timeline } from './Timeline'
 
 /**

@@ -1,4 +1,4 @@
-import { CoreContext, EditorEvents, createBox, createStandardMaterial } from '@3d-editor/engine'
+import { CoreContext, EditorEvents, createBox, createStandardMaterial } from '@3d-editor/editor'
 import { createSnapPlugin, SnapSystem } from '@3d-editor/extensions'
 import * as THREE from 'three'
 import { factoryPreset } from '../preset/factory-preset'
