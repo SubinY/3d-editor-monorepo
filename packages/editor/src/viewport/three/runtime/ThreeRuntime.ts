@@ -1,7 +1,9 @@
+import type { TransformMode } from '../../../core/types'
 import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import { TransformControls } from 'three/examples/jsm/controls/TransformControls.js'
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
+import { DEFAULT_TRANSLATION_SNAP } from '../../../core/interaction'
 
 export interface TransformSnapshot {
   position: [number, number, number]
@@ -19,6 +21,7 @@ export interface ThreeRuntimeOptions {
   container: HTMLElement
   /** false 时不创建 gizmo（只读预览） */
   enableTransform?: boolean
+  transformMode?: TransformMode
 }
 
 /**
@@ -38,6 +41,8 @@ export class ThreeRuntime {
   private transformEndHandlers = new Set<TransformEndHandler>()
   private raycaster = new THREE.Raycaster()
   private pointer = new THREE.Vector2()
+  private allowedModes: TransformMode[] = ['translate']
+  private translationSnapSize = DEFAULT_TRANSLATION_SNAP
 
   constructor(options: ThreeRuntimeOptions) {
     this.container = options.container
@@ -60,7 +65,7 @@ export class ThreeRuntime {
 
     if (options.enableTransform !== false) {
       this.transform = new TransformControls(this.camera, this.renderer.domElement)
-      this.transform.setMode('translate')
+      this.transform.setMode(options.transformMode ?? 'translate')
       this.transform.addEventListener('dragging-changed', this.handleDraggingChanged)
       this.scene.add(this.transform)
     } else {
@@ -89,6 +94,31 @@ export class ThreeRuntime {
 
   getAttachedObject(): THREE.Object3D | null {
     return (this.transform?.object as THREE.Object3D | undefined) ?? null
+  }
+
+  setAllowedModes(modes: TransformMode[]): void {
+    this.allowedModes = modes.length ? [...modes] : ['translate']
+    const current = this.getTransformMode()
+    if (!this.allowedModes.includes(current)) {
+      this.setMode(this.allowedModes[0] ?? 'translate')
+    }
+  }
+
+  setMode(mode: TransformMode): void {
+    if (!this.transform) return
+    if (!this.allowedModes.includes(mode)) return
+    this.transform.setMode(mode)
+  }
+
+  getTransformMode(): TransformMode {
+    return (this.transform?.getMode() as TransformMode | undefined) ?? 'translate'
+  }
+
+  setTranslationSnap(enabled: boolean, size = this.translationSnapSize): void {
+    this.translationSnapSize = size
+    if (!this.transform) return
+    this.transform.translationSnap = enabled ? size : null
+    this.transform.rotationSnap = enabled ? Math.PI / 12 : null
   }
 
   pick(

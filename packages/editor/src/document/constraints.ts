@@ -109,15 +109,19 @@ export function boundsConstraint(options?: { margin?: number }): ConstraintRule 
   }
 }
 
-/** 通用规则：网格吸附（水平 XZ） */
+/** 通用规则：网格吸附（scene=XZ；container=XY） */
 export function gridSnapConstraint(options?: { size?: number }): ConstraintRule {
   const size = options?.size ?? 0.5
   return {
     id: 'core:grid-snap',
-    evaluate(input) {
+    evaluate(input, doc) {
       const transform = cloneTransform(input.transform)
       transform.position[0] = Math.round(transform.position[0] / size) * size
-      transform.position[2] = Math.round(transform.position[2] / size) * size
+      if (doc.kind === 'container') {
+        transform.position[1] = Math.round(transform.position[1] / size) * size
+      } else {
+        transform.position[2] = Math.round(transform.position[2] / size) * size
+      }
       return { allowed: true, transform }
     }
   }

@@ -9,8 +9,9 @@
 架构与定稿决策见 [architecture.md](./architecture.md)；**用法**见 [sdk-guide.md](./sdk-guide.md)。
 
 - D1 唯一历史栈 · D2 复合资产嵌套解析 · D3 单包 + 包内 ThreeRuntime · D4 线段墙
-- **D5 MVP**：内建 AABB 碰撞；细则 `ConstraintEngine` 降级为可选
+- **D5 MVP**：内建 AABB 碰撞；细则 `ConstraintEngine` 降级为可选；scale↔碰撞互斥
 - **D6 MVP**：连续画墙、拖放落点、门窗柱贴墙吸附（非开洞）
+- **D7**：会话级 `snapEnabled` / `collisionEnabled` / `transformModes`（见 sdk-guide）
 ## Tech Stack
 
 | Layer | Technology | Notes |
@@ -25,8 +26,8 @@
 
 ## 建议阅读顺序
 
-1. 本文 + [architecture.md](./architecture.md)（分层、D1–D6、Schema）
-2. [sdk-guide.md](./sdk-guide.md)（`createEditor` 用法）
+1. 本文 + [architecture.md](./architecture.md)（分层、D1–D7、Schema）
+2. [sdk-guide.md](./sdk-guide.md)（`createEditor` 简单/手动配置与交互 API）
 3. `packages/editor/src/core/create-editor.ts`
 4. `packages/editor/src/document/types.ts` + `EditorDocument.ts`
 5. `packages/editor/src/viewport/canvas2d/Viewport2D.ts`
@@ -98,7 +99,7 @@ pnpm build
 | 我想… | 去看… |
 |--------|--------|
 | 改碰撞 / setBounds / 命令 | `packages/editor/src/document/` |
-| 改连续画墙 / 拖放 / 贴墙 | `viewport/canvas2d/services/`、`utils/wall-snap.ts`；门面 `Viewport2D.ts` |
+| 改连续画墙 / 拖放 / 贴墙 / 拖墙 | `viewport/canvas2d/services/`、`utils/wall-snap.ts`（`applyWallDrag`）；门面 `Viewport2D.ts` |
 | 改封闭地板 / 对齐线 | `viewport/canvas2d/utils/closed-loops.ts`、`align-guides.ts`；3D 地板在 `Viewport3D.rebuildFloors` |
 | 改 3D 拾取 / gizmo 回写 | `viewport/three/services/selection.ts`、`transform-bridge.ts` |
 | 改素材分组约定 | `CatalogCategory` in `catalog/types.ts`；条目在 `apps/.../catalog.ts` |

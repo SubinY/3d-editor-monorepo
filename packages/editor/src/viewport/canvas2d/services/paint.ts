@@ -162,12 +162,16 @@ function drawAlignGuides(p: Paint2DContext): void {
 }
 
 function drawWalls(p: Paint2DContext): void {
-  const { ctx, camera, doc, theme } = p
+  const { ctx, camera, doc, theme, select, tool, readonly } = p
   const selection = doc.selection.get()
+  const patchMap = new Map(select.wallDragPatches.map(patch => [patch.id, patch]))
   ctx.lineCap = 'round'
   doc.getWalls().forEach(wall => {
-    const a = camera.worldToScreen(wall.a[0], wall.a[1])
-    const b = camera.worldToScreen(wall.b[0], wall.b[1])
+    const patch = patchMap.get(wall.id)
+    const wa = patch?.a ?? wall.a
+    const wb = patch?.b ?? wall.b
+    const a = camera.worldToScreen(wa[0], wa[1])
+    const b = camera.worldToScreen(wb[0], wb[1])
     const selected = selection.includes(wall.id)
     ctx.strokeStyle = selected ? theme.wallSelected : theme.wall
     ctx.lineWidth = Math.max(3, (wall.thickness ?? 0.2) * camera.scale)
@@ -175,7 +179,29 @@ function drawWalls(p: Paint2DContext): void {
     ctx.moveTo(a.sx, a.sy)
     ctx.lineTo(b.sx, b.sy)
     ctx.stroke()
-    drawWallDimension(p, wall)
+    drawWallDimension(p, { ...wall, a: wa, b: wb })
+
+    if (selected && tool === 'select' && !readonly) {
+      drawWallEndpointHandles(p, wa, wb)
+    }
+  })
+}
+
+function drawWallEndpointHandles(
+  p: Paint2DContext,
+  a: [number, number],
+  b: [number, number]
+): void {
+  const { ctx, camera, theme } = p
+  ;[a, b].forEach(pt => {
+    const s = camera.worldToScreen(pt[0], pt[1])
+    ctx.fillStyle = theme.wallSelected
+    ctx.beginPath()
+    ctx.arc(s.sx, s.sy, 5, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.strokeStyle = 'rgba(255,255,255,0.9)'
+    ctx.lineWidth = 1.5
+    ctx.stroke()
   })
 }
 

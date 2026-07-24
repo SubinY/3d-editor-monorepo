@@ -27,6 +27,7 @@ export class Viewport2D {
   private onDenied?: (reason: string) => void
   private onPlaceResult?: (result: PlaceResult) => void
   private onWallSelect?: Viewport2DOptions['onWallSelect']
+  private snapEnabled: boolean
 
   private camera: Camera2D
   private select: SelectInteraction
@@ -46,6 +47,7 @@ export class Viewport2D {
     this.onDenied = options.onDenied
     this.onPlaceResult = options.onPlaceResult
     this.onWallSelect = options.onWallSelect
+    this.snapEnabled = options.snapEnabled ?? true
 
     this.canvas = window.document.createElement('canvas')
     this.canvas.style.width = '100%'
@@ -106,6 +108,9 @@ export class Viewport2D {
       get scale() {
         return self.camera.scale
       },
+      get snapEnabled() {
+        return self.snapEnabled
+      },
       get onDenied() {
         return self.onDenied
       },
@@ -121,6 +126,10 @@ export class Viewport2D {
       yawToRotation: (yaw, base) => self.yawToRotation(yaw, base),
       requestRender: () => self.requestRender()
     }
+  }
+
+  setSnapEnabled(enabled: boolean): void {
+    this.snapEnabled = enabled
   }
 
   setTool(tool: Tool2D): void {

@@ -6,7 +6,17 @@ import { Viewport2D } from '../viewport/canvas2d/Viewport2D'
 import type { Viewport2DOptions } from '../viewport/canvas2d/types'
 import { Viewport3D } from '../viewport/three/Viewport3D'
 import type { Viewport3DOptions } from '../viewport/three/Viewport3D'
-import type { CreateEditorOptions, EditorSession } from './types'
+import {
+  modesIncludeScale,
+  normalizeTransformModes,
+  pickTransformMode
+} from './interaction'
+import type {
+  CreateEditorOptions,
+  EditorInteractionState,
+  EditorSession,
+  TransformMode
+} from './types'
 
 function isDocumentJSON(value: EditorDocumentJSON | CreateDocumentOptions): value is EditorDocumentJSON {
   return (
@@ -25,11 +35,33 @@ export class EditorSessionImpl implements EditorSession {
   private viewport3dOptions?: CreateEditorOptions['viewport3d']
   private disposed = false
 
+  private snapEnabled: boolean
+  private collisionPreference: boolean
+  private transformModes: TransformMode[]
+  private transformMode: TransformMode
+
   constructor(document: EditorDocument, options: CreateEditorOptions) {
     this.document = document
     this.catalog = options.catalog
     this.onDenied = options.onDenied
     this.viewport3dOptions = options.viewport3d
+
+    const interaction = options.interaction
+    this.snapEnabled = interaction?.snapEnabled ?? true
+    this.collisionPreference = interaction?.collisionEnabled ?? true
+    this.transformModes = normalizeTransformModes(interaction?.transformModes)
+    this.transformMode = pickTransformMode(this.transformModes, 'translate')
+
+    if (
+      modesIncludeScale(this.transformModes) &&
+      (interaction?.collisionEnabled ?? true) === true
+    ) {
+      console.warn(
+        '[createEditor] transformModes includes "scale"; collisionEnabled forced to false (scale ↔ collision mutex)'
+      )
+    }
+
+    this.applyInteraction()
 
     if (options.mount?.canvas2d) {
       this.mountCanvas2d(options.mount.canvas2d)
@@ -45,7 +77,8 @@ export class EditorSessionImpl implements EditorSession {
     const options: Viewport2DOptions = {
       document: this.document,
       catalog: this.catalog,
-      onDenied: this.onDenied
+      onDenied: this.onDenied,
+      snapEnabled: this.snapEnabled
     }
     this.viewport2d = new Viewport2D(el, options)
     return this.viewport2d
@@ -63,7 +96,10 @@ export class EditorSessionImpl implements EditorSession {
       document: this.document,
       catalog: this.catalog,
       readonly: this.viewport3dOptions?.readonly,
-      onNodeClick: this.viewport3dOptions?.onNodeClick
+      onNodeClick: this.viewport3dOptions?.onNodeClick,
+      transformModes: this.transformModes,
+      transformMode: this.transformMode,
+      snapEnabled: this.snapEnabled
     }
     this.viewport3d = new Viewport3D(el, options)
     return this.viewport3d
@@ -72,6 +108,48 @@ export class EditorSessionImpl implements EditorSession {
   unmountCanvas3d(): void {
     this.viewport3d?.dispose()
     this.viewport3d = undefined
+  }
+
+  getInteraction(): EditorInteractionState {
+    return {
+      snapEnabled: this.snapEnabled,
+      collisionEnabled: this.document.collisionEnabled,
+      collisionPreference: this.collisionPreference,
+      transformModes: [...this.transformModes],
+      transformMode: this.transformMode
+    }
+  }
+
+  setSnapEnabled(enabled: boolean): void {
+    this.ensureAlive()
+    this.snapEnabled = enabled
+    this.viewport2d?.setSnapEnabled(enabled)
+    this.viewport3d?.setSnapEnabled(enabled)
+  }
+
+  setCollisionEnabled(enabled: boolean): void {
+    this.ensureAlive()
+    this.collisionPreference = enabled
+    if (enabled && modesIncludeScale(this.transformModes)) {
+      this.transformModes = this.transformModes.filter(mode => mode !== 'scale')
+      if (this.transformModes.length === 0) this.transformModes = ['translate']
+      this.transformMode = pickTransformMode(this.transformModes, this.transformMode)
+    }
+    this.applyInteraction()
+  }
+
+  setTransformModes(modes: TransformMode[]): void {
+    this.ensureAlive()
+    this.transformModes = normalizeTransformModes(modes)
+    this.transformMode = pickTransformMode(this.transformModes, this.transformMode)
+    this.applyInteraction()
+  }
+
+  setTransformMode(mode: TransformMode): void {
+    this.ensureAlive()
+    if (!this.transformModes.includes(mode)) return
+    this.transformMode = mode
+    this.viewport3d?.setTransformMode(mode)
   }
 
   toJSON(): EditorDocumentJSON {
@@ -83,6 +161,15 @@ export class EditorSessionImpl implements EditorSession {
     this.disposed = true
     this.unmountCanvas2d()
     this.unmountCanvas3d()
+  }
+
+  private applyInteraction(): void {
+    const hasScale = modesIncludeScale(this.transformModes)
+    this.document.collisionEnabled = hasScale ? false : this.collisionPreference
+    this.viewport2d?.setSnapEnabled(this.snapEnabled)
+    this.viewport3d?.setTransformModes(this.transformModes)
+    this.viewport3d?.setTransformMode(this.transformMode)
+    this.viewport3d?.setSnapEnabled(this.snapEnabled)
   }
 
   private ensureAlive(): void {

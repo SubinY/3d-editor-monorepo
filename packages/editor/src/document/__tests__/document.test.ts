@@ -95,6 +95,15 @@ describe('约束引擎', () => {
     expect(node!.transform.position[2]).toBeCloseTo(2.5)
   })
 
+  it('gridSnapConstraint container 吸附 XY', () => {
+    const doc = createDocument({ kind: 'container', bounds: { width: 0.8, depth: 0.6, height: 2 } })
+    doc.constraints.register(gridSnapConstraint({ size: 0.5 }))
+    const { node } = doc.commands.placeItem(breakerItem, { position: [0.26, 1.24, -0.1] })
+    expect(node!.transform.position[0]).toBeCloseTo(0.5)
+    expect(node!.transform.position[1]).toBeCloseTo(1)
+    expect(node!.transform.position[2]).toBeCloseTo(-0.1)
+  })
+
   it('自定义规则可以拒绝变换', () => {
     const doc = createSceneDoc()
     const { node } = doc.commands.placeItem(cabinetItem, { position: [0, 0, 0] })
@@ -183,6 +192,29 @@ describe('墙体（线段墙定稿 D4）', () => {
     const doc = createSceneDoc()
     doc.createRectRoom({ height: 3 })
     expect(doc.getWalls()).toHaveLength(4)
+  })
+
+  it('moveWalls 批量改端点并可撤销', () => {
+    const doc = createSceneDoc()
+    const w1 = doc.commands.addWall([0, 0], [4, 0])!
+    const w2 = doc.commands.addWall([4, 0], [4, 3])!
+    const ok = doc.commands.moveWalls([
+      { id: w1.id, a: [0, 1], b: [4, 1] },
+      { id: w2.id, a: [4, 1], b: [4, 3] }
+    ])
+    expect(ok).toBe(true)
+    expect(doc.getWall(w1.id)?.a).toEqual([0, 1])
+    expect(doc.getWall(w2.id)?.a).toEqual([4, 1])
+    doc.history.undo()
+    expect(doc.getWall(w1.id)?.a).toEqual([0, 0])
+    expect(doc.getWall(w2.id)?.a).toEqual([4, 0])
+  })
+
+  it('moveWalls 拒绝近零长度', () => {
+    const doc = createSceneDoc()
+    const w = doc.commands.addWall([0, 0], [4, 0])!
+    expect(doc.commands.moveWalls([{ id: w.id, a: [0, 0], b: [0.01, 0] }])).toBe(false)
+    expect(doc.getWall(w.id)?.b).toEqual([4, 0])
   })
 })
 

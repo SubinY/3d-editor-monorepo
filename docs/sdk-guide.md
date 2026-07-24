@@ -22,11 +22,24 @@ pnpm add @3d-editor/editor
 
 ---
 
-## 2. 包内结构
+## 2. 包适用场景
+
+| 场景 | Document `kind` | 说明 |
+|------|-----------------|------|
+| 房间 / 车间俯视布局 | `scene` | 画墙、放设备 footprint、门窗柱贴墙 |
+| 柜 / 设备内立面排布 | `container` | 元器件在宽×高平面摆放 |
+| 只读 3D 预览 / 监控 | 任意 | `viewport3d.readonly: true`；`setNodeVisualState` 高亮 |
+| 复合资产嵌套 | scene 放 document 型柜 | 3D 展开 container JSON（深度上限 2） |
+
+行业语义（电柜、电视整机等）只出现在 Host Catalog / 路由 / 落库，不进入内核 schema。
+
+---
+
+## 3. 包内结构
 
 ```
 packages/editor/src/
-  core/           # createEditor / EditorSession
+  core/           # createEditor / EditorSession / 交互配置
   document/       # 合同类型 + 运行时门面（history/selection/events/serialize…）
   catalog/
   viewport/
@@ -40,23 +53,19 @@ packages/editor/src/
 
 ---
 
-## 3. 统一用法（唯一推荐）
+## 4. 简单配置（推荐默认）
+
+一次 `createEditor` + `mount` 即可开编。默认：`snapEnabled`、`collisionEnabled` 开启；3D gizmo 仅 `translate`。
 
 ```ts
 import {
   createEditor,
   createMemoryCatalog,
   createEmptyDocumentJSON,
-  SCHEMA_VERSION,
   CATALOG_ITEM_MIME,
 } from '@3d-editor/editor'
-import type {
-  EditorDocumentJSON,
-  CreateEditorOptions,
-  CatalogItem,
-} from '@3d-editor/editor'
+import type { EditorDocumentJSON, CatalogItem } from '@3d-editor/editor'
 
-// 列表页：生成空合同 → Host 自行落库
 const draft = createEmptyDocumentJSON({
   kind: 'scene',
   name: '车间',
@@ -64,28 +73,23 @@ const draft = createEmptyDocumentJSON({
 })
 await api.save(draft)
 
-// 打开编辑器
 const catalog = createMemoryCatalog(items)
 const editor = await createEditor({
   catalog,
-  document: draft, // 或 DB 读出的 EditorDocumentJSON
-  mount: {
-    canvas2d: el2d,
-    canvas3d: el3d,
-  },
+  document: draft,
+  mount: { canvas2d: el2d, canvas3d: el3d },
   onDenied: reason => toast(reason),
 })
 
-editor.document.commands.placeItem(...)
 editor.document.history.undo()
 editor.viewport2d?.setTool('wall')
-const json = editor.document.toJSON()
-await api.save(json)
+await api.save(editor.toJSON())
 editor.dispose()
 ```
 
+Host 只需：Catalog、落库、素材拖放（`CATALOG_ITEM_MIME`）。
+
 - 只 2D / 只 3D / 双视图：由 `mount` 传哪些容器决定；双视图共享同一 `editor.document`。
-- 延迟挂载：`editor.mountCanvas2d(el)` / `mountCanvas3d(el)`。
 - 类型与值分条导入：`import type { ... }`。
 
 ### EditorDocumentJSON 与落库
@@ -99,26 +103,75 @@ editor.dispose()
 
 ---
 
-## 4. 公共导出 vs 不导出
+## 5. 手动配置（仍走 createEditor，Host 自建壳）
+
+低层工厂（`createDocument` / Viewport 构造）**不对外导出**。「手动」= 延迟挂载 + 会话交互 API + Host 工具栏。
+
+```ts
+const editor = await createEditor({
+  catalog,
+  document: draft,
+  // 不传 mount
+  interaction: {
+    snapEnabled: true,
+    collisionEnabled: true,
+    transformModes: ['translate', 'rotate'], // 需要缩放再加 'scale'（会关碰撞）
+  },
+  viewport3d: { readonly: false },
+})
+
+// 路由 / DOM 就绪后
+editor.mountCanvas2d(el2d)
+editor.mountCanvas3d(el3d)
+
+editor.setSnapEnabled(false)           // 懒吸附：不回扫已有节点
+editor.setCollisionEnabled(false)      // 允许重叠（柜内 / 模型内摆件）
+editor.setTransformMode('rotate')      // 须在 transformModes 白名单内
+editor.viewport2d?.setTool('wall')
+```
+
+| API | 作用 |
+|-----|------|
+| `getInteraction()` | 读生效态：`snapEnabled` / `collisionEnabled` / `collisionPreference` / `transformModes` / `transformMode` |
+| `setSnapEnabled` | 2D 贴边对齐（物件边 / 墙面）；**不**做硬网格量化；画墙端点吸附不受影响 |
+| `setCollisionEnabled` | 写 Document AABB；与 scale **互斥**（见下） |
+| `setTransformModes` | 改 3D gizmo 白名单 |
+| `setTransformMode` | 切当前 mode；不在白名单则 no-op |
+
+### Scale ↔ 碰撞互斥
+
+当前 AABB 按 catalog `footprint` 计算，**不读** `node.scale`。因此：
+
+- `transformModes` **含** `'scale'` → 强制 `collisionEnabled = false`（保留 `collisionPreference`）
+- 从白名单 **去掉** `'scale'` → 按 preference 恢复碰撞
+- `setCollisionEnabled(true)` 且白名单含 scale → 踢掉 scale；若当前 mode 是 scale 则回退 `translate`
+- 创建时同时开 scale 与 collision → **scale 优先**，关碰撞并 `console.warn`
+
+布局编辑默认不要加 scale；自由造型再开 scale，并接受无碰撞。
+
+---
+
+## 6. 公共导出 vs 不导出
 
 **导出（值）：** `createEditor`、`createMemoryCatalog`、`createEmptyDocumentJSON`、`SCHEMA_VERSION`、`CATALOG_ITEM_MIME`
 
-**导出（类型）：** `CreateEditorOptions`、`EditorSession`、合同类型、`CatalogItem`…、以及 `EditorDocument` / `Viewport2D` / `Viewport3D` **仅作类型标注**
+**导出（类型）：** `CreateEditorOptions`、`EditorSession`、`EditorInteractionOptions`、`EditorInteractionState`、`TransformMode`、合同类型、`CatalogItem`…、以及 `EditorDocument` / `Viewport2D` / `Viewport3D` **仅作类型标注**
 
 **不导出：** `createDocument`、`loadDocument`、`create2DViewport`、`create3DViewport`、`ThreeRuntime`、commands/collision 实现、约束注册 API 等。积木仅供 `createEditor` 内部使用。
 
 ---
 
-## 5. Document / Catalog / Viewport（摘要）
+## 7. Document / Catalog / Viewport（摘要）
 
 - **Document**：写操作走 `doc.commands.*`；历史 `doc.history`；选中 `doc.selection`。
-- **Catalog**：Host 注入 `CatalogItem[]`；`model` / `document` 两型。
-- **碰撞**：内建 AABB；`onDenied` 接收 `collision:…`。
-- **3D**：包内 `ThreeRuntime`（渲染/相机/orbit/gizmo/拾取/GLTF），不再依赖 `@3d-editor/engine`。
+- **Catalog**：Host 注入 `CatalogItem[]`；`model` / `document` 两型；`placeableIn` 必填。
+- **碰撞**：内建 AABB；会话 `setCollisionEnabled` / `interaction.collisionEnabled`；`onDenied` 接收 `collision:…`。
+- **吸附**：会话 `snapEnabled` 控制 2D 贴边对齐（懒生效）；画墙工具内置端点吸附始终可用。硬网格 `gridSnapConstraint` 仍可供 Host 自行注册，但不随会话吸附自动开启。
+- **3D**：包内 `ThreeRuntime`；gizmo mode 由会话白名单控制。
 
 ---
 
-## 6. 相关文档
+## 8. 相关文档
 
 - [architecture.md](./architecture.md)
 - [reading-guide.md](./reading-guide.md)

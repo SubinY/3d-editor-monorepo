@@ -8,7 +8,7 @@ export { SCHEMA_VERSION, createDefaultTransform, cloneTransform } from './docume
 export { createEmptyDocumentJSON } from './document/serialize'
 export { isDocumentItem, catalogKey } from './catalog/types'
 
-export type { CreateEditorOptions, EditorSession } from './core/types'
+export type { CreateEditorOptions, EditorSession, EditorInteractionOptions, EditorInteractionState, TransformMode } from './core/types'
 export type {
   DocumentKind,
   BoundsJSON,

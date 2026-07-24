@@ -10,6 +10,8 @@ export interface Viewport2DHost {
   readonly readonly: boolean
   readonly isElevation: boolean
   readonly scale: number
+  /** 节点拖拽对齐吸附 */
+  readonly snapEnabled: boolean
   clientToPlane(clientX: number, clientY: number): PlanePoint
   planeFromPosition(pos: [number, number, number]): PlanePoint
   positionFromPlane(u: number, v: number, base?: TransformJSON): [number, number, number]

@@ -131,6 +131,9 @@ export const COMPONENT_ITEMS: CatalogItem[] = [
 /** 新建电柜的默认净空尺寸（米），创建表单可改 */
 export const DEFAULT_CABINET_BOUNDS = { width: 0.8, depth: 0.6, height: 2 }
 
+/** 电柜室工作区默认尺寸（进入编辑器后仍可改） */
+export const DEFAULT_SCENE_BOUNDS = { width: 20, depth: 15, height: 3 }
+
 function componentNode(id: string, itemId: string, name: string, x: number, y: number): EditorNodeJSON {
   return {
     id,

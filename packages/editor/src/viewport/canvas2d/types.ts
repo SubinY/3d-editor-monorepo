@@ -50,6 +50,8 @@ export interface Viewport2DOptions {
   catalog?: CatalogProvider
   readonly?: boolean
   theme?: Partial<Theme2D>
+  /** 会话级节点对齐吸附；画墙端点吸附不受此开关影响 */
+  snapEnabled?: boolean
   onDenied?: (reason: string) => void
   onPlaceResult?: (result: PlaceResult) => void
   onWallSelect?: (wall: WallJSON) => void

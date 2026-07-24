@@ -4,6 +4,27 @@ import type { EditorDocumentJSON, EditorNodeJSON } from '../document/types'
 import type { Viewport2D } from '../viewport/canvas2d/Viewport2D'
 import type { Viewport3D } from '../viewport/three/Viewport3D'
 
+export type TransformMode = 'translate' | 'rotate' | 'scale'
+
+export interface EditorInteractionOptions {
+  /** 默认 true；懒吸附，不回扫已有节点 */
+  snapEnabled?: boolean
+  /** 默认 true；写入 document.collisionEnabled（若 modes 含 scale 则被强制 false） */
+  collisionEnabled?: boolean
+  /** 3D gizmo 允许的 mode；默认 ['translate']；含 scale 时互斥关碰撞 */
+  transformModes?: TransformMode[]
+}
+
+export interface EditorInteractionState {
+  snapEnabled: boolean
+  /** 生效值（已写入 Document） */
+  collisionEnabled: boolean
+  /** 用户意图（无 scale 时与生效值一致） */
+  collisionPreference: boolean
+  transformModes: TransformMode[]
+  transformMode: TransformMode
+}
+
 export interface CreateEditorOptions {
   catalog?: CatalogProvider
   /** 已有落库 JSON，或新建空文档选项 */
@@ -16,6 +37,8 @@ export interface CreateEditorOptions {
     readonly?: boolean
     onNodeClick?: (nodePath: string, node: EditorNodeJSON | undefined) => void
   }
+  /** 会话级交互：吸附 / 碰撞 / 3D gizmo mode */
+  interaction?: EditorInteractionOptions
   onDenied?: (reason: string) => void
 }
 
@@ -27,6 +50,11 @@ export interface EditorSession {
   unmountCanvas2d(): void
   mountCanvas3d(el: HTMLElement): Viewport3D
   unmountCanvas3d(): void
+  getInteraction(): EditorInteractionState
+  setSnapEnabled(enabled: boolean): void
+  setCollisionEnabled(enabled: boolean): void
+  setTransformModes(modes: TransformMode[]): void
+  setTransformMode(mode: TransformMode): void
   toJSON(): EditorDocumentJSON
   dispose(): void
 }

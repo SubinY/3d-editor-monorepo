@@ -1,6 +1,7 @@
 import * as THREE from 'three'
 import type { CatalogItem, CatalogProvider, Model3DSpec } from '../../catalog/types'
 import { catalogKey, isDocumentItem } from '../../catalog/types'
+import type { TransformMode } from '../../core/types'
 import type { EditorDocument } from '../../document/EditorDocument'
 import type {
   EditorDocumentJSON,
@@ -20,6 +21,9 @@ export interface Viewport3DOptions {
   /** 只读预览：无 gizmo、不写 document；点击经 onNodeClick 通知 Host */
   readonly?: boolean
   onNodeClick?: (nodePath: string, node: EditorNodeJSON | undefined) => void
+  transformModes?: TransformMode[]
+  transformMode?: TransformMode
+  snapEnabled?: boolean
 }
 
 /** 嵌套解析深度上限（D2：场景→柜→元件） */
@@ -69,7 +73,17 @@ export class Viewport3D {
     this.readonly = options.readonly ?? false
     this.onNodeClick = options.onNodeClick
 
-    this.runtime = new ThreeRuntime({ container, enableTransform: !this.readonly })
+    this.runtime = new ThreeRuntime({
+      container,
+      enableTransform: !this.readonly,
+      transformMode: options.transformMode ?? 'translate'
+    })
+    if (!this.readonly) {
+      this.runtime.setAllowedModes(options.transformModes ?? ['translate'])
+      this.runtime.setMode(options.transformMode ?? 'translate')
+      // 会话吸附是 2D 贴边对齐；3D gizmo 不做硬网格，避免一格一格跳
+      this.runtime.setTranslationSnap(false)
+    }
 
     this.envGroup.name = '__editorEnv__'
     this.wallGroup.name = '__editorWalls__'
@@ -180,13 +194,13 @@ export class Viewport3D {
     dir.castShadow = true
     this.envGroup.add(ambient, dir)
 
-    const floor = new THREE.Mesh(
-      new THREE.PlaneGeometry(width, depth),
-      new THREE.MeshStandardMaterial({ color: '#16202c', roughness: 0.9, metalness: 0.05 })
-    )
-    floor.rotation.x = -Math.PI / 2
-    floor.receiveShadow = true
-    this.envGroup.add(floor)
+    // const floor = new THREE.Mesh(
+    //   new THREE.PlaneGeometry(width, depth),
+    //   new THREE.MeshStandardMaterial({ color: '#16202c', roughness: 0.9, metalness: 0.05 })
+    // )
+    // floor.rotation.x = -Math.PI / 2
+    // floor.receiveShadow = true
+    // this.envGroup.add(floor)
 
     const grid = new THREE.GridHelper(Math.max(width, depth), Math.max(width, depth), 0x2b3b4d, 0x1c2836)
     ;(grid.material as THREE.Material).transparent = true
@@ -512,6 +526,24 @@ export class Viewport3D {
     object.position.fromArray(transform.position)
     object.rotation.set(transform.rotation[0], transform.rotation[1], transform.rotation[2])
     object.scale.fromArray(transform.scale)
+  }
+
+  // -- 会话交互 ----------------------------------------------------------------
+
+  setSnapEnabled(_enabled: boolean): void {
+    if (this.readonly) return
+    // 2D 贴边由 Viewport2D 处理；3D 保持连续拖拽
+    this.runtime.setTranslationSnap(false)
+  }
+
+  setTransformModes(modes: TransformMode[]): void {
+    if (this.readonly) return
+    this.runtime.setAllowedModes(modes)
+  }
+
+  setTransformMode(mode: TransformMode): void {
+    if (this.readonly) return
+    this.runtime.setMode(mode)
   }
 
   // -- 运行时可视状态（监控预览） --------------------------------------------------

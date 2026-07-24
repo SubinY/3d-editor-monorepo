@@ -3,7 +3,7 @@ import { computed, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { createEmptyDocumentJSON } from '@3d-editor/editor'
 import type { EditorDocumentJSON } from '@3d-editor/editor'
-import { DEFAULT_CABINET_BOUNDS } from '@/business/catalog'
+import { DEFAULT_CABINET_BOUNDS, DEFAULT_SCENE_BOUNDS } from '@/business/catalog'
 import { createDemoSceneJSON } from '@/business/demo-scene'
 import { deleteDocument, listEntries, saveDocument, type DocumentEntry } from '@/business/storage'
 
@@ -25,7 +25,7 @@ type CreateKind = 'container' | 'scene' | null
 const creating = ref<CreateKind>(null)
 
 const cabinetForm = reactive({ name: '', ...DEFAULT_CABINET_BOUNDS })
-const roomForm = reactive({ name: '', location: '' })
+const roomForm = reactive({ name: '', location: '', ...DEFAULT_SCENE_BOUNDS })
 
 function openCreate(kind: Exclude<CreateKind, null>) {
   creating.value = kind
@@ -33,6 +33,7 @@ function openCreate(kind: Exclude<CreateKind, null>) {
   Object.assign(cabinetForm, DEFAULT_CABINET_BOUNDS)
   roomForm.name = `电柜室 ${rooms.value.length + 1}`
   roomForm.location = ''
+  Object.assign(roomForm, DEFAULT_SCENE_BOUNDS)
 }
 
 function newDocumentJSON(kind: 'container' | 'scene'): EditorDocumentJSON {
@@ -52,7 +53,11 @@ function newDocumentJSON(kind: 'container' | 'scene'): EditorDocumentJSON {
     kind,
     id: `${kind}-${Date.now().toString(36)}`,
     name: roomForm.name || '未命名电柜室',
-    bounds: { width: 20, depth: 15, height: 3 },
+    bounds: {
+      width: roomForm.width || DEFAULT_SCENE_BOUNDS.width,
+      depth: roomForm.depth || DEFAULT_SCENE_BOUNDS.depth,
+      height: roomForm.height || DEFAULT_SCENE_BOUNDS.height
+    },
     metadata: roomForm.location ? { location: roomForm.location } : undefined
   })
 }
@@ -137,7 +142,7 @@ function timeLabel(ts: number): string {
             <div class="card-meta">
               <div class="card-name">{{ entry.json.name }}</div>
               <div class="card-sub">
-                {{ (entry.json.structure?.walls?.length ?? 0) }} 面墙 · {{ entry.json.nodes.length }} 台设备 · {{ timeLabel(entry.updatedAt) }}
+                {{ boundsLabel(entry.json) }} · {{ (entry.json.structure?.walls?.length ?? 0) }} 面墙 · {{ entry.json.nodes.length }} 台设备 · {{ timeLabel(entry.updatedAt) }}
               </div>
             </div>
           </div>
@@ -166,7 +171,12 @@ function timeLabel(ts: number): string {
         <template v-else>
           <label>名称<input v-model="roomForm.name" required /></label>
           <label>位置 / 备注<input v-model="roomForm.location" placeholder="选填，如 1# 配电房" /></label>
-          <p class="hint">进入编辑器后用「画墙」工具圈出房间</p>
+          <div class="row3">
+            <label>宽 (m)<input v-model.number="roomForm.width" type="number" step="1" min="1" required /></label>
+            <label>深 (m)<input v-model.number="roomForm.depth" type="number" step="1" min="1" required /></label>
+            <label>高 (m)<input v-model.number="roomForm.height" type="number" step="0.5" min="1" required /></label>
+          </div>
+          <p class="hint">工作区参考尺寸；进入编辑器后右侧仍可调整，再用画墙圈房间</p>
         </template>
         <div class="modal-actions">
           <button type="button" @click="creating = null">取消</button>

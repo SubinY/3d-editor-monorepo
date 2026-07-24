@@ -63,17 +63,27 @@ apps ──► @3d-editor/editor（peer: three）
 
 ### D5. MVP 约束模型：内建 AABB 碰撞，细则约束降级为可选
 
-- 内核在 `placeItem` / `transformNode` 内建 **AABB 物体碰撞**（footprint + yaw 近似，见 `document/collision.ts`）：同层级节点重叠即拒绝，denied 形如 `collision:<对方名称>`；`doc.collisionEnabled = false` 可整体关闭。
-- `ConstraintEngine` 保留但**降级为可选扩展点**：Host 不注册规则时只保证碰撞；`bounds` 仅表达工作区/柜体尺寸（container 强边界感，scene 作画布参考，不强制「墙外禁放」）。
+- 内核在 `placeItem` / `transformNode` 内建 **AABB 物体碰撞**（footprint + yaw 近似，见 `document/collision.ts`）：同层级节点重叠即拒绝，denied 形如 `collision:<对方名称>`；经 `createEditor` 的 `interaction.collisionEnabled` / `session.setCollisionEnabled` 控制（底层为 `doc.collisionEnabled`）。
+- **Scale ↔ 碰撞互斥**：`transformModes` 含 `'scale'` 时强制关碰撞（AABB 不读 `node.scale`）；开碰撞会从白名单剔除 scale。详见 [sdk-guide.md](./sdk-guide.md)。
+- `ConstraintEngine` 保留但**降级为可选扩展点**：会话吸附**不**自动注册网格约束（避免拖拽量化）；Host 若需要硬网格可自行 `doc.constraints.register(gridSnapConstraint(...))`（约束 API 仍为包内能力，非公共导出面）。
+- `bounds` 仅表达工作区/柜体尺寸（container 强边界感，scene 作画布参考，不强制「墙外禁放」）。
 - 柜体尺寸可中途修改：`doc.commands.setBounds(next)` 进历史，viewport 监听 `bounds:updated` 刷新。
 
 ### D6. MVP 2D 交互约定
 
-- **连续画墙**：`tool='wall'` 时左键连续落点成链，右键 / Esc 结束当前链；落点 0.1m 网格吸附 + 既有端点磁吸（便于闭合）；墙段带米制长度标注（一位小数）。
+- **连续画墙**：`tool='wall'` 时左键连续落点成链，右键 / Esc 结束当前链；落点 0.1m 网格吸附 + 既有端点磁吸（便于闭合）；墙段带米制长度标注（一位小数）。画墙吸附**不受**会话 `snapEnabled` 影响。
 - **拖放落点**：Host 在素材 `dragstart` 写入 `CATALOG_ITEM_MIME`，并调用 `viewport2d.beginExternalDrag(item)`（因 dragover 读不到 getData，用于 footprint 悬浮预览）；画布内置 `drop` 在指针世界坐标处 `placeItem`；也可用 `placeItemAt` / `clientToWorld` 自组装。`dragend` 时调 `endExternalDrag()`。
 - **门窗柱 = 可放置节点，非开洞布尔**：`CatalogItem.category: 'fixture'` 的条目放置时若距最近墙 < 阈值，位置投影到墙段、朝向贴墙。
 - **封闭墙填地板**：端点聚类后提取封闭环，2D/3D 运行时填充地板（不写入 Document schema）。
+- **2D 拖墙**：可选中墙拖墙身平移或拖端点改形；共享端点（吸附阈值内）联动邻墙；fixture 不跟随。
 - `CatalogItem.category`（`wall | fixture | equipment | component`）供 Host 左侧素材分组与交互语义（fixture 触发贴墙吸附）。
+
+### D7. 会话级交互配置
+
+- `createEditor({ interaction })`：`snapEnabled`（默认 true，懒生效）、`collisionEnabled`（默认 true）、`transformModes`（默认 `['translate']`）。
+- 运行时：`setSnapEnabled` / `setCollisionEnabled` / `setTransformModes` / `setTransformMode` / `getInteraction()`。
+- 会话吸附 = 2D **贴边**对齐（物件四边、轴对齐墙内外表面）；不注册硬网格约束，避免拖拽一格一格跳。
+- 3D gizmo 仅允许白名单内 mode；布局默认不开 scale。
 
 ### 次级定稿
 

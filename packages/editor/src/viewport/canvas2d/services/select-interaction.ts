@@ -1,15 +1,17 @@
-/** 选择模式：点选、拖移、旋转手柄，写回 doc.commands */
+/** 选择模式：点选、拖移、旋转手柄、墙身/端点拖拽，写回 doc.commands */
 import type { EditorNodeJSON } from '../../../document/types'
 import type { AlignGuide } from '../utils/align-guides'
 import { snapWithAlignGuides } from '../utils/align-guides'
 import { computeNodeLayout } from '../utils/node-layout'
-import { hitTestNode, hitTestRotateHandle, hitTestWall } from '../utils/hit-test'
+import { hitTestNode, hitTestRotateHandle } from '../utils/hit-test'
+import type { WallDragMode, WallDragPatch } from '../utils/wall-snap'
+import { applyWallDrag, hitWallDragTarget } from '../utils/wall-snap'
 import type { PlanePoint } from '../types'
 import type { PointerInteraction, Viewport2DHost } from './types'
 
 const SOURCE = 'viewport2d'
 
-/** 选择 / 平移 / 旋转手柄 */
+/** 选择 / 平移 / 旋转手柄 / 墙拖 */
 export class SelectInteraction implements PointerInteraction {
   dragNodeId: string | null = null
   dragGhost: PlanePoint | null = null
@@ -26,6 +28,12 @@ export class SelectInteraction implements PointerInteraction {
   rotateMoved = false
   rotateColliding = false
 
+  dragWallId: string | null = null
+  wallDragMode: WallDragMode = 'body'
+  wallDragOrigin: PlanePoint | null = null
+  wallDragPatches: WallDragPatch[] = []
+  wallDragMoved = false
+
   constructor(private host: Viewport2DHost) {}
 
   reset(): void {
@@ -38,6 +46,11 @@ export class SelectInteraction implements PointerInteraction {
     this.rotateCenter = null
     this.rotateMoved = false
     this.rotateColliding = false
+    this.dragWallId = null
+    this.wallDragMode = 'body'
+    this.wallDragOrigin = null
+    this.wallDragPatches = []
+    this.wallDragMoved = false
   }
 
   onPointerDown(event: PointerEvent, plane: PlanePoint): boolean {
@@ -82,13 +95,27 @@ export class SelectInteraction implements PointerInteraction {
       return true
     }
 
-    const hitWall = hitTestWall(plane.u, plane.v, doc.getWalls(), this.host.scale, this.host.isElevation)
-    if (hitWall) {
-      doc.selection.set(hitWall.id)
-      this.host.onWallSelect?.(hitWall)
-    } else {
-      doc.selection.clear()
+    const wallHit = hitWallDragTarget(
+      doc.getWalls(),
+      plane.u,
+      plane.v,
+      this.host.scale,
+      this.host.isElevation
+    )
+    if (wallHit) {
+      const wall = doc.getWall(wallHit.wallId)
+      doc.selection.set(wallHit.wallId)
+      if (wall) this.host.onWallSelect?.(wall)
+      this.dragWallId = wallHit.wallId
+      this.wallDragMode = wallHit.mode
+      this.wallDragOrigin = { ...plane }
+      this.wallDragPatches = []
+      this.wallDragMoved = false
+      this.host.requestRender()
+      return true
     }
+
+    doc.selection.clear()
     this.host.requestRender()
     return true
   }
@@ -115,6 +142,21 @@ export class SelectInteraction implements PointerInteraction {
       return true
     }
 
+    if (this.dragWallId && this.wallDragOrigin) {
+      this.wallDragMoved = true
+      const du = plane.u - this.wallDragOrigin.u
+      const dv = plane.v - this.wallDragOrigin.v
+      this.wallDragPatches = applyWallDrag(
+        this.host.doc.getWalls(),
+        this.dragWallId,
+        this.wallDragMode,
+        du,
+        dv
+      )
+      this.host.requestRender()
+      return true
+    }
+
     if (this.dragNodeId) {
       this.dragMoved = true
       let next = { u: plane.u + this.dragOffset.u, v: plane.v + this.dragOffset.v }
@@ -132,17 +174,21 @@ export class SelectInteraction implements PointerInteraction {
             const cv = this.host.isElevation ? p.v + fp.wv / 2 : p.v
             return { u: cu, v: cv, wu: fp.wu, wv: fp.wv }
           })
-        const centerV = this.host.isElevation ? next.v + wv / 2 : next.v
-        const snapped = snapWithAlignGuides({
-          moving: { u: next.u, v: centerV, wu, wv },
-          targets,
-          walls: this.host.isElevation ? [] : this.host.doc.getWalls(),
-          threshold: Math.max(0.08, 10 / this.host.scale)
-        })
-        this.alignGuides = snapped.guides
-        next = {
-          u: snapped.u,
-          v: this.host.isElevation ? snapped.v - wv / 2 : snapped.v
+        if (this.host.snapEnabled) {
+          const centerV = this.host.isElevation ? next.v + wv / 2 : next.v
+          const snapped = snapWithAlignGuides({
+            moving: { u: next.u, v: centerV, wu, wv },
+            targets,
+            walls: this.host.isElevation ? [] : this.host.doc.getWalls(),
+            threshold: Math.max(0.08, 10 / this.host.scale)
+          })
+          this.alignGuides = snapped.guides
+          next = {
+            u: snapped.u,
+            v: this.host.isElevation ? snapped.v - wv / 2 : snapped.v
+          }
+        } else {
+          this.alignGuides = []
         }
         this.dragGhost = next
         const nextPos = this.host.positionFromPlane(next.u, next.v, node.transform)
@@ -179,6 +225,10 @@ export class SelectInteraction implements PointerInteraction {
         )
         if (!result.ok && result.denied) this.host.onDenied?.(result.denied)
       }
+    }
+
+    if (this.dragWallId && this.wallDragMoved && this.wallDragPatches.length) {
+      this.host.doc.commands.moveWalls(this.wallDragPatches)
     }
 
     if (this.dragNodeId && this.dragGhost && this.dragMoved) {

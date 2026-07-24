@@ -435,6 +435,51 @@ export class EditorDocument {
       return true
     },
 
+    /** 批量更新墙端点（墙拖/端点联动）；一条历史；有近零长则整次拒绝 */
+    moveWalls: (
+      updates: Array<{ id: string; a: [number, number]; b: [number, number] }>
+    ): boolean => {
+      if (this.kind !== 'scene' || !updates.length) return false
+      const MIN_LEN = 0.05
+      for (const u of updates) {
+        if (Math.hypot(u.b[0] - u.a[0], u.b[1] - u.a[1]) < MIN_LEN) return false
+      }
+      const before = updates.map(u => {
+        const wall = this.walls.find(w => w.id === u.id)
+        if (!wall) return null
+        return {
+          id: wall.id,
+          a: [...wall.a] as [number, number],
+          b: [...wall.b] as [number, number]
+        }
+      })
+      if (before.some(b => !b)) return false
+      const after = updates.map(u => ({
+        id: u.id,
+        a: [...u.a] as [number, number],
+        b: [...u.b] as [number, number]
+      }))
+
+      const apply = (list: Array<{ id: string; a: [number, number]; b: [number, number] }>) => {
+        list.forEach(item => {
+          const wall = this.walls.find(w => w.id === item.id)
+          if (!wall) return
+          wall.a = [...item.a]
+          wall.b = [...item.b]
+          this.emitter.emit('wall:updated', { wall })
+        })
+        this.emitChange()
+      }
+
+      apply(after)
+      this.history.push({
+        label: 'move walls',
+        undo: () => apply(before as Array<{ id: string; a: [number, number]; b: [number, number] }>),
+        redo: () => apply(after)
+      })
+      return true
+    },
+
     setBounds: (next: Partial<BoundsJSON>): void => {
       const before = { ...this.bounds }
       const after: BoundsJSON = {

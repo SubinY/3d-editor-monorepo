@@ -8,6 +8,7 @@ import type {
   EditorDocumentJSON,
   EditorSession,
   MemoryCatalog,
+  TransformMode,
   WallJSON
 } from '@3d-editor/editor'
 
@@ -32,6 +33,9 @@ let session: EditorSession | undefined
 const docName = ref('')
 const tool = ref<'select' | 'wall'>('select')
 const viewMode = ref<'2d' | '3d' | 'split'>('split')
+const snapEnabled = ref(true)
+const collisionEnabled = ref(true)
+const transformMode = ref<TransformMode>('translate')
 const canUndo = ref(false)
 const canRedo = ref(false)
 const toast = ref('')
@@ -107,9 +111,14 @@ function refreshSelected() {
     selectedNode.y = Number(node.transform.position[1].toFixed(2))
     selectedNode.z = Number(node.transform.position[2].toFixed(2))
     selectedNode.yawDeg = Number(
-      (((isScene.value ? node.transform.rotation[1] : node.transform.rotation[2]) * 180) / Math.PI).toFixed(1)
+      (
+        ((isScene.value ? node.transform.rotation[1] : node.transform.rotation[2]) * 180) /
+        Math.PI
+      ).toFixed(1)
     )
-    selectedNode.catalog = node.catalogRef ? `${node.catalogRef.id}@${node.catalogRef.version}` : '-'
+    selectedNode.catalog = node.catalogRef
+      ? `${node.catalogRef.id}@${node.catalogRef.version}`
+      : '-'
     return
   }
   selectedNode.id = ''
@@ -127,12 +136,19 @@ onMounted(async () => {
       canvas2d: el2d.value,
       canvas3d: el3d.value
     },
+    interaction: {
+      transformModes: ['translate', 'rotate']
+    },
     onDenied: reason => showToast(deniedMessage(reason), 'error')
   })
 
   const d = session.document
   doc.value = d
   docName.value = d.name
+  const interaction = session.getInteraction()
+  snapEnabled.value = interaction.snapEnabled
+  collisionEnabled.value = interaction.collisionEnabled
+  transformMode.value = interaction.transformMode
   refreshBoundsForm()
 
   d.on('change', () => {
@@ -145,12 +161,24 @@ onMounted(async () => {
   const items = await props.catalog.list({ placeableIn: props.kind })
   if (isScene.value) {
     groups.value = [
-      { key: 'fixture', label: '墙体构件', items: items.filter(item => item.category === 'fixture') },
-      { key: 'equipment', label: '电柜', items: items.filter(item => item.category === 'equipment') }
+      {
+        key: 'fixture',
+        label: '墙体构件',
+        items: items.filter(item => item.category === 'fixture')
+      },
+      {
+        key: 'equipment',
+        label: '电柜',
+        items: items.filter(item => item.category === 'equipment')
+      }
     ]
   } else {
     groups.value = [
-      { key: 'component', label: '元器件', items: items.filter(item => item.category === 'component') }
+      {
+        key: 'component',
+        label: '元器件',
+        items: items.filter(item => item.category === 'component')
+      }
     ]
   }
 
@@ -235,6 +263,23 @@ function fitView() {
   session?.viewport2d?.fitBounds()
 }
 
+function toggleSnap() {
+  const next = !snapEnabled.value
+  session?.setSnapEnabled(next)
+  snapEnabled.value = session?.getInteraction().snapEnabled ?? next
+}
+
+function toggleCollision() {
+  const next = !collisionEnabled.value
+  session?.setCollisionEnabled(next)
+  collisionEnabled.value = session?.getInteraction().collisionEnabled ?? next
+}
+
+function setTransformMode(mode: TransformMode) {
+  session?.setTransformMode(mode)
+  transformMode.value = session?.getInteraction().transformMode ?? mode
+}
+
 function save() {
   const d = doc.value
   if (!d) return
@@ -314,8 +359,21 @@ function wallLength(wall: WallJSON): string {
       <span class="kind-badge">{{ isScene ? '电柜室' : '电柜' }}</span>
 
       <div class="tool-seg">
-        <button :class="{ active: tool === 'select' }" title="选择 (W 切换)" @click="setTool('select')">选择</button>
-        <button v-if="isScene" :class="{ active: tool === 'wall' }" title="画墙 (W)" @click="setTool('wall')">画墙</button>
+        <button
+          :class="{ active: tool === 'select' }"
+          title="选择 (W 切换)"
+          @click="setTool('select')"
+        >
+          选择
+        </button>
+        <button
+          v-if="isScene"
+          :class="{ active: tool === 'wall' }"
+          title="画墙 (W)"
+          @click="setTool('wall')"
+        >
+          画墙
+        </button>
       </div>
 
       <div class="tool-seg">
@@ -325,11 +383,43 @@ function wallLength(wall: WallJSON): string {
         <button title="视图适配" @click="fitView">⛶</button>
       </div>
 
+      <div class="tool-seg">
+        <button
+          :class="{ active: snapEnabled }"
+          title="贴边吸附（物件边 / 墙面；非硬网格）"
+          @click="toggleSnap"
+        >
+          吸附
+        </button>
+        <button :class="{ active: collisionEnabled }" title="AABB 碰撞" @click="toggleCollision">
+          碰撞
+        </button>
+      </div>
+
+      <div class="tool-seg">
+        <button
+          :class="{ active: transformMode === 'translate' }"
+          title="3D 移动"
+          @click="setTransformMode('translate')"
+        >
+          移动
+        </button>
+        <button
+          :class="{ active: transformMode === 'rotate' }"
+          title="3D 旋转"
+          @click="setTransformMode('rotate')"
+        >
+          旋转
+        </button>
+      </div>
+
       <div class="spacer" />
 
       <div class="tool-seg view-seg">
         <button :class="{ active: viewMode === '2d' }" @click="setViewMode('2d')">2D</button>
-        <button :class="{ active: viewMode === 'split' }" @click="setViewMode('split')">并排</button>
+        <button :class="{ active: viewMode === 'split' }" @click="setViewMode('split')">
+          并排
+        </button>
         <button :class="{ active: viewMode === '3d' }" @click="setViewMode('3d')">3D</button>
       </div>
       <button class="primary" @click="save">保存</button>
@@ -341,7 +431,11 @@ function wallLength(wall: WallJSON): string {
         <template v-if="isScene">
           <div class="group">
             <div class="group-label">墙体</div>
-            <div class="asset tool-asset" :class="{ active: tool === 'wall' }" @click="setTool(tool === 'wall' ? 'select' : 'wall')">
+            <div
+              class="asset tool-asset"
+              :class="{ active: tool === 'wall' }"
+              @click="setTool(tool === 'wall' ? 'select' : 'wall')"
+            >
               <span class="swatch wall-swatch">▭</span>
               <div class="meta">
                 <div class="name">画墙工具</div>
@@ -387,13 +481,35 @@ function wallLength(wall: WallJSON): string {
 
       <!-- 右：属性 -->
       <aside class="right">
-        <div v-if="!isScene" class="section">
-          <div class="section-title">柜体尺寸</div>
+        <div class="section">
+          <div class="section-title">{{ isScene ? '工作区尺寸' : '柜体尺寸' }}</div>
           <div class="row3">
-            <label>宽 (m)<input v-model.number="boundsForm.width" type="number" step="0.1" min="0.2" @change="applyBounds" /></label>
-            <label>深 (m)<input v-model.number="boundsForm.depth" type="number" step="0.1" min="0.2" @change="applyBounds" /></label>
-            <label>高 (m)<input v-model.number="boundsForm.height" type="number" step="0.1" min="0.5" @change="applyBounds" /></label>
+            <label
+              >宽 (m)<input
+                v-model.number="boundsForm.width"
+                type="number"
+                step="0.1"
+                :min="isScene ? 1 : 0.2"
+                @change="applyBounds"
+            /></label>
+            <label
+              >深 (m)<input
+                v-model.number="boundsForm.depth"
+                type="number"
+                step="0.1"
+                :min="isScene ? 1 : 0.2"
+                @change="applyBounds"
+            /></label>
+            <label
+              >高 (m)<input
+                v-model.number="boundsForm.height"
+                type="number"
+                step="0.1"
+                :min="isScene ? 1 : 0.5"
+                @change="applyBounds"
+            /></label>
           </div>
+          <p v-if="isScene" class="hint">影响 3D 底图与网格范围；房间轮廓仍由画墙决定。</p>
         </div>
 
         <div class="section">
@@ -401,17 +517,43 @@ function wallLength(wall: WallJSON): string {
           <template v-if="selectedNode.id">
             <label>名称<input v-model="selectedNode.name" @change="applyNodeName" /></label>
             <div class="row3">
-              <label>X 宽 (m)<input v-model.number="selectedNode.x" type="number" step="0.1" @change="applyNodeTransform" /></label>
-              <label v-if="isScene">Z 深 (m)<input v-model.number="selectedNode.z" type="number" step="0.1" @change="applyNodeTransform" /></label>
-              <label v-else>Y 高 (m)<input v-model.number="selectedNode.y" type="number" step="0.1" @change="applyNodeTransform" /></label>
-              <label>朝向 (°)<input v-model.number="selectedNode.yawDeg" type="number" step="15" @change="applyNodeTransform" /></label>
+              <label
+                >X 宽 (m)<input
+                  v-model.number="selectedNode.x"
+                  type="number"
+                  step="0.1"
+                  @change="applyNodeTransform"
+              /></label>
+              <label v-if="isScene"
+                >Z 深 (m)<input
+                  v-model.number="selectedNode.z"
+                  type="number"
+                  step="0.1"
+                  @change="applyNodeTransform"
+              /></label>
+              <label v-else
+                >Y 高 (m)<input
+                  v-model.number="selectedNode.y"
+                  type="number"
+                  step="0.1"
+                  @change="applyNodeTransform"
+              /></label>
+              <label
+                >朝向 (°)<input
+                  v-model.number="selectedNode.yawDeg"
+                  type="number"
+                  step="15"
+                  @change="applyNodeTransform"
+              /></label>
             </div>
             <div class="kv">资产：{{ selectedNode.catalog }}</div>
             <button class="danger" @click="removeSelected">删除节点</button>
           </template>
           <template v-else-if="selectedWall">
             <div class="kv">墙段长度：{{ wallLength(selectedWall) }} m</div>
-            <div class="kv">高 {{ selectedWall.height ?? 3 }} m · 厚 {{ selectedWall.thickness ?? 0.2 }} m</div>
+            <div class="kv">
+              高 {{ selectedWall.height ?? 3 }} m · 厚 {{ selectedWall.thickness ?? 0.2 }} m
+            </div>
             <button class="danger" @click="removeSelected">删除墙段</button>
           </template>
           <p v-else class="hint">在 2D/3D 画布中点击对象查看属性；空白处点击取消选中。</p>
@@ -431,7 +573,8 @@ function wallLength(wall: WallJSON): string {
           <div class="section-title">操作提示</div>
           <p class="hint">
             画墙：左键连续落点，右键或 Esc 结束当前链；封闭墙体会自动填充地板。<br />
-            W 切换「选择 / 画墙」· Ctrl+Z / Ctrl+Shift+Z 撤销重做 · Delete 删除 · Esc 取消工具态/清选中<br />
+            W 切换「选择 / 画墙」· Ctrl+Z / Ctrl+Shift+Z 撤销重做 · Delete 删除 · Esc
+            取消工具态/清选中<br />
             门 / 窗 / 柱拖近墙体会自动贴墙；物件拖动时有对齐辅助线。<br />
             平移：中键或 Shift+左键；缩放：滚轮。选中后拖主体平移，拖外侧圆环旋转。
           </p>
