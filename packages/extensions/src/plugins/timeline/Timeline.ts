@@ -1,4 +1,4 @@
-import type { TimelineSchema, Track, Keyframe } from '@3d-editor/editor'
+﻿import type { TimelineSchema, Track, Keyframe } from '@3d-editor/engine'
 
 export class Timeline {
   public data: TimelineSchema

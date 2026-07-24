@@ -1,1 +1,0 @@
-{"version":3,"file":"AnimationSystem.d.ts","sourceRoot":"","sources":["AnimationSystem.ts"],"names":[],"mappings":"AAAA,OAAO,KAAK,KAAK,MAAM,OAAO,CAAA;AAE9B,qBAAa,eAAe;IAC1B,OAAO,CAAC,MAAM,CAAuC;IAErD,GAAG,CAAC,MAAM,EAAE,KAAK,CAAC,QAAQ,EAAE,KAAK,GAAE,KAAK,CAAC,aAAa,EAAO,GAAG,KAAK,CAAC,cAAc;IAOpF,MAAM,CAAC,KAAK,EAAE,MAAM,GAAG,IAAI;CAG5B"}

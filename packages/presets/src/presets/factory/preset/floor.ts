@@ -1,6 +1,6 @@
 import * as THREE from 'three'
 import { Reflector } from 'three/examples/jsm/objects/Reflector.js'
-import type { CoreContext } from '@3d-editor/editor'
+import type { CoreContext } from '@3d-editor/engine'
 import type { FactoryPresetOptions, FactoryPresetState } from './types'
 
 function setNonSelectable(obj: THREE.Object3D) {
@@ -100,7 +100,7 @@ function addFloorBorders(
   depth: number,
   halfW: number,
   halfD: number,
-  borderOptions?: NonNullable<FactoryPresetOptions['floor']>['border']
+  borderOptions?: FactoryPresetOptions['floor']['border']
 ) {
   const makeStrip = (w: number, d: number, x: number, z: number, material: THREE.Material) => {
     const geo = new THREE.BoxGeometry(w, 0.02, d)

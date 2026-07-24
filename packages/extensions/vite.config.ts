@@ -10,10 +10,10 @@ export default defineConfig({
       fileName: format => `index.${format === 'es' ? 'js' : 'cjs'}`
     },
     rollupOptions: {
-      external: ['@3d-editor/editor', 'three'],
+      external: ['@3d-editor/engine', 'three'],
       output: {
         globals: {
-          '@3d-editor/editor': 'ThreeEditorSDK',
+          '@3d-editor/engine': 'ThreeEditorEngine',
           'three': 'THREE'
         }
       }

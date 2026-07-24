@@ -1,5 +1,5 @@
 import * as THREE from 'three'
-import type { CoreContext } from '@3d-editor/editor'
+import type { CoreContext } from '@3d-editor/engine'
 import type { FactoryPresetOptions, FactoryPresetState } from './types'
 
 function setNonSelectable(obj: THREE.Object3D) {

@@ -1,4 +1,4 @@
-import type { CoreContext } from '@3d-editor/editor'
+﻿import type { CoreContext } from '@3d-editor/engine'
 
 export interface PerformanceStats {
   fps: number

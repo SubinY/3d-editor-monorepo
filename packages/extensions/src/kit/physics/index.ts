@@ -1,4 +1,4 @@
-import type { PhysicsBodySchema } from '@3d-editor/editor'
+import type { PhysicsBodySchema } from '@3d-editor/engine'
 
 export interface PhysicsBodyHandle {
   id: string

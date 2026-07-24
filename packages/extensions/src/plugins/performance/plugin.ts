@@ -1,4 +1,4 @@
-import type { CoreContext, EnginePlugin } from '@3d-editor/editor'
+﻿import type { CoreContext, EnginePlugin } from '@3d-editor/engine'
 import { PerformanceMonitor, type PerformanceStats } from './PerformanceMonitor'
 
 export interface PerformancePluginOptions {
