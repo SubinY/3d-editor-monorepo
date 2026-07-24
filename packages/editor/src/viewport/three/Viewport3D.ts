@@ -520,6 +520,12 @@ export class Viewport3D {
     if (!root) return
     this.applyTransformToObject(root, node.transform)
     root.visible = node.visible !== false
+    // 隐藏时立刻卸掉 gizmo（visible 变更不会走 selection:changed）
+    if (node.visible === false && this.doc.selection.first() === node.id) {
+      this.selection.syncGizmo([])
+    } else if (node.visible !== false && this.doc.selection.first() === node.id) {
+      this.selection.syncGizmo([node.id])
+    }
   }
 
   private applyTransformToObject(object: THREE.Object3D, transform: TransformJSON): void {

@@ -27,6 +27,7 @@ export function hitTestNode(opts: {
   const { nodes, u, v, isElevation, planeFromPosition, footprintSize, itemFor } = opts
   for (let i = nodes.length - 1; i >= 0; i--) {
     const node = nodes[i]
+    if (node.visible === false) continue
     const item = itemFor(node)
     const { wu, wv } = footprintSize(item)
     const plane = planeFromPosition(node.transform.position)

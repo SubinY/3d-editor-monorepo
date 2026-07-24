@@ -22,7 +22,13 @@ export class SelectionService {
   syncGizmo(ids: string[]): void {
     if (this.opts.readonly) return
     const first = ids[0]
-    const object = first ? this.opts.nodeRoots.get(first) : undefined
+    const node = first ? this.opts.doc.getNode(first) : undefined
+    // 隐藏节点不挂 gizmo，避免对不可见对象做变换
+    if (!node || node.visible === false) {
+      this.opts.runtime.attachTransform(null)
+      return
+    }
+    const object = this.opts.nodeRoots.get(first)
     this.opts.runtime.attachTransform(object ?? null)
   }
 

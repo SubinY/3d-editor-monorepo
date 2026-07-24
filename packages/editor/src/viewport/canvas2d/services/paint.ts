@@ -287,6 +287,7 @@ function drawNodes(p: Paint2DContext): void {
   const { ctx, camera, doc, theme, select, tool, readonly, isElevation } = p
   const selection = doc.selection.get()
   doc.getNodes().forEach(node => {
+    if (node.visible === false) return
     const item = p.itemFor(node)
     const { wu, wv } = p.footprintSize(item)
     const w = wu * camera.scale
