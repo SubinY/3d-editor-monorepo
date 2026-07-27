@@ -144,6 +144,14 @@ interface EnvironmentJSON {
     mapUrl?: string
     mapRepeat?: number
   }
+  /** 场景墙体外观；所有墙共用一套材质 */
+  wall: {
+    color: string
+    opacity?: number
+    presetId?: string
+    mapUrl?: string
+    mapRepeat?: number
+  }
   defaultView?: {
     /** orbit=旋转相机；orthographic=正交平面图 */
     type?: 'orbit' | 'orthographic'
@@ -217,6 +225,7 @@ packages/editor/src/
 
 3D 由 `viewport/three/runtime/ThreeRuntime` 提供；旧 `packages/engine` 为 legacy。
 Viewport 内：`utils/` 纯函数，`services/` 有状态职责；门面只做装配与事件路由。
+3D 视口右下角有世界坐标轴角标（点 ±X/±Y/±Z 立刻切视角，角标内拖拽环绕相机）；不进 `environment.helpers`。
 
 ## 7. 平台 / 业务分工
 

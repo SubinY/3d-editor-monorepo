@@ -41,8 +41,8 @@ function wallLength(wall: WallJSON): string {
     <section class="section">
       <div class="section-title">{{ isScene ? '工作区尺寸' : '柜体尺寸' }}</div>
       <el-form label-position="top" size="small" class="bounds-form">
-        <div class="row3">
-          <el-form-item label="宽 (m)">
+        <div :class="isScene ? 'row2' : 'row3'">
+          <el-form-item label="长 (X)">
             <el-input-number
               v-model="boundsForm.width"
               :min="isScene ? 1 : 0.2"
@@ -51,7 +51,7 @@ function wallLength(wall: WallJSON): string {
               @change="emit('update:bounds')"
             />
           </el-form-item>
-          <el-form-item label="深 (m)">
+          <el-form-item label="宽 (Z)">
             <el-input-number
               v-model="boundsForm.depth"
               :min="isScene ? 1 : 0.2"
@@ -60,10 +60,10 @@ function wallLength(wall: WallJSON): string {
               @change="emit('update:bounds')"
             />
           </el-form-item>
-          <el-form-item label="高 (m)">
+          <el-form-item v-if="!isScene" label="高 (Y)">
             <el-input-number
               v-model="boundsForm.height"
-              :min="isScene ? 1 : 0.5"
+              :min="0.5"
               :step="0.1"
               controls-position="right"
               @change="emit('update:bounds')"
@@ -176,7 +176,14 @@ function wallLength(wall: WallJSON): string {
   gap: 6px;
 }
 
+.row2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
 .bounds-form :deep(.el-input-number),
+.row2 :deep(.el-input-number),
 .row3 :deep(.el-input-number) {
   width: 100%;
 }

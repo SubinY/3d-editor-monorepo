@@ -10,6 +10,7 @@ export {
   cloneTransform,
   createDefaultEnvironment,
   createDefaultFloor,
+  createDefaultWall,
   cloneEnvironment
 } from './document/types'
 export { createEmptyDocumentJSON } from './document/serialize'
@@ -29,6 +30,7 @@ export type {
   LightJSON,
   EnvironmentHelpersJSON,
   EnvironmentFloorJSON,
+  EnvironmentWallJSON,
   FloorCoverage,
   DefaultViewJSON,
   CameraViewType,

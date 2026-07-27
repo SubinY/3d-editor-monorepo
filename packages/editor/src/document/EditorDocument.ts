@@ -15,6 +15,7 @@ import {
   cloneTransform,
   createDefaultEnvironment,
   createDefaultTransform,
+  createDefaultWall,
   type BoundsJSON,
   type DocumentKind,
   type EditorDocumentJSON,
@@ -99,6 +100,7 @@ export class EditorDocument {
     this.environment = options.environment
       ? cloneEnvironment(options.environment)
       : createDefaultEnvironment(options.kind, options.bounds)
+    if (!this.environment.wall) this.environment.wall = createDefaultWall()
     this.metadata = { ...(options.metadata ?? {}) }
     this.walls = (options.walls ?? []).map(wall => ({ ...wall }))
     this.selection = new DocumentSelection(ids => {

@@ -21,6 +21,11 @@ import {
   createSiteFloorMesh,
   type FloorMaterialHandle
 } from './helpers/floor'
+import {
+  createWallMaterial,
+  scaleWallBoxUVs,
+  type WallMaterialHandle
+} from './helpers/wall-material'
 import { findClosedWallLoops } from '../canvas2d/utils/closed-loops'
 
 export interface Viewport3DOptions {
@@ -78,13 +83,8 @@ export class Viewport3D {
   private lastCameraPoseKey: string | null = null
   private floorMaterialHandle: FloorMaterialHandle | null = null
   private floorApplyToken = 0
-  /** 所有墙共用同一材质实例，减少 draw call */
-  private readonly wallMaterial = new THREE.MeshStandardMaterial({
-    color: '#233242',
-    roughness: 0.85,
-    transparent: true,
-    opacity: 0.92
-  })
+  private wallMaterialHandle: WallMaterialHandle | null = null
+  private wallApplyToken = 0
 
   constructor(container: HTMLElement, options: Viewport3DOptions) {
     this.doc = options.document
@@ -119,7 +119,7 @@ export class Viewport3D {
     this.applyCameraFromEnvironment()
     void this.environment.apply(this.doc.environment, this.doc.bounds)
 
-    this.rebuildWalls()
+    void this.rebuildWalls()
     void this.buildAllNodes()
 
     this.selection = new SelectionService({
@@ -147,9 +147,9 @@ export class Viewport3D {
       this.doc.on('node:updated', ({ node }) => {
         this.syncNodeObject(node)
       }),
-      this.doc.on('wall:added', () => this.rebuildWalls()),
-      this.doc.on('wall:removed', () => this.rebuildWalls()),
-      this.doc.on('wall:updated', () => this.rebuildWalls()),
+      this.doc.on('wall:added', () => void this.rebuildWalls()),
+      this.doc.on('wall:removed', () => void this.rebuildWalls()),
+      this.doc.on('wall:updated', () => void this.rebuildWalls()),
       this.doc.on('bounds:updated', () => {
         void this.environment.apply(this.doc.environment, this.doc.bounds)
         void this.rebuildFloors()
@@ -158,6 +158,7 @@ export class Viewport3D {
         void this.environment.apply(environment, this.doc.bounds)
         this.applyCameraFromEnvironment()
         void this.rebuildFloors()
+        void this.rebuildWalls()
       }),
       this.doc.on('selection:changed', ({ ids }) => this.selection.syncGizmo(ids)),
       this.runtime.onTransformEnd(onTransformEnd)
@@ -211,20 +212,32 @@ export class Viewport3D {
     }
   }
 
-  private rebuildWalls(): void {
-    // 释放旧 geometry，避免 GPU 内存泄漏
+  private async rebuildWalls(): Promise<void> {
+    const token = ++this.wallApplyToken
     this.wallGroup.children.forEach(child => {
-      ;(child as THREE.Mesh).geometry?.dispose()
+      ; (child as THREE.Mesh).geometry?.dispose()
     })
     this.wallGroup.clear()
+    if (this.wallMaterialHandle) {
+      this.wallMaterialHandle.dispose()
+      this.wallMaterialHandle = null
+    }
+
+    const handle = await createWallMaterial(this.doc.environment.wall)
+    if (token !== this.wallApplyToken || this.disposed) {
+      handle.dispose()
+      return
+    }
+    this.wallMaterialHandle = handle
+
     this.doc.getWalls().forEach(wall => {
-      const mesh = this.buildWallMesh(wall)
+      const mesh = this.buildWallMesh(wall, handle.material)
       this.wallGroup.add(mesh)
     })
     void this.rebuildFloors()
     this.markNonSelectable(this.wallGroup)
     this.wallGroup.traverse(child => {
-      child.raycast = () => {}
+      child.raycast = () => { }
     })
   }
 
@@ -268,18 +281,23 @@ export class Viewport3D {
 
     this.markNonSelectable(this.floorGroup)
     this.floorGroup.traverse(child => {
-      child.raycast = () => {}
+      child.raycast = () => { }
     })
   }
 
-  private buildWallMesh(wall: WallJSON): THREE.Mesh {
+  private buildWallMesh(
+    wall: WallJSON,
+    material: THREE.MeshStandardMaterial
+  ): THREE.Mesh {
     const length = Math.hypot(wall.b[0] - wall.a[0], wall.b[1] - wall.a[1])
     const height = wall.height ?? 3
     const thickness = wall.thickness ?? 0.2
-    const mesh = new THREE.Mesh(
-      new THREE.BoxGeometry(Math.max(length, 0.01), height, thickness),
-      this.wallMaterial
-    )
+    const geometry = new THREE.BoxGeometry(Math.max(length, 0.01), height, thickness)
+    const wallEnv = this.doc.environment.wall
+    if (wallEnv.mapUrl) {
+      scaleWallBoxUVs(geometry, Math.max(length, 0.01), height, wallEnv.mapRepeat ?? 2)
+    }
+    const mesh = new THREE.Mesh(geometry, material)
     mesh.position.set((wall.a[0] + wall.b[0]) / 2, height / 2, (wall.a[1] + wall.b[1]) / 2)
     mesh.rotation.y = -Math.atan2(wall.b[1] - wall.a[1], wall.b[0] - wall.a[0])
     mesh.castShadow = true
@@ -596,13 +614,17 @@ export class Viewport3D {
   dispose(): void {
     this.disposed = true
     this.floorApplyToken++
+    this.wallApplyToken++
     this.clearFloorGroup()
     this.unsubscribers.forEach(off => off())
     const dom = this.runtime.domElement
     dom.removeEventListener('pointerdown', this.selection.handlePointerDown)
     dom.removeEventListener('pointerup', this.selection.handlePointerUp)
     Array.from(this.nodeRoots.keys()).forEach(id => this.removeNodeObject(id))
-    this.wallMaterial.dispose()
+    if (this.wallMaterialHandle) {
+      this.wallMaterialHandle.dispose()
+      this.wallMaterialHandle = null
+    }
     this.environment.dispose()
     this.runtime.dispose()
   }

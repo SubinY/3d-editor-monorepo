@@ -18,7 +18,7 @@ import WorkbenchToolbar from './workbench/WorkbenchToolbar.vue'
 import LeftPanel from './workbench/LeftPanel.vue'
 import ViewportArea from './workbench/ViewportArea.vue'
 import RightPanel from './workbench/RightPanel.vue'
-import type { LiveCameraPose } from './workbench/EnvironmentPanel.vue'
+import type { LiveCameraPose } from './workbench/environment-panel/types'
 import type { AssetGroup, EditorTool, LayerTreeItem, ViewMode } from './workbench/types'
 
 const props = defineProps<{

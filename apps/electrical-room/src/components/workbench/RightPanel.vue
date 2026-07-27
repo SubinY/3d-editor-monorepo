@@ -4,8 +4,8 @@ import { Setting, Monitor } from '@element-plus/icons-vue'
 import type { EnvironmentJSON, WallJSON } from '@3d-editor/editor'
 import type { ViewMode } from './types'
 import PropertyPanel from './PropertyPanel.vue'
-import EnvironmentPanel from './EnvironmentPanel.vue'
-import type { LiveCameraPose } from './EnvironmentPanel.vue'
+import EnvironmentPanel from './environment-panel/EnvironmentPanel.vue'
+import type { LiveCameraPose } from './environment-panel/types'
 import type { BoundsForm, SelectedNodeForm } from './PropertyPanel.vue'
 
 defineProps<{

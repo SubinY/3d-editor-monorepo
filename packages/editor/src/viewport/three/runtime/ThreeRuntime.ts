@@ -5,6 +5,11 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import { TransformControls } from 'three/examples/jsm/controls/TransformControls.js'
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
 import { DEFAULT_TRANSLATION_SNAP } from '../../../core/interaction'
+import {
+  cameraPoseAlongAxis,
+  WorldViewGizmo,
+  type AxisHit
+} from '../helpers/world-view-gizmo'
 
 export interface TransformSnapshot {
   position: [number, number, number]
@@ -61,6 +66,23 @@ export class ThreeRuntime {
   private allowedModes: TransformMode[] = ['translate']
   private translationSnapSize = DEFAULT_TRANSLATION_SNAP
 
+  private viewGizmo = new WorldViewGizmo()
+  private gizmoPointer: {
+    pointerId: number
+    startX: number
+    startY: number
+    lastX: number
+    lastY: number
+    hit: AxisHit | null
+    dragged: boolean
+    orbitWasEnabled: boolean
+  } | null = null
+  private spherical = new THREE.Spherical()
+  private offset = new THREE.Vector3()
+  private quat = new THREE.Quaternion()
+  private quatInverse = new THREE.Quaternion()
+  private yAxis = new THREE.Vector3(0, 1, 0)
+
   constructor(options: ThreeRuntimeOptions) {
     this.container = options.container
     this.scene = new THREE.Scene()
@@ -93,6 +115,12 @@ export class ThreeRuntime {
       this.transform = null
     }
 
+    const dom = this.renderer.domElement
+    dom.addEventListener('pointerdown', this.handleGizmoPointerDown, true)
+    window.addEventListener('pointermove', this.handleGizmoPointerMove)
+    window.addEventListener('pointerup', this.handleGizmoPointerUp)
+    window.addEventListener('pointercancel', this.handleGizmoPointerUp)
+
     window.addEventListener('resize', this.handleResize)
     this.handleResize()
     this.startLoop()
@@ -104,6 +132,11 @@ export class ThreeRuntime {
 
   get domElement(): HTMLCanvasElement {
     return this.renderer.domElement
+  }
+
+  /** 世界坐标轴角标是否正在处理指针（选中拾取应跳过） */
+  isCapturingPointer(): boolean {
+    return this.gizmoPointer !== null
   }
 
   onTransformEnd(handler: TransformEndHandler): () => void {
@@ -284,6 +317,13 @@ export class ThreeRuntime {
 
   dispose(): void {
     window.removeEventListener('resize', this.handleResize)
+    const dom = this.renderer.domElement
+    dom.removeEventListener('pointerdown', this.handleGizmoPointerDown, true)
+    window.removeEventListener('pointermove', this.handleGizmoPointerMove)
+    window.removeEventListener('pointerup', this.handleGizmoPointerUp)
+    window.removeEventListener('pointercancel', this.handleGizmoPointerUp)
+    this.viewGizmo.dispose()
+    this.gizmoPointer = null
     this.orbit.removeEventListener('change', this.handleOrbitChange)
     if (this.transform) {
       this.transform.removeEventListener('dragging-changed', this.handleDraggingChanged)
@@ -327,7 +367,9 @@ export class ThreeRuntime {
   private startLoop(): void {
     const step = () => {
       this.orbit.update()
+      this.viewGizmo.syncFromCamera(this._camera, this.orbit.target)
       this.renderer.render(this.scene, this._camera)
+      this.viewGizmo.render(this.renderer)
       this.loopId = requestAnimationFrame(step)
     }
     this.loopId = requestAnimationFrame(step)
@@ -379,5 +421,100 @@ export class ThreeRuntime {
       this.transformEndHandlers.forEach(handler => handler(payload))
     }
     this.transformBefore = undefined
+  }
+
+  private handleGizmoPointerDown = (event: PointerEvent): void => {
+    if (event.button !== 0) return
+    const rect = this.domElement.getBoundingClientRect()
+    if (!this.viewGizmo.containsClientPoint(event.clientX, event.clientY, rect)) return
+
+    event.preventDefault()
+    event.stopPropagation()
+    const hit = this.viewGizmo.pickAxis(event.clientX, event.clientY, rect)
+    this.gizmoPointer = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      lastX: event.clientX,
+      lastY: event.clientY,
+      hit,
+      dragged: false,
+      orbitWasEnabled: this.orbit.enabled
+    }
+    this.orbit.enabled = false
+    try {
+      this.domElement.setPointerCapture(event.pointerId)
+    } catch {
+      /* ignore */
+    }
+  }
+
+  private handleGizmoPointerMove = (event: PointerEvent): void => {
+    const state = this.gizmoPointer
+    if (!state || state.pointerId !== event.pointerId) return
+
+    const dx = event.clientX - state.lastX
+    const dy = event.clientY - state.lastY
+    state.lastX = event.clientX
+    state.lastY = event.clientY
+
+    const total = Math.hypot(event.clientX - state.startX, event.clientY - state.startY)
+    if (!state.dragged && total < 4) return
+    state.dragged = true
+
+    this.orbitCameraByDelta(dx, dy)
+  }
+
+  private handleGizmoPointerUp = (event: PointerEvent): void => {
+    const state = this.gizmoPointer
+    if (!state || state.pointerId !== event.pointerId) return
+
+    if (!state.dragged && state.hit) {
+      this.snapCameraToAxis(state.hit)
+    }
+
+    this.orbit.enabled = state.orbitWasEnabled
+    this.gizmoPointer = null
+    try {
+      this.domElement.releasePointerCapture(event.pointerId)
+    } catch {
+      /* ignore */
+    }
+  }
+
+  private snapCameraToAxis(hit: AxisHit): void {
+    const target: [number, number, number] = [
+      this.orbit.target.x,
+      this.orbit.target.y,
+      this.orbit.target.z
+    ]
+    const radius = this._camera.position.distanceTo(this.orbit.target) || 1
+    const pose = cameraPoseAlongAxis(target, radius, hit.axis, hit.sign)
+    this._camera.up.set(pose.up[0], pose.up[1], pose.up[2])
+    this._camera.position.set(pose.position[0], pose.position[1], pose.position[2])
+    this._camera.lookAt(this.orbit.target)
+    this.orbit.update()
+    this.handleOrbitChange()
+  }
+
+  private orbitCameraByDelta(dx: number, dy: number): void {
+    const target = this.orbit.target
+    // 与 OrbitControls 一致：先把 offset 变到 Y-up 球坐标，再变回 camera.up
+    this.quat.setFromUnitVectors(this._camera.up, this.yAxis)
+    this.quatInverse.copy(this.quat).invert()
+    this.offset.copy(this._camera.position).sub(target)
+    this.offset.applyQuaternion(this.quat)
+    this.spherical.setFromVector3(this.offset)
+    const rotSpeed = 0.005
+    this.spherical.theta -= dx * rotSpeed
+    this.spherical.phi -= dy * rotSpeed
+    const eps = 1e-4
+    this.spherical.phi = Math.max(eps, Math.min(Math.PI - eps, this.spherical.phi))
+    this.offset.setFromSpherical(this.spherical)
+    this.offset.applyQuaternion(this.quatInverse)
+    this._camera.position.copy(target).add(this.offset)
+    this._camera.lookAt(target)
+    this.orbit.update()
+    this.handleOrbitChange()
   }
 }

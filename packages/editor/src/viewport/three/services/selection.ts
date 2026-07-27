@@ -33,10 +33,18 @@ export class SelectionService {
   }
 
   handlePointerDown = (event: PointerEvent): void => {
+    if (this.opts.runtime.isCapturingPointer()) {
+      this.pointerDownAt = null
+      return
+    }
     this.pointerDownAt = { x: event.clientX, y: event.clientY }
   }
 
   handlePointerUp = (event: PointerEvent): void => {
+    if (this.opts.runtime.isCapturingPointer()) {
+      this.pointerDownAt = null
+      return
+    }
     if (!this.pointerDownAt) return
     const moved = Math.hypot(event.clientX - this.pointerDownAt.x, event.clientY - this.pointerDownAt.y)
     this.pointerDownAt = null

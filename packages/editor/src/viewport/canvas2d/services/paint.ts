@@ -198,12 +198,15 @@ function drawWalls(p: Paint2DContext): void {
     const a = camera.worldToScreen(wa[0], wa[1])
     const b = camera.worldToScreen(wb[0], wb[1])
     const selected = selection.includes(wall.id)
-    ctx.strokeStyle = selected ? theme.wallSelected : theme.wall
+    const wallColor = doc.environment.wall?.color || theme.wall
+    ctx.strokeStyle = selected ? theme.wallSelected : wallColor
     ctx.lineWidth = Math.max(3, (wall.thickness ?? 0.2) * camera.scale)
+    ctx.globalAlpha = doc.environment.wall?.opacity ?? 0.92
     ctx.beginPath()
     ctx.moveTo(a.sx, a.sy)
     ctx.lineTo(b.sx, b.sy)
     ctx.stroke()
+    ctx.globalAlpha = 1
     drawWallDimension(p, { ...wall, a: wa, b: wb })
 
     if (selected && tool === 'select' && !readonly) {

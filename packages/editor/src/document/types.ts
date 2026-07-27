@@ -100,6 +100,20 @@ export interface EnvironmentFloorJSON {
   mapRepeat?: number
 }
 
+/**
+ * 场景级墙体外观（所有墙共用一套材质）。
+ * presetId 由 Host 解释；内核只加载 mapUrl
+ */
+export interface EnvironmentWallJSON {
+  color: string
+  opacity?: number
+  presetId?: string
+  /** 推荐同源相对路径，如 /textures/wall/plaster_diff_1k.jpg */
+  mapUrl?: string
+  /** 贴图世界重复尺度（米/格），默认 2 */
+  mapRepeat?: number
+}
+
 /** 3D 相机交互模式（对齐常见组态：旋转相机 / 正交平面图） */
 export type CameraViewType = 'orbit' | 'orthographic'
 
@@ -130,6 +144,8 @@ export interface EnvironmentJSON {
   helpers: EnvironmentHelpersJSON
   /** 场景地面；container 默认 visible=false */
   floor: EnvironmentFloorJSON
+  /** 场景墙体外观；所有墙共用 */
+  wall: EnvironmentWallJSON
   /** 默认视角：类型 / 目标 / 位姿 / 视场 / 距离限制；编辑态 Orbit 可静默回写目标与半径 */
   defaultView?: DefaultViewJSON
 }
@@ -230,22 +246,8 @@ export function createDefaultEnvironment(kind: DocumentKind, bounds: BoundsJSON)
         }
       })()
 
-  const floor: EnvironmentFloorJSON =
-    kind === 'container'
-      ? {
-        visible: false,
-        coverage: 'bounds',
-        color: '#1a3048',
-        opacity: 1,
-        presetId: 'none'
-      }
-      : {
-        visible: true,
-        coverage: 'bounds',
-        color: '#1a3048',
-        opacity: 1,
-        presetId: 'none'
-      }
+  const floor: EnvironmentFloorJSON = createDefaultFloor(kind)
+  const wall: EnvironmentWallJSON = createDefaultWall()
 
   return {
     background: { type: 'color', value: '#0c1420' },
@@ -256,6 +258,7 @@ export function createDefaultEnvironment(kind: DocumentKind, bounds: BoundsJSON)
       enclosure: kind === 'container' ? 'openBoxDoor' : 'none'
     },
     floor,
+    wall,
     defaultView
   }
 }
@@ -264,19 +267,28 @@ export function createDefaultEnvironment(kind: DocumentKind, bounds: BoundsJSON)
 export function createDefaultFloor(kind: DocumentKind = 'scene'): EnvironmentFloorJSON {
   return kind === 'container'
     ? {
-      visible: false,
-      coverage: 'bounds',
-      color: '#1a3048',
-      opacity: 1,
-      presetId: 'none'
-    }
+        visible: false,
+        coverage: 'bounds',
+        color: '#1a3048',
+        opacity: 1,
+        presetId: 'none'
+      }
     : {
-      visible: true,
-      coverage: 'bounds',
-      color: '#1a3048',
-      opacity: 1,
-      presetId: 'none'
-    }
+        visible: true,
+        coverage: 'bounds',
+        color: '#1a3048',
+        opacity: 1,
+        presetId: 'none'
+      }
+}
+
+/** 缺省墙体外观 */
+export function createDefaultWall(): EnvironmentWallJSON {
+  return {
+    color: '#233242',
+    opacity: 0.92,
+    presetId: 'none'
+  }
 }
 
 export function cloneEnvironment(env: EnvironmentJSON): EnvironmentJSON {

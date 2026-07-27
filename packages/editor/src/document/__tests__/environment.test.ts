@@ -16,6 +16,8 @@ describe('createDefaultEnvironment', () => {
     expect(env.floor.visible).toBe(true)
     expect(env.floor.coverage).toBe('bounds')
     expect(env.floor.presetId).toBe('none')
+    expect(env.wall.color).toBe('#233242')
+    expect(env.wall.presetId).toBe('none')
   })
 
   it('container：无网格、openBoxDoor、地面默认隐藏', () => {
@@ -28,7 +30,7 @@ describe('createDefaultEnvironment', () => {
 })
 
 describe('createEmptyDocumentJSON', () => {
-  it('写出完整 environment（含 floor）', () => {
+  it('写出完整 environment（含 floor / wall）', () => {
     const json = createEmptyDocumentJSON({
       kind: 'scene',
       bounds: { width: 10, depth: 8, height: 3 }
@@ -36,6 +38,7 @@ describe('createEmptyDocumentJSON', () => {
     expect(json.schemaVersion).toBe(SCHEMA_VERSION)
     expect(json.environment.helpers.grid).toBe(true)
     expect(json.environment.floor.coverage).toBe('bounds')
+    expect(json.environment.wall.color).toBe('#233242')
     expect(json.nodes).toEqual([])
   })
 })
