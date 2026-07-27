@@ -1,6 +1,7 @@
 import {
   SCHEMA_VERSION,
-  createMemoryCatalog
+  createMemoryCatalog,
+  createDefaultEnvironment
 } from '@3d-editor/editor'
 import type {
   CatalogItem,
@@ -145,14 +146,16 @@ function componentNode(id: string, itemId: string, name: string, x: number, y: n
 }
 
 function cabinetDocument(id: string, name: string, nodes: EditorNodeJSON[]): EditorDocumentJSON {
+  const bounds = { ...DEFAULT_CABINET_BOUNDS }
   return {
     schemaVersion: SCHEMA_VERSION,
     kind: 'container',
     id,
     name,
     unit: 'm',
-    bounds: { ...DEFAULT_CABINET_BOUNDS },
-    nodes
+    bounds,
+    nodes,
+    environment: createDefaultEnvironment('container', bounds)
   }
 }
 

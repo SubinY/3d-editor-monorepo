@@ -175,6 +175,35 @@ describe('setBounds', () => {
   })
 })
 
+describe('setEnvironment', () => {
+  it('写入完整 environment 并可撤销', () => {
+    const doc = createDocument({ kind: 'container', bounds: { width: 0.8, depth: 0.6, height: 2 } })
+    expect(doc.environment.helpers.enclosure).toBe('openBoxDoor')
+    const next = {
+      ...doc.environment,
+      helpers: { grid: false, enclosure: 'none' as const },
+      background: { type: 'color' as const, value: '#112233' }
+    }
+    doc.commands.setEnvironment(next)
+    expect(doc.environment.helpers.enclosure).toBe('none')
+    expect(doc.environment.background).toEqual({ type: 'color', value: '#112233' })
+    doc.history.undo()
+    expect(doc.environment.helpers.enclosure).toBe('openBoxDoor')
+    doc.history.redo()
+    expect(doc.environment.helpers.enclosure).toBe('none')
+  })
+
+  it('toJSON 带上 environment；缺省 fromJSON 补默认', () => {
+    const doc = createDocument({ kind: 'scene', bounds: { width: 20, depth: 15, height: 3 } })
+    const json = doc.toJSON()
+    expect(json.environment.helpers.grid).toBe(true)
+    const bare = { ...json, environment: undefined as unknown as typeof json.environment }
+    const loaded = EditorDocument.fromJSON(bare as typeof json)
+    expect(loaded.environment.helpers.enclosure).toBe('none')
+    expect(loaded.environment.background.type).toBe('color')
+  })
+})
+
 describe('墙体（线段墙定稿 D4）', () => {
   it('scene 支持 addWall 与撤销；container 不支持', () => {
     const doc = createSceneDoc()
@@ -226,6 +255,8 @@ describe('序列化与加载', () => {
     const json = doc.toJSON()
     expect(json.schemaVersion).toBe('1.0.0')
     expect(json.unit).toBe('m')
+    expect(json.environment.helpers.grid).toBe(true)
+    expect(json.environment.helpers.enclosure).toBe('none')
     expect(json.structure?.walls).toHaveLength(4)
     expect(json.nodes).toHaveLength(1)
     expect(json.nodes[0].props).toEqual({ circuit: 'A-01' })

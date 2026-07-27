@@ -1,7 +1,12 @@
 import type { CatalogProvider } from '../catalog/types'
 import { createId } from '../utils/id'
 import { EditorDocument, type CreateDocumentOptions, type ValidationWarning } from './EditorDocument'
-import { SCHEMA_VERSION, type EditorDocumentJSON } from './types'
+import {
+  SCHEMA_VERSION,
+  cloneEnvironment,
+  createDefaultEnvironment,
+  type EditorDocumentJSON
+} from './types'
 
 export interface LoadDocumentOptions {
   catalog?: CatalogProvider
@@ -9,15 +14,19 @@ export interface LoadDocumentOptions {
 
 /** 仅生成空合同草稿（无 viewport / 历史），供 Host 落库 */
 export function createEmptyDocumentJSON(options: CreateDocumentOptions): EditorDocumentJSON {
+  const bounds = { ...options.bounds }
   return {
     schemaVersion: SCHEMA_VERSION,
     kind: options.kind,
     id: options.id ?? createId(options.kind),
     name: options.name ?? options.kind,
     unit: 'm',
-    bounds: { ...options.bounds },
+    bounds,
     structure: options.walls?.length ? { walls: options.walls.map(wall => ({ ...wall })) } : undefined,
     nodes: [],
+    environment: options.environment
+      ? cloneEnvironment(options.environment)
+      : createDefaultEnvironment(options.kind, bounds),
     metadata: options.metadata ? { ...options.metadata } : undefined
   }
 }

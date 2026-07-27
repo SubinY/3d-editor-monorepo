@@ -11,12 +11,15 @@ import { DocumentHistory } from './history'
 import { DocumentSelection } from './selection'
 import {
   SCHEMA_VERSION,
+  cloneEnvironment,
   cloneTransform,
+  createDefaultEnvironment,
   createDefaultTransform,
   type BoundsJSON,
   type DocumentKind,
   type EditorDocumentJSON,
   type EditorNodeJSON,
+  type EnvironmentJSON,
   type TransformJSON,
   type WallJSON
 } from './types'
@@ -27,6 +30,7 @@ export interface CreateDocumentOptions {
   name?: string
   bounds: BoundsJSON
   walls?: WallJSON[]
+  environment?: EnvironmentJSON
   metadata?: Record<string, unknown>
 }
 
@@ -71,6 +75,7 @@ export class EditorDocument {
   public readonly id: string
   public name: string
   public bounds: BoundsJSON
+  public environment: EnvironmentJSON
   public metadata: Record<string, unknown>
 
   public readonly history = new DocumentHistory(100, () => this.emitChange())
@@ -91,6 +96,9 @@ export class EditorDocument {
     this.id = options.id ?? createId(options.kind)
     this.name = options.name ?? options.kind
     this.bounds = { ...options.bounds }
+    this.environment = options.environment
+      ? cloneEnvironment(options.environment)
+      : createDefaultEnvironment(options.kind, options.bounds)
     this.metadata = { ...(options.metadata ?? {}) }
     this.walls = (options.walls ?? []).map(wall => ({ ...wall }))
     this.selection = new DocumentSelection(ids => {
@@ -501,6 +509,25 @@ export class EditorDocument {
         undo: () => apply(before),
         redo: () => apply(after)
       })
+    },
+
+    setEnvironment: (next: EnvironmentJSON, options?: { history?: boolean }): void => {
+      const before = cloneEnvironment(this.environment)
+      const after = cloneEnvironment(next)
+      const recordHistory = options?.history !== false
+      const apply = (environment: EnvironmentJSON) => {
+        this.environment = cloneEnvironment(environment)
+        this.emitter.emit('environment:updated', { environment: this.environment })
+        // Orbit 位姿静默回写不触发全局 change，避免拖相机时刷图层树
+        if (recordHistory) this.emitChange()
+      }
+      apply(after)
+      if (!recordHistory) return
+      this.history.push({
+        label: 'set environment',
+        undo: () => apply(before),
+        redo: () => apply(after)
+      })
     }
   }
 
@@ -550,6 +577,7 @@ export class EditorDocument {
         bounds: this.bounds,
         structure: this.walls.length ? { walls: this.walls } : undefined,
         nodes: this.nodes,
+        environment: this.environment,
         metadata: Object.keys(this.metadata).length ? this.metadata : undefined
       })
     )
@@ -562,6 +590,7 @@ export class EditorDocument {
       name: json.name,
       bounds: json.bounds,
       walls: json.structure?.walls,
+      environment: json.environment ?? createDefaultEnvironment(json.kind, json.bounds),
       metadata: json.metadata
     })
     const nodes: EditorNodeJSON[] = JSON.parse(JSON.stringify(json.nodes ?? []))

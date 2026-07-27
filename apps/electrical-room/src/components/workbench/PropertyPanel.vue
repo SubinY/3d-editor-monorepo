@@ -37,7 +37,7 @@ function wallLength(wall: WallJSON): string {
 </script>
 
 <template>
-  <aside class="property-panel">
+  <div class="property-panel">
     <section class="section">
       <div class="section-title">{{ isScene ? '工作区尺寸' : '柜体尺寸' }}</div>
       <el-form label-position="top" size="small" class="bounds-form">
@@ -148,17 +148,12 @@ function wallLength(wall: WallJSON): string {
         Ctrl+Z / Ctrl+Shift+Z 撤销重做 · Delete 删除 · Esc 清选中
       </p>
     </section>
-  </aside>
+  </div>
 </template>
 
 <style scoped>
 .property-panel {
-  width: 260px;
   padding: 14px 12px;
-  background: #0e1621;
-  border-left: 1px solid #1d2c3e;
-  overflow-y: auto;
-  flex-shrink: 0;
 }
 
 .section {

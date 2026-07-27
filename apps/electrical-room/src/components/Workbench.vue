@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, shallowRef } from 'vue'
 import { ElMessage } from 'element-plus'
-import { CATALOG_ITEM_MIME, createEditor } from '@3d-editor/editor'
+import { CATALOG_ITEM_MIME, cloneEnvironment, createEditor } from '@3d-editor/editor'
 import type {
   CatalogItem,
   DocumentKind,
@@ -9,6 +9,7 @@ import type {
   EditorDocumentJSON,
   EditorNodeJSON,
   EditorSession,
+  EnvironmentJSON,
   MemoryCatalog,
   TransformMode,
   WallJSON
@@ -16,7 +17,8 @@ import type {
 import WorkbenchToolbar from './workbench/WorkbenchToolbar.vue'
 import LeftPanel from './workbench/LeftPanel.vue'
 import ViewportArea from './workbench/ViewportArea.vue'
-import PropertyPanel from './workbench/PropertyPanel.vue'
+import RightPanel from './workbench/RightPanel.vue'
+import type { LiveCameraPose } from './workbench/EnvironmentPanel.vue'
 import type { AssetGroup, EditorTool, LayerTreeItem, ViewMode } from './workbench/types'
 
 const props = defineProps<{
@@ -59,6 +61,10 @@ const selectedNode = reactive({
 })
 const selectedWall = shallowRef<WallJSON | null>(null)
 const boundsForm = reactive({ width: 0, depth: 0, height: 0 })
+const environment = shallowRef<EnvironmentJSON | null>(null)
+const liveCameraPose = shallowRef<LiveCameraPose | null>(null)
+let unsubCameraPose: (() => void) | undefined
+let cameraPosePersistTimer: number | undefined
 
 const isScene = computed(() => props.kind === 'scene')
 
@@ -85,6 +91,15 @@ function refreshBoundsForm() {
   boundsForm.width = d.bounds.width
   boundsForm.depth = d.bounds.depth
   boundsForm.height = d.bounds.height ?? 0
+}
+
+function refreshEnvironment() {
+  const d = doc.value
+  if (!d) {
+    environment.value = null
+    return
+  }
+  environment.value = cloneEnvironment(d.environment)
 }
 
 async function mapLayerItem(node: EditorNodeJSON, d: EditorDocument): Promise<LayerTreeItem> {
@@ -189,6 +204,7 @@ onMounted(async () => {
   collisionEnabled.value = interaction.collisionEnabled
   transformMode.value = interaction.transformMode
   refreshBoundsForm()
+  refreshEnvironment()
   await refreshLayers()
   refreshHistoryState()
 
@@ -196,11 +212,36 @@ onMounted(async () => {
     refreshHistoryState()
     refreshSelected()
     refreshBoundsForm()
+    refreshEnvironment()
     void refreshLayers()
   })
   d.on('selection:changed', () => {
     refreshSelected()
     void refreshLayers()
+  })
+  d.on('environment:updated', () => {
+    refreshEnvironment()
+  })
+
+  unsubCameraPose = session.viewport3d?.onCameraPoseChange(pose => {
+    const rounded: LiveCameraPose = {
+      position: [
+        Math.round(pose.position[0] * 1000) / 1000,
+        Math.round(pose.position[1] * 1000) / 1000,
+        Math.round(pose.position[2] * 1000) / 1000
+      ],
+      target: [
+        Math.round(pose.target[0] * 1000) / 1000,
+        Math.round(pose.target[1] * 1000) / 1000,
+        Math.round(pose.target[2] * 1000) / 1000
+      ],
+      radius: Math.round(pose.radius * 1000) / 1000
+    }
+    liveCameraPose.value = rounded
+    window.clearTimeout(cameraPosePersistTimer)
+    cameraPosePersistTimer = window.setTimeout(() => {
+      persistLiveCameraPose(rounded)
+    }, 160)
   })
 
   const items = await props.catalog.list({ placeableIn: props.kind })
@@ -232,6 +273,9 @@ onMounted(async () => {
 
 onBeforeUnmount(() => {
   window.removeEventListener('keydown', onKeyDown)
+  window.clearTimeout(cameraPosePersistTimer)
+  unsubCameraPose?.()
+  unsubCameraPose = undefined
   session?.dispose()
   session = undefined
 })
@@ -384,6 +428,47 @@ function applyBounds() {
   })
   session?.viewport2d?.fitBounds()
 }
+
+function persistLiveCameraPose(pose: LiveCameraPose) {
+  const d = doc.value
+  if (!d) return
+  const cur = d.environment.defaultView
+  if (
+    cur &&
+    Math.abs(cur.position[0] - pose.position[0]) < 1e-3 &&
+    Math.abs(cur.position[1] - pose.position[1]) < 1e-3 &&
+    Math.abs(cur.position[2] - pose.position[2]) < 1e-3 &&
+    Math.abs(cur.target[0] - pose.target[0]) < 1e-3 &&
+    Math.abs(cur.target[1] - pose.target[1]) < 1e-3 &&
+    Math.abs(cur.target[2] - pose.target[2]) < 1e-3
+  ) {
+    return
+  }
+  const env = cloneEnvironment(d.environment)
+  const view = env.defaultView ?? {
+    type: 'orbit' as const,
+    position: pose.position,
+    target: pose.target,
+    fov: 50
+  }
+  view.position = [
+    Math.round(pose.position[0] * 1000) / 1000,
+    Math.round(pose.position[1] * 1000) / 1000,
+    Math.round(pose.position[2] * 1000) / 1000
+  ]
+  view.target = [
+    Math.round(pose.target[0] * 1000) / 1000,
+    Math.round(pose.target[1] * 1000) / 1000,
+    Math.round(pose.target[2] * 1000) / 1000
+  ]
+  env.defaultView = view
+  d.commands.setEnvironment(env, { history: false })
+}
+
+function applyEnvironment(env: EnvironmentJSON) {
+  liveCameraPose.value = null
+  doc.value?.commands.setEnvironment(env)
+}
 </script>
 
 <template>
@@ -434,15 +519,19 @@ function applyBounds() {
         </template>
       </ViewportArea>
 
-      <PropertyPanel
+      <RightPanel
         :is-scene="isScene"
         :bounds-form="boundsForm"
         :selected-node="selectedNode"
         :selected-wall="selectedWall"
+        :environment="environment"
+        :view-mode="viewMode"
+        :live-camera-pose="liveCameraPose"
         @update:bounds="applyBounds"
         @update:name="applyNodeName"
         @update:transform="applyNodeTransform"
         @remove="removeSelected"
+        @apply-environment="applyEnvironment"
       />
     </div>
   </div>

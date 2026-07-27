@@ -1,4 +1,4 @@
-import type { BoundsJSON, EditorNodeJSON, WallJSON } from './types'
+import type { BoundsJSON, EditorNodeJSON, EnvironmentJSON, WallJSON } from './types'
 
 export interface NodeEventPayload {
   node: EditorNodeJSON
@@ -23,6 +23,7 @@ export type DocumentEventMap = {
   'wall:removed': WallEventPayload
   'wall:updated': WallEventPayload
   'bounds:updated': { bounds: BoundsJSON }
+  'environment:updated': { environment: EnvironmentJSON }
   'selection:changed': SelectionEventPayload
   loaded: void
   change: void

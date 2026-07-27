@@ -4,6 +4,7 @@ import { catalogKey, isDocumentItem } from '../../catalog/types'
 import type { TransformMode } from '../../core/types'
 import type { EditorDocument } from '../../document/EditorDocument'
 import type {
+  DefaultViewJSON,
   EditorDocumentJSON,
   EditorNodeJSON,
   TransformJSON,
@@ -11,6 +12,7 @@ import type {
   WallJSON
 } from '../../document/types'
 import { ThreeRuntime } from './runtime/ThreeRuntime'
+import { EnvironmentService } from './services/environment'
 import { SelectionService } from './services/selection'
 import { createTransformBridge } from './services/transform-bridge'
 import { findClosedWallLoops } from '../canvas2d/utils/closed-loops'
@@ -63,9 +65,11 @@ export class Viewport3D {
   private itemCache = new Map<string, CatalogItem>()
   private unsubscribers: Array<() => void> = []
   private disposed = false
-  private usesDefaultEnv = false
   private visualStates = new Map<string, VisualState>()
   private selection: SelectionService
+  private environment: EnvironmentService
+  /** 上次已写入的位姿键；仅 type/position/target 变化时才重置 Orbit */
+  private lastCameraPoseKey: string | null = null
 
   constructor(container: HTMLElement, options: Viewport3DOptions) {
     this.doc = options.document
@@ -88,16 +92,17 @@ export class Viewport3D {
     this.envGroup.name = '__editorEnv__'
     this.wallGroup.name = '__editorWalls__'
     this.floorGroup.name = '__editorFloors__'
-    this.markNonSelectable(this.envGroup)
     this.markNonSelectable(this.floorGroup)
     this.runtime.scene.add(this.envGroup)
     this.runtime.scene.add(this.floorGroup)
     this.runtime.scene.add(this.wallGroup)
 
-    this.setupCamera()
-
-    this.usesDefaultEnv = true
-    this.setupDefaultEnvironment()
+    this.environment = new EnvironmentService({
+      runtime: this.runtime,
+      envGroup: this.envGroup
+    })
+    this.applyCameraFromEnvironment()
+    void this.environment.apply(this.doc.environment, this.doc.bounds)
 
     this.rebuildWalls()
     void this.buildAllNodes()
@@ -131,10 +136,11 @@ export class Viewport3D {
       this.doc.on('wall:removed', () => this.rebuildWalls()),
       this.doc.on('wall:updated', () => this.rebuildWalls()),
       this.doc.on('bounds:updated', () => {
-        if (this.usesDefaultEnv) {
-          this.envGroup.clear()
-          this.setupDefaultEnvironment()
-        }
+        void this.environment.apply(this.doc.environment, this.doc.bounds)
+      }),
+      this.doc.on('environment:updated', ({ environment }) => {
+        void this.environment.apply(environment, this.doc.bounds)
+        this.applyCameraFromEnvironment()
       }),
       this.doc.on('selection:changed', ({ ids }) => this.selection.syncGizmo(ids)),
       this.runtime.onTransformEnd(onTransformEnd)
@@ -145,7 +151,7 @@ export class Viewport3D {
     dom.addEventListener('pointerup', this.selection.handlePointerUp)
   }
 
-  // -- 环境 -----------------------------------------------------------------
+  // -- 环境 / 相机 -------------------------------------------------------------
 
   private markNonSelectable(object: THREE.Object3D): void {
     object.traverse(child => {
@@ -154,102 +160,38 @@ export class Viewport3D {
     object.userData.nonSelectable = true
   }
 
-  private setupCamera(): void {
+  /** Document.defaultView → 相机；位姿未变时只更新投影/距离限制 */
+  private applyCameraFromEnvironment(): void {
+    const view = this.doc.environment.defaultView ?? this.fallbackDefaultView()
+    const type = view.type === 'orthographic' ? 'orthographic' : 'orbit'
+    const poseKey = `${type}|${view.position.join(',')}|${view.target.join(',')}`
+    const poseChanged = this.lastCameraPoseKey !== poseKey
+    const applyPose =
+      this.lastCameraPoseKey === null ||
+      (poseChanged && !this.runtime.poseNear(view.position, view.target))
+
+    this.runtime.applyDefaultView(view, { applyPose })
+    this.lastCameraPoseKey = poseKey
+  }
+
+  private fallbackDefaultView(): DefaultViewJSON {
     const { width, depth, height } = this.doc.bounds
     if (this.doc.kind === 'container') {
       const h = height ?? 2
-      // 正对开口面（+Z）
-      this.runtime.camera.position.set(0, h * 0.45, Math.max(depth, 0.6) * 2.2)
-      this.runtime.camera.lookAt(0, h * 0.45, 0)
-      return
+      return {
+        type: 'orbit',
+        position: [0, h * 0.45, Math.max(depth, 0.6) * 2.2],
+        target: [0, h * 0.45, 0],
+        fov: 50
+      }
     }
     const d = Math.max(width, depth, 4)
-    this.runtime.camera.position.set(d * 0.65, d * 0.6, d * 0.95)
-    this.runtime.camera.lookAt(0, 0, 0)
-  }
-
-  private setupDefaultEnvironment(): void {
-    const { width, depth, height } = this.doc.bounds
-    this.runtime.scene.background = new THREE.Color('#0c1420')
-
-    const ambient = new THREE.AmbientLight('#ffffff', 0.75)
-    const dir = new THREE.DirectionalLight('#ffffff', 1.4)
-
-    if (this.doc.kind === 'container') {
-      const h = height ?? 2
-      dir.position.set(width * 0.4, h * 1.2, depth * 1.5)
-      dir.castShadow = true
-      this.envGroup.add(ambient, dir)
-      // 五面开口柜：底/顶/后/左/右，开口朝 +Z（像打开柜门）
-      const shell = this.buildOpenCabinetShell(width, h, depth)
-      this.envGroup.add(shell)
-      this.markNonSelectable(this.envGroup)
-      this.envGroup.traverse(child => {
-        child.raycast = () => {}
-      })
-      return
+    return {
+      type: 'orbit',
+      position: [d * 0.65, d * 0.6, d * 0.95],
+      target: [0, 0, 0],
+      fov: 50
     }
-
-    dir.position.set(width * 0.6, Math.max(height ?? 0, Math.max(width, depth)) * 0.9, depth * 0.6)
-    dir.castShadow = true
-    this.envGroup.add(ambient, dir)
-
-    // const floor = new THREE.Mesh(
-    //   new THREE.PlaneGeometry(width, depth),
-    //   new THREE.MeshStandardMaterial({ color: '#16202c', roughness: 0.9, metalness: 0.05 })
-    // )
-    // floor.rotation.x = -Math.PI / 2
-    // floor.receiveShadow = true
-    // this.envGroup.add(floor)
-
-    const grid = new THREE.GridHelper(Math.max(width, depth), Math.max(width, depth), 0x2b3b4d, 0x1c2836)
-    ;(grid.material as THREE.Material).transparent = true
-    ;(grid.material as THREE.Material).opacity = 0.5
-    this.envGroup.add(grid)
-
-    this.markNonSelectable(this.envGroup)
-    this.envGroup.traverse(child => {
-      child.raycast = () => {}
-    })
-  }
-
-  /**
-   * 不透明五面柜壳（缺 +Z 前脸），类似打开柜门。
-   * Three.js：用 5 块薄 BoxGeometry，而不是透明整盒。
-   */
-  private buildOpenCabinetShell(width: number, height: number, depth: number): THREE.Group {
-    const group = new THREE.Group()
-    group.name = '__openCabinet__'
-    const mat = new THREE.MeshStandardMaterial({
-      color: '#2c3c4d',
-      roughness: 0.72,
-      metalness: 0.18,
-      side: THREE.DoubleSide
-    })
-    const t = Math.min(0.04, Math.min(width, depth, height) * 0.08)
-
-    const bottom = new THREE.Mesh(new THREE.BoxGeometry(width, t, depth), mat)
-    bottom.position.set(0, t / 2, 0)
-
-    const top = new THREE.Mesh(new THREE.BoxGeometry(width, t, depth), mat.clone())
-    top.position.set(0, height - t / 2, 0)
-
-    const back = new THREE.Mesh(new THREE.BoxGeometry(width, height, t), mat.clone())
-    back.position.set(0, height / 2, -depth / 2 + t / 2)
-
-    const left = new THREE.Mesh(new THREE.BoxGeometry(t, height, depth), mat.clone())
-    left.position.set(-width / 2 + t / 2, height / 2, 0)
-
-    const right = new THREE.Mesh(new THREE.BoxGeometry(t, height, depth), mat.clone())
-    right.position.set(width / 2 - t / 2, height / 2, 0)
-
-    ;[bottom, top, back, left, right].forEach(mesh => {
-      mesh.castShadow = true
-      mesh.receiveShadow = true
-      mesh.userData.isShell = true
-      group.add(mesh)
-    })
-    return group
   }
 
   private rebuildWalls(): void {
@@ -611,6 +553,15 @@ export class Viewport3D {
 
   // -- 生命周期 -----------------------------------------------------------------
 
+  /** Orbit 交互位姿变化（滚轮/右键平移/旋转等） */
+  onCameraPoseChange(handler: (pose: {
+    position: [number, number, number]
+    target: [number, number, number]
+    radius: number
+  }) => void): () => void {
+    return this.runtime.onCameraPoseChange(handler)
+  }
+
   dispose(): void {
     this.disposed = true
     this.unsubscribers.forEach(off => off())
@@ -618,6 +569,7 @@ export class Viewport3D {
     dom.removeEventListener('pointerdown', this.selection.handlePointerDown)
     dom.removeEventListener('pointerup', this.selection.handlePointerUp)
     Array.from(this.nodeRoots.keys()).forEach(id => this.removeNodeObject(id))
+    this.environment.dispose()
     this.runtime.dispose()
   }
 }

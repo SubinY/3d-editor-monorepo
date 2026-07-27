@@ -1,6 +1,6 @@
 /**
  * EditorDocumentJSON —— 跨团队存盘与交换的主格式（schema 合同）。
- * 与行业无关：只描述「边界 + 线段墙 + 节点引用与变换」。
+ * 与行业无关：只描述「边界 + 线段墙 + 节点引用与变换 + 3D 呈现环境」。
  */
 
 export const SCHEMA_VERSION = '1.0.0'
@@ -10,7 +10,7 @@ export type DocumentKind = 'scene' | 'container'
 export interface BoundsJSON {
   width: number
   depth: number
-  /** container 常用（柜内净高）；scene 可选净高 */
+  /** container 常用（箱体净高）；scene 可选净高 */
   height?: number
 }
 
@@ -29,7 +29,7 @@ export interface TransformJSON {
   /**
    * 世界坐标：y 向上。
    * - scene 2D：主要改 x/z（俯视）
-   * - container 2D：主要改 x/y（立面：宽×高；y=元件底边离地高度）
+   * - container 2D：主要改 x/y（立面：宽×高；y=物件底边离地高度）
    */
   position: [number, number, number]
   /** euler (rad) */
@@ -54,7 +54,65 @@ export interface EditorNodeJSON {
   props?: Record<string, unknown>
 }
 
+/** 3D 背景：纯色或等距柱状全景/HDR URL */
+export type BackgroundJSON =
+  | { type: 'color'; value: string }
+  | { type: 'equirect'; url: string }
+
+export interface LightJSON {
+  type: 'ambient' | 'directional'
+  color?: string
+  intensity?: number
+  /** directional：世界坐标位置 */
+  position?: [number, number, number]
+  castShadow?: boolean
+}
+
+export interface EnvironmentHelpersJSON {
+  grid: boolean
+  /**
+   * 编辑态空间壳（不可选中）：
+   * - none：无壳
+   * - openBox：五面开口盒（缺 +Z）
+   * - openBoxDoor：五面开口盒 + 外开前柜门
+   */
+  enclosure: 'none' | 'openBox' | 'openBoxDoor'
+}
+
+/** 3D 相机交互模式（对齐常见组态：旋转相机 / 正交平面图） */
+export type CameraViewType = 'orbit' | 'orthographic'
+
+/**
+ * 默认/预览视角种子（非 Orbit 运行时位姿）。
+ * 半径 = ‖position − target‖，不单独存盘。
+ */
+export interface DefaultViewJSON {
+  /** orbit：透视 + 可旋转；orthographic：正交 + 禁旋转（平面图） */
+  type?: CameraViewType
+  /** 相机位置（世界坐标） */
+  position: [number, number, number]
+  /** 注视点 / 轨道圆心 */
+  target: [number, number, number]
+  /** orbit：垂直视野角(°)；orthographic：视窗高度（米） */
+  fov?: number
+  /** 允许靠近目标的最小距离（米） */
+  minDistance?: number
+  /** 允许远离目标的最大距离（米） */
+  maxDistance?: number
+}
+
+/** Document 级 3D 呈现配置（内核可解释并投影） */
+export interface EnvironmentJSON {
+  background: BackgroundJSON
+  lights: LightJSON[]
+  shadows: { enabled: boolean; type?: 'basic' | 'pcfsoft' }
+  helpers: EnvironmentHelpersJSON
+  /** 默认视角：类型 / 目标 / 位姿 / 视场 / 距离限制；编辑态 Orbit 可静默回写目标与半径 */
+  defaultView?: DefaultViewJSON
+}
+
 export interface EditorDocumentJSON {
+  /** 开发期字段戳；不做按版本分支或迁移 */
   schemaVersion: string
   kind: DocumentKind
   id: string
@@ -66,6 +124,8 @@ export interface EditorDocumentJSON {
     walls?: WallJSON[]
   }
   nodes: EditorNodeJSON[]
+  /** 3D 呈现：背景 / 灯 / 阴影 / 辅助体 / 默认视角 */
+  environment: EnvironmentJSON
   /** 非契约扩展；编辑相机等工作区状态不入资产契约 */
   metadata?: Record<string, unknown>
 }
@@ -91,4 +151,74 @@ export function cloneTransform(t: TransformJSON): TransformJSON {
     rotation: [...t.rotation],
     scale: [...t.scale]
   }
+}
+
+/** 按拓扑写出完整默认 environment */
+export function createDefaultEnvironment(kind: DocumentKind, bounds: BoundsJSON): EnvironmentJSON {
+  const { width, depth, height } = bounds
+  const h = height ?? (kind === 'container' ? 2 : Math.max(width, depth) * 0.5)
+
+  const lights: LightJSON[] =
+    kind === 'container'
+      ? [
+          { type: 'ambient', color: '#ffffff', intensity: 0.75 },
+          {
+            type: 'directional',
+            color: '#ffffff',
+            intensity: 1.4,
+            position: [width * 0.4, h * 1.2, depth * 1.5],
+            castShadow: true
+          }
+        ]
+      : [
+          { type: 'ambient', color: '#ffffff', intensity: 0.75 },
+          {
+            type: 'directional',
+            color: '#ffffff',
+            intensity: 1.4,
+            position: [
+              width * 0.6,
+              Math.max(h, Math.max(width, depth)) * 0.9,
+              depth * 0.6
+            ],
+            castShadow: true
+          }
+        ]
+
+  const defaultView: DefaultViewJSON =
+    kind === 'container'
+      ? {
+          type: 'orbit',
+          position: [0, h * 0.45, Math.max(depth, 0.6) * 2.2],
+          target: [0, h * 0.45, 0],
+          fov: 50,
+          minDistance: 0.2,
+          maxDistance: 200
+        }
+      : (() => {
+          const d = Math.max(width, depth, 4)
+          return {
+            type: 'orbit' as const,
+            position: [d * 0.65, d * 0.6, d * 0.95] as [number, number, number],
+            target: [0, 0, 0] as [number, number, number],
+            fov: 50,
+            minDistance: 1,
+            maxDistance: 500
+          }
+        })()
+
+  return {
+    background: { type: 'color', value: '#0c1420' },
+    lights,
+    shadows: { enabled: true, type: 'pcfsoft' },
+    helpers: {
+      grid: kind === 'scene',
+      enclosure: kind === 'container' ? 'openBoxDoor' : 'none'
+    },
+    defaultView
+  }
+}
+
+export function cloneEnvironment(env: EnvironmentJSON): EnvironmentJSON {
+  return JSON.parse(JSON.stringify(env)) as EnvironmentJSON
 }

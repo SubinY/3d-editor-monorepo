@@ -128,6 +128,13 @@ editor.setSnapEnabled(false)           // 懒吸附：不回扫已有节点
 editor.setCollisionEnabled(false)      // 允许重叠（柜内 / 模型内摆件）
 editor.setTransformMode('rotate')      // 须在 transformModes 白名单内
 editor.viewport2d?.setTool('wall')
+
+// 3D 呈现（背景 / 灯 / 阴影 / 网格 / 开口盒）：走 Document 命令
+editor.document.commands.setEnvironment({
+  ...editor.document.environment,
+  helpers: { grid: true, enclosure: 'none' },
+  background: { type: 'color', value: '#0c1420' },
+})
 ```
 
 | API | 作用 |
@@ -137,6 +144,7 @@ editor.viewport2d?.setTool('wall')
 | `setCollisionEnabled` | 写 Document AABB；与 scale **互斥**（见下） |
 | `setTransformModes` | 改 3D gizmo 白名单 |
 | `setTransformMode` | 切当前 mode；不在白名单则 no-op |
+| `document.commands.setEnvironment` | 整对象替换 3D 呈现配置（进历史）；`createEmptyDocumentJSON` 已按 kind 写出默认 |
 
 ### Scale ↔ 碰撞互斥
 
@@ -153,9 +161,9 @@ editor.viewport2d?.setTool('wall')
 
 ## 6. 公共导出 vs 不导出
 
-**导出（值）：** `createEditor`、`createMemoryCatalog`、`createEmptyDocumentJSON`、`SCHEMA_VERSION`、`CATALOG_ITEM_MIME`
+**导出（值）：** `createEditor`、`createMemoryCatalog`、`createEmptyDocumentJSON`、`SCHEMA_VERSION`、`CATALOG_ITEM_MIME`、`createDefaultEnvironment`、`cloneEnvironment`
 
-**导出（类型）：** `CreateEditorOptions`、`EditorSession`、`EditorInteractionOptions`、`EditorInteractionState`、`TransformMode`、合同类型、`CatalogItem`…、以及 `EditorDocument` / `Viewport2D` / `Viewport3D` **仅作类型标注**
+**导出（类型）：** `CreateEditorOptions`、`EditorSession`、`EditorInteractionOptions`、`EditorInteractionState`、`TransformMode`、合同类型（含 `EnvironmentJSON` / `BackgroundJSON` / `LightJSON`）、`CatalogItem`…、以及 `EditorDocument` / `Viewport2D` / `Viewport3D` **仅作类型标注**
 
 **不导出：** `createDocument`、`loadDocument`、`create2DViewport`、`create3DViewport`、`ThreeRuntime`、commands/collision 实现、约束注册 API 等。积木仅供 `createEditor` 内部使用。
 
@@ -163,11 +171,11 @@ editor.viewport2d?.setTool('wall')
 
 ## 7. Document / Catalog / Viewport（摘要）
 
-- **Document**：写操作走 `doc.commands.*`；历史 `doc.history`；选中 `doc.selection`。
+- **Document**：写操作走 `doc.commands.*`；历史 `doc.history`；选中 `doc.selection`；3D 呈现 `doc.commands.setEnvironment`。
 - **Catalog**：Host 注入 `CatalogItem[]`；`model` / `document` 两型；`placeableIn` 必填。
 - **碰撞**：内建 AABB；会话 `setCollisionEnabled` / `interaction.collisionEnabled`；`onDenied` 接收 `collision:…`。
 - **吸附**：会话 `snapEnabled` 控制 2D 贴边对齐（懒生效）；画墙工具内置端点吸附始终可用。硬网格 `gridSnapConstraint` 仍可供 Host 自行注册，但不随会话吸附自动开启。
-- **3D**：包内 `ThreeRuntime`；gizmo mode 由会话白名单控制。
+- **3D**：包内 `ThreeRuntime`；环境由 Document.environment 投影；`defaultView.type`：`orbit`（旋转/透视）| `orthographic`（正交平面图，禁旋转）；gizmo mode 由会话白名单控制；`helpers.enclosure`：`none` | `openBox` | `openBoxDoor`（五面开口 + 可选外开前柜门）。
 
 ---
 

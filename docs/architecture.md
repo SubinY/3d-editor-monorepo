@@ -91,7 +91,8 @@ apps ──► @3d-editor/editor（peer: three）
 |----|------|
 | VisualState | `viewport3d.setNodeVisualState(nodeIdPath, { status, intensity })`，status: normal/warning/fault/offline |
 | 只读预览 | `create3DViewport({ readonly: true })`，点击经 `onNodeClick` 通知 Host，不另设 createViewer |
-| camera 持久化 | 不入资产契约；需要时存 Host 本地或 `metadata`（非契约字段） |
+| environment | Document 同级契约字段；背景/灯/阴影/helpers/defaultView；经 `commands.setEnvironment` |
+| camera 交互位姿 | `defaultView` 存类型/目标/位姿种子与距离限制；编辑态 Orbit 变化可静默回写目标与半径（不入历史）；无阻尼，操作立刻到位 |
 | 约束时机 | 交互（place/transform）强制（内建碰撞 + 可选规则）；`loadDocument` 只校验产出警告列表，不阻塞加载 |
 | unit | schema 保留 `unit: 'm'` 但为常量（当前仅米制） |
 | 2D 技术 | Canvas 2D（自管命中测试），非 SVG |
@@ -102,7 +103,7 @@ apps ──► @3d-editor/editor（peer: three）
 
 ```ts
 interface EditorDocumentJSON {
-  schemaVersion: string          // 当前 "1.0.0"，用于迁移
+  schemaVersion: string          // 开发期字段戳；当前不做按版本迁移
   kind: 'scene' | 'container'    // 按编辑拓扑，不按行业
   id: string
   name: string
@@ -118,7 +119,31 @@ interface EditorDocumentJSON {
     }>
   }
   nodes: EditorNodeJSON[]
+  environment: EnvironmentJSON   // 3D 呈现：背景/灯/阴影/grid|openBox/defaultView
   metadata?: Record<string, unknown>   // 非契约扩展
+}
+
+interface EnvironmentJSON {
+  background: { type: 'color'; value: string } | { type: 'equirect'; url: string }
+  lights: Array<{
+    type: 'ambient' | 'directional'
+    color?: string
+    intensity?: number
+    position?: [number, number, number]
+    castShadow?: boolean
+  }>
+  shadows: { enabled: boolean; type?: 'basic' | 'pcfsoft' }
+  helpers: { grid: boolean; enclosure: 'none' | 'openBox' | 'openBoxDoor' }
+  defaultView?: {
+    /** orbit=旋转相机；orthographic=正交平面图 */
+    type?: 'orbit' | 'orthographic'
+    position: [number, number, number]
+    target: [number, number, number]
+    /** orbit：FOV(°)；orthographic：视窗高度（米） */
+    fov?: number
+    minDistance?: number
+    maxDistance?: number
+  }
 }
 
 interface EditorNodeJSON {
