@@ -21,6 +21,12 @@ export interface Theme2D {
   label: string
   dimension: string
   guide: string
+  /** 游标尺背景 */
+  ruler: string
+  /** 游标尺刻度线 / 文字 */
+  rulerTick: string
+  /** 游标尺光标准线 */
+  rulerCursor: string
 }
 
 export const DEFAULT_THEME: Theme2D = {
@@ -36,7 +42,10 @@ export const DEFAULT_THEME: Theme2D = {
   nodeDenied: '#ff5a5a',
   label: '#c7d3e0',
   dimension: '#7ea4c4',
-  guide: '#39d2ff'
+  guide: '#39d2ff',
+  ruler: '#1a1f26',
+  rulerTick: '#8fa5b8',
+  rulerCursor: '#39d2ff'
 }
 
 /** 平面坐标：scene=XZ 俯视；container=XY 立面 */

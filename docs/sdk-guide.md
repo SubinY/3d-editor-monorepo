@@ -175,7 +175,7 @@ editor.document.commands.setEnvironment({
 - **Catalog**：Host 注入 `CatalogItem[]`；`model` / `document` 两型；`placeableIn` 必填。
 - **碰撞**：内建 AABB；会话 `setCollisionEnabled` / `interaction.collisionEnabled`；`onDenied` 接收 `collision:…`。
 - **吸附**：会话 `snapEnabled` 控制 2D 贴边对齐（懒生效）；画墙工具内置端点吸附始终可用。硬网格 `gridSnapConstraint` 仍可供 Host 自行注册，但不随会话吸附自动开启。
-- **3D**：包内 `ThreeRuntime`；环境由 Document.environment 投影；`defaultView.type`：`orbit`（旋转/透视）| `orthographic`（正交平面图，禁旋转）；gizmo mode 由会话白名单控制；`helpers.enclosure`：`none` | `openBox` | `openBoxDoor`（五面开口 + 可选外开前柜门）。
+- **3D**：包内 `ThreeRuntime`；环境由 Document.environment 投影；`floor.coverage`：`bounds`（工作区）| `closedRooms`（仅闭合墙围合，不规则跟随墙）；`defaultView.type`：`orbit` | `orthographic`；`helpers.enclosure`：`none` | `openBox` | `openBoxDoor`。地板贴图由 Host 同源静态资源提供（`mapUrl` / `presetId`），内核不内置纹理文件。
 
 ---
 

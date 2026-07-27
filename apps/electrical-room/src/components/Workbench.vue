@@ -42,6 +42,7 @@ const tool = ref<EditorTool>('select')
 const viewMode = ref<ViewMode>('split')
 const snapEnabled = ref(true)
 const collisionEnabled = ref(true)
+const rulersEnabled = ref(true)
 const transformMode = ref<TransformMode>('translate')
 const canUndo = ref(false)
 const canRedo = ref(false)
@@ -203,6 +204,7 @@ onMounted(async () => {
   snapEnabled.value = interaction.snapEnabled
   collisionEnabled.value = interaction.collisionEnabled
   transformMode.value = interaction.transformMode
+  session.viewport2d?.setRulersVisible(rulersEnabled.value)
   refreshBoundsForm()
   refreshEnvironment()
   await refreshLayers()
@@ -351,6 +353,12 @@ function toggleSnap() {
   snapEnabled.value = session?.getInteraction().snapEnabled ?? next
 }
 
+function toggleRulers() {
+  const next = !rulersEnabled.value
+  rulersEnabled.value = next
+  session?.viewport2d?.setRulersVisible(next)
+}
+
 function toggleCollision() {
   const next = !collisionEnabled.value
   session?.setCollisionEnabled(next)
@@ -480,6 +488,7 @@ function applyEnvironment(env: EnvironmentJSON) {
       :view-mode="viewMode"
       :snap-enabled="snapEnabled"
       :collision-enabled="collisionEnabled"
+      :rulers-enabled="rulersEnabled"
       :transform-mode="transformMode"
       :can-undo="canUndo"
       :can-redo="canRedo"
@@ -491,6 +500,7 @@ function applyEnvironment(env: EnvironmentJSON) {
       @fit-view="fitView"
       @toggle-snap="toggleSnap"
       @toggle-collision="toggleCollision"
+      @toggle-rulers="toggleRulers"
       @set-transform-mode="setTransformMode"
       @set-view-mode="setViewMode"
       @save="save"

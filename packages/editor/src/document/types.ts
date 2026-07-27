@@ -79,6 +79,27 @@ export interface EnvironmentHelpersJSON {
   enclosure: 'none' | 'openBox' | 'openBoxDoor'
 }
 
+/** 地面铺设范围 */
+export type FloorCoverage = 'bounds' | 'closedRooms'
+
+/**
+ * 场景级地面（单套材质）。
+ * - bounds：工作区矩形场地 + 可选闭合墙内叠层
+ * - closedRooms：仅闭合墙围合区（不规则跟随墙环）
+ * presetId 由 Host 解释；内核只加载 mapUrl
+ */
+export interface EnvironmentFloorJSON {
+  visible: boolean
+  coverage: FloorCoverage
+  color: string
+  opacity?: number
+  presetId?: string
+  /** 推荐同源相对路径，如 /textures/floor/concrete.webp */
+  mapUrl?: string
+  /** 贴图世界重复尺度（米/格），默认 4 */
+  mapRepeat?: number
+}
+
 /** 3D 相机交互模式（对齐常见组态：旋转相机 / 正交平面图） */
 export type CameraViewType = 'orbit' | 'orthographic'
 
@@ -107,6 +128,8 @@ export interface EnvironmentJSON {
   lights: LightJSON[]
   shadows: { enabled: boolean; type?: 'basic' | 'pcfsoft' }
   helpers: EnvironmentHelpersJSON
+  /** 场景地面；container 默认 visible=false */
+  floor: EnvironmentFloorJSON
   /** 默认视角：类型 / 目标 / 位姿 / 视场 / 距离限制；编辑态 Orbit 可静默回写目标与半径 */
   defaultView?: DefaultViewJSON
 }
@@ -161,51 +184,68 @@ export function createDefaultEnvironment(kind: DocumentKind, bounds: BoundsJSON)
   const lights: LightJSON[] =
     kind === 'container'
       ? [
-          { type: 'ambient', color: '#ffffff', intensity: 0.75 },
-          {
-            type: 'directional',
-            color: '#ffffff',
-            intensity: 1.4,
-            position: [width * 0.4, h * 1.2, depth * 1.5],
-            castShadow: true
-          }
-        ]
+        { type: 'ambient', color: '#ffffff', intensity: 0.75 },
+        {
+          type: 'directional',
+          color: '#ffffff',
+          intensity: 1.4,
+          position: [width * 0.4, h * 1.2, depth * 1.5],
+          castShadow: true
+        }
+      ]
       : [
-          { type: 'ambient', color: '#ffffff', intensity: 0.75 },
-          {
-            type: 'directional',
-            color: '#ffffff',
-            intensity: 1.4,
-            position: [
-              width * 0.6,
-              Math.max(h, Math.max(width, depth)) * 0.9,
-              depth * 0.6
-            ],
-            castShadow: true
-          }
-        ]
+        { type: 'ambient', color: '#ffffff', intensity: 0.75 },
+        {
+          type: 'directional',
+          color: '#ffffff',
+          intensity: 1.4,
+          position: [
+            width * 0.6,
+            Math.max(h, Math.max(width, depth)) * 0.9,
+            depth * 0.6
+          ],
+          castShadow: true
+        }
+      ]
 
   const defaultView: DefaultViewJSON =
     kind === 'container'
       ? {
-          type: 'orbit',
-          position: [0, h * 0.45, Math.max(depth, 0.6) * 2.2],
-          target: [0, h * 0.45, 0],
-          fov: 50,
-          minDistance: 0.2,
-          maxDistance: 200
-        }
+        type: 'orbit',
+        position: [0, h * 0.45, Math.max(depth, 0.6) * 8],
+        target: [0, h * 0.45, 0],
+        fov: 50,
+        minDistance: 0.2,
+        maxDistance: 200
+      }
       : (() => {
-          const d = Math.max(width, depth, 4)
-          return {
-            type: 'orbit' as const,
-            position: [d * 0.65, d * 0.6, d * 0.95] as [number, number, number],
-            target: [0, 0, 0] as [number, number, number],
-            fov: 50,
-            minDistance: 1,
-            maxDistance: 500
-          }
-        })()
+        const d = Math.max(width, depth, 4)
+        return {
+          type: 'orbit' as const,
+          position: [d * 0.65, d * 0.6, d * 0.95] as [number, number, number],
+          target: [0, 0, 0] as [number, number, number],
+          fov: 50,
+          minDistance: 1,
+          maxDistance: 500
+        }
+      })()
+
+  const floor: EnvironmentFloorJSON =
+    kind === 'container'
+      ? {
+        visible: false,
+        coverage: 'bounds',
+        color: '#1a3048',
+        opacity: 1,
+        presetId: 'none'
+      }
+      : {
+        visible: true,
+        coverage: 'bounds',
+        color: '#1a3048',
+        opacity: 1,
+        presetId: 'none'
+      }
 
   return {
     background: { type: 'color', value: '#0c1420' },
@@ -215,8 +255,28 @@ export function createDefaultEnvironment(kind: DocumentKind, bounds: BoundsJSON)
       grid: kind === 'scene',
       enclosure: kind === 'container' ? 'openBoxDoor' : 'none'
     },
+    floor,
     defaultView
   }
+}
+
+/** 缺省地面（createEmpty / createDefaultEnvironment） */
+export function createDefaultFloor(kind: DocumentKind = 'scene'): EnvironmentFloorJSON {
+  return kind === 'container'
+    ? {
+      visible: false,
+      coverage: 'bounds',
+      color: '#1a3048',
+      opacity: 1,
+      presetId: 'none'
+    }
+    : {
+      visible: true,
+      coverage: 'bounds',
+      color: '#1a3048',
+      opacity: 1,
+      presetId: 'none'
+    }
 }
 
 export function cloneEnvironment(env: EnvironmentJSON): EnvironmentJSON {

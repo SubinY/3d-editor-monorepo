@@ -38,6 +38,9 @@ export class Viewport2D {
   private itemCache = new Map<string, CatalogItem>()
   private unsubscribers: Array<() => void> = []
   private raf = 0
+  private showRulers = false
+  private rulerCursorSx: number | undefined
+  private rulerCursorSy: number | undefined
 
   constructor(container: HTMLElement, options: Viewport2DOptions) {
     this.doc = options.document
@@ -130,6 +133,11 @@ export class Viewport2D {
 
   setSnapEnabled(enabled: boolean): void {
     this.snapEnabled = enabled
+  }
+
+  setRulersVisible(visible: boolean): void {
+    this.showRulers = visible
+    this.requestRender()
   }
 
   setTool(tool: Tool2D): void {
@@ -321,6 +329,13 @@ export class Viewport2D {
   }
 
   private onPointerMove = (event: PointerEvent): void => {
+    // 追踪鼠标在 canvas 上的屏幕坐标，供游标尺准线使用
+    if (this.showRulers) {
+      const rect = this.canvas.getBoundingClientRect()
+      this.rulerCursorSx = event.clientX - rect.left
+      this.rulerCursorSy = event.clientY - rect.top
+    }
+
     if (this.camera.onPanMove(event)) {
       this.requestRender()
       return
@@ -346,6 +361,8 @@ export class Viewport2D {
   }
 
   private onPointerLeave = (event: PointerEvent): void => {
+    this.rulerCursorSx = undefined
+    this.rulerCursorSy = undefined
     this.onPointerUp(event)
   }
 
@@ -395,7 +412,10 @@ export class Viewport2D {
         dropGhost: this.place.dropGhost,
         footprintSize: item => this.footprintSize(item),
         itemFor: node => this.itemFor(node),
-        planeFromPosition: pos => this.planeFromPosition(pos)
+        planeFromPosition: pos => this.planeFromPosition(pos),
+        showRulers: this.showRulers,
+        rulerCursorSx: this.rulerCursorSx,
+        rulerCursorSy: this.rulerCursorSy
       },
       width,
       height

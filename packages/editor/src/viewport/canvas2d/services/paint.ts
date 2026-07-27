@@ -23,7 +23,13 @@ export interface Paint2DContext {
   footprintSize: (item: CatalogItem | undefined) => { wu: number; wv: number }
   itemFor: (node: EditorNodeJSON) => CatalogItem | undefined
   planeFromPosition: (pos: [number, number, number]) => PlanePoint
+  /** 游标尺是否显示；鼠标当前屏幕坐标（像素） */
+  showRulers?: boolean
+  rulerCursorSx?: number
+  rulerCursorSy?: number
 }
+
+const RULER_SIZE = 18 // 游标尺宽度（px）
 
 export function paintScene(p: Paint2DContext, width: number, height: number): void {
   const { ctx, theme } = p
@@ -39,6 +45,8 @@ export function paintScene(p: Paint2DContext, width: number, height: number): vo
   drawChainGhost(p)
   drawDropGhost(p)
   drawAlignGuides(p)
+  drawWallGuides(p, width, height)
+  if (p.showRulers) drawRulers(p, width, height)
 }
 
 function drawGrid(p: Paint2DContext, width: number, height: number): void {
@@ -114,11 +122,28 @@ function drawBounds(p: Paint2DContext): void {
 }
 
 function drawFloors(p: Paint2DContext): void {
-  const loops = findClosedWallLoops(p.doc.getWalls())
+  const floor = p.doc.environment.floor
+  if (!floor.visible) return
+
+  const { ctx, camera, theme, doc } = p
+  const color = floor.color || theme.floor
+  const coverage = floor.coverage
+
+  if (coverage === 'bounds') {
+    const w = doc.bounds.width
+    const d = doc.bounds.depth
+    const tl = camera.worldToScreen(-w / 2, -d / 2)
+    const br = camera.worldToScreen(w / 2, d / 2)
+    ctx.fillStyle = color
+    ctx.globalAlpha = 0.35
+    ctx.fillRect(tl.sx, tl.sy, br.sx - tl.sx, br.sy - tl.sy)
+    ctx.globalAlpha = 1
+  }
+
+  const loops = findClosedWallLoops(doc.getWalls())
   if (!loops.length) return
-  const { ctx, camera, theme } = p
-  ctx.fillStyle = theme.floor
-  ctx.globalAlpha = 0.55
+  ctx.fillStyle = color
+  ctx.globalAlpha = coverage === 'bounds' ? 0.55 : 0.5
   loops.forEach(loop => {
     if (loop.points.length < 3) return
     ctx.beginPath()
@@ -369,4 +394,184 @@ function drawRotateHandle(p: Paint2DContext, node: EditorNodeJSON): void {
   ctx.lineWidth = 1.5
   ctx.stroke()
   ctx.restore()
+}
+
+// ---------------------------------------------------------------------------
+// 画墙辅助线：chainCursor 经 snapWallPoint 对齐后，du 或 dv 精确为 0 才激活
+// 过 chainLast 画全屏水平线或垂直线，表示「当前正在画水平/垂直墙」
+// ---------------------------------------------------------------------------
+
+/** snap 精度 0.1m，对齐后绝对值低于此即视为「精确水平/垂直」 */
+const ORTHO_SNAP_THRESHOLD = 0.05
+
+function drawWallGuides(p: Paint2DContext, width: number, height: number): void {
+  if (p.tool !== 'wall') return
+  const { chainLast, chainCursor } = p.wall
+  if (!chainLast || !chainCursor) return
+  const du = chainCursor.u - chainLast.u
+  const dv = chainCursor.v - chainLast.v
+  if (Math.hypot(du, dv) < 0.01) return
+
+  // snap 后 dv≈0 = 水平墙；du≈0 = 垂直墙；非精确对齐则不显示
+  const isHorizontal = Math.abs(dv) < ORTHO_SNAP_THRESHOLD
+  const isVertical   = Math.abs(du) < ORTHO_SNAP_THRESHOLD
+  if (!isHorizontal && !isVertical) return
+
+  const { ctx, camera, theme } = p
+  const last = camera.worldToScreen(chainLast.u, chainLast.v)
+  ctx.save()
+  ctx.strokeStyle = theme.guide
+  ctx.lineWidth = 1.5
+  ctx.globalAlpha = 0.7
+  ctx.setLineDash([6, 4])
+
+  if (isHorizontal) {
+    // 过 chainLast 的水平线
+    ctx.beginPath()
+    ctx.moveTo(0, last.sy)
+    ctx.lineTo(width, last.sy)
+    ctx.stroke()
+  }
+  if (isVertical) {
+    // 过 chainLast 的垂直线
+    ctx.beginPath()
+    ctx.moveTo(last.sx, 0)
+    ctx.lineTo(last.sx, height)
+    ctx.stroke()
+  }
+  ctx.restore()
+}
+
+// ---------------------------------------------------------------------------
+// 游标尺：顶部横尺 + 左侧纵尺，刻度单位 = 世界米
+// 样式参照 Blender / CAD：深底、高对比度刻度线、数字标注在刻度旁
+// ---------------------------------------------------------------------------
+
+function drawRulers(p: Paint2DContext, width: number, height: number): void {
+  const { ctx, camera, theme, isElevation } = p
+  const R = RULER_SIZE
+
+  // ---- 尺底色 ----
+  ctx.fillStyle = theme.ruler
+  ctx.globalAlpha = 1
+  ctx.fillRect(0, 0, width, R)       // 横尺
+  ctx.fillRect(0, 0, R, height)      // 纵尺
+  ctx.fillRect(0, 0, R, R)           // 左上角
+
+  // ---- 自适应刻度步距（米） ----
+  const minGapPx = 50
+  const rawStep = minGapPx / camera.scale
+  const magnitudes = [0.1, 0.2, 0.5, 1, 2, 5, 10, 20, 50, 100]
+  const step = magnitudes.find(s => s >= rawStep) ?? 100
+  const subDiv = 5
+  const subStep = step / subDiv
+
+  const majorTickH = R * 0.65
+  const midTickH = R * 0.35
+  const minorTickH = R * 0.2
+
+  ctx.save()
+  ctx.lineWidth = 1
+
+  // -- 横尺 --
+  const uStart = camera.screenToPlane(R, 0).u
+  const uEnd = camera.screenToPlane(width, 0).u
+  const uFrom = Math.floor(uStart / subStep) * subStep
+  for (let u = uFrom; u <= uEnd; u = Math.round((u + subStep) * 1e6) / 1e6) {
+    const sx = camera.worldToScreen(u, 0).sx
+    if (sx < R) continue
+    const isMajor = Math.abs(Math.round(u / step) * step - u) < 1e-9
+    const isMid = !isMajor && Math.abs(Math.round(u / (step / 2)) * (step / 2) - u) < 1e-9
+    const tickH = isMajor ? majorTickH : isMid ? midTickH : minorTickH
+    ctx.strokeStyle = isMajor ? theme.rulerTick : `${theme.rulerTick}88`
+    ctx.beginPath()
+    ctx.moveTo(sx, R)
+    ctx.lineTo(sx, R - tickH)
+    ctx.stroke()
+    if (isMajor) {
+      const label = formatRulerLabel(u)
+      ctx.fillStyle = theme.rulerTick
+      ctx.font = '11px sans-serif'
+      ctx.textAlign = 'left'
+      ctx.textBaseline = 'top'
+      ctx.fillText(label, sx + 3, 2)
+    }
+  }
+
+  // -- 纵尺 --
+  const vStart = camera.screenToPlane(0, R).v
+  const vEnd = camera.screenToPlane(0, height).v
+  const vMin = Math.min(vStart, vEnd)
+  const vMax = Math.max(vStart, vEnd)
+  const vFrom = Math.floor(vMin / subStep) * subStep
+
+  for (let v = vFrom; v <= vMax; v = Math.round((v + subStep) * 1e6) / 1e6) {
+    const sy = camera.worldToScreen(0, v).sy
+    if (sy < R) continue
+    const isMajor = Math.abs(Math.round(v / step) * step - v) < 1e-9
+    const isMid = !isMajor && Math.abs(Math.round(v / (step / 2)) * (step / 2) - v) < 1e-9
+    const tickW = isMajor ? majorTickH : isMid ? midTickH : minorTickH
+    ctx.strokeStyle = isMajor ? theme.rulerTick : `${theme.rulerTick}88`
+    ctx.beginPath()
+    ctx.moveTo(R, sy)
+    ctx.lineTo(R - tickW, sy)
+    ctx.stroke()
+    if (isMajor) {
+      const label = formatRulerLabel(v)
+      ctx.save()
+      ctx.fillStyle = theme.rulerTick
+      ctx.font = '9px sans-serif'
+      ctx.textAlign = 'center'
+      ctx.textBaseline = 'bottom'
+      // 文字水平居中写在纵尺中央，刻度线上方 2px
+      ctx.fillText(label, R / 2, sy - 2)
+      ctx.restore()
+    }
+  }
+
+  // ---- 光标准线 + 画布十字线 ----
+  const cx = p.rulerCursorSx
+  const cy = p.rulerCursorSy
+  if (cx != null && cy != null) {
+    // 尺上的高亮色块
+    ctx.globalAlpha = 0.25
+    ctx.fillStyle = theme.rulerCursor
+    if (cx >= R) ctx.fillRect(cx - 1, 0, 3, R)
+    if (cy >= R) ctx.fillRect(0, cy - 1, R, 3)
+
+    // 画布十字线（半透明从尺边缘延伸到画布）
+    ctx.strokeStyle = theme.rulerCursor
+    ctx.lineWidth = 1
+    ctx.globalAlpha = 0.3
+    ctx.setLineDash([4, 4])
+    if (cx >= R) {
+      ctx.beginPath()
+      ctx.moveTo(cx, R)
+      ctx.lineTo(cx, height)
+      ctx.stroke()
+    }
+    if (cy >= R) {
+      ctx.beginPath()
+      ctx.moveTo(R, cy)
+      ctx.lineTo(width, cy)
+      ctx.stroke()
+    }
+    ctx.setLineDash([])
+    ctx.globalAlpha = 1
+  }
+
+  ctx.restore()
+
+  // ---- 尺边框 ----
+  ctx.strokeStyle = theme.gridMajor
+  ctx.lineWidth = 1
+  ctx.beginPath()
+  ctx.moveTo(R, 0); ctx.lineTo(R, height)
+  ctx.moveTo(0, R); ctx.lineTo(width, R)
+  ctx.stroke()
+}
+
+function formatRulerLabel(value: number): string {
+  if (value === 0) return '0'
+  return value % 1 === 0 ? String(value) : value.toFixed(1)
 }

@@ -4,7 +4,14 @@
 export { createEditor } from './core/create-editor'
 export { createMemoryCatalog, MemoryCatalog } from './catalog/MemoryCatalog'
 export { CATALOG_ITEM_MIME } from './viewport/canvas2d/types'
-export { SCHEMA_VERSION, createDefaultTransform, cloneTransform, createDefaultEnvironment, cloneEnvironment } from './document/types'
+export {
+  SCHEMA_VERSION,
+  createDefaultTransform,
+  cloneTransform,
+  createDefaultEnvironment,
+  createDefaultFloor,
+  cloneEnvironment
+} from './document/types'
 export { createEmptyDocumentJSON } from './document/serialize'
 export { isDocumentItem, catalogKey } from './catalog/types'
 
@@ -21,6 +28,8 @@ export type {
   BackgroundJSON,
   LightJSON,
   EnvironmentHelpersJSON,
+  EnvironmentFloorJSON,
+  FloorCoverage,
   DefaultViewJSON,
   CameraViewType,
   VisualState

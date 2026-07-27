@@ -1,8 +1,14 @@
 <script setup lang="ts">
 import { computed, nextTick, reactive, ref, watch } from 'vue'
-import { Box, Camera, MostlyCloudy, PictureFilled, Sunny } from '@element-plus/icons-vue'
+import { Box, Camera, PictureFilled, Sunny } from '@element-plus/icons-vue'
 import { cloneEnvironment } from '@3d-editor/editor'
-import type { DefaultViewJSON, EnvironmentJSON } from '@3d-editor/editor'
+import type {
+  DefaultViewJSON,
+  EnvironmentFloorJSON,
+  EnvironmentJSON,
+  FloorCoverage
+} from '@3d-editor/editor'
+import { FLOOR_PRESETS, resolveFloorPreset } from '@/business/floor-presets'
 
 export type LiveCameraPose = {
   position: [number, number, number]
@@ -13,6 +19,7 @@ export type LiveCameraPose = {
 const props = defineProps<{
   environment: EnvironmentJSON
   viewMode: '2d' | '3d' | 'split'
+  isScene?: boolean
   /** 3D Orbit 实时位姿；有值时目标/半径优先显示它 */
   liveCameraPose?: LiveCameraPose | null
 }>()
@@ -21,7 +28,7 @@ const emit = defineEmits<{
   apply: [env: EnvironmentJSON]
 }>()
 
-type SectionId = 'camera' | 'light' | 'helpers' | 'background' | 'shadow'
+type SectionId = 'camera' | 'light' | 'helpers' | 'background'
 
 const section = ref<SectionId>('camera')
 const applying = ref(false)
@@ -41,9 +48,34 @@ function syncForm(env: EnvironmentJSON) {
   const next = cloneEnvironment(env)
   form.background = next.background
   form.lights = next.lights
-  form.shadows = next.shadows
   form.helpers = next.helpers
+  form.floor = next.floor
   form.defaultView = next.defaultView
+}
+
+function floor(): EnvironmentFloorJSON {
+  return form.floor
+}
+
+function setFloorPreset(id: string) {
+  const preset = resolveFloorPreset(id)
+  const f = floor()
+  f.presetId = preset.id
+  f.mapUrl = preset.mapUrl
+  // 有贴图时 color 会与 map 相乘；固定白色避免染色。纯色才用 color。
+  if (preset.mapUrl) {
+    f.color = '#ffffff'
+  } else if (f.color === '#ffffff') {
+    f.color = '#1a3048'
+  }
+  commit()
+}
+
+const isSolidFloor = computed(() => !floor().mapUrl && (floor().presetId ?? 'none') === 'none')
+
+function setFloorCoverage(coverage: FloorCoverage) {
+  floor().coverage = coverage
+  commit()
 }
 
 function commit() {
@@ -89,6 +121,7 @@ function viewRadius(v: DefaultViewJSON): number {
   const dx = v.position[0] - v.target[0]
   const dy = v.position[1] - v.target[1]
   const dz = v.position[2] - v.target[2]
+  console.log(v, 'vvvvvv')
   return Math.hypot(dx, dy, dz) || 1
 }
 
@@ -192,8 +225,7 @@ const navItems: Array<{ id: SectionId; icon: typeof Camera; title: string }> = [
   { id: 'camera', icon: Camera, title: '相机' },
   { id: 'light', icon: Sunny, title: '灯光' },
   { id: 'helpers', icon: Box, title: '辅助体' },
-  { id: 'background', icon: PictureFilled, title: '背景' },
-  { id: 'shadow', icon: MostlyCloudy, title: '阴影' }
+  { id: 'background', icon: PictureFilled, title: '背景' }
 ]
 </script>
 
@@ -488,13 +520,98 @@ const navItems: Array<{ id: SectionId; icon: typeof Camera; title: string }> = [
         </el-form-item>
       </el-form>
 
-      <!-- 辅助体：空间壳由创建文档时的 helpers.enclosure 决定，不在此改 -->
+      <!-- 辅助体 / 地面：空间壳由创建文档时写入 -->
       <el-form v-show="section === 'helpers'" label-position="left" label-width="88px" size="small">
         <div class="section-head">辅助体</div>
         <el-form-item label="网格">
           <el-switch v-model="form.helpers.grid" @change="commit" />
         </el-form-item>
-        <p class="hint">网格用于编辑参照；空间壳（柜体开口盒等）仅在新建文档时写入，不在此调整。</p>
+        <p class="hint">网格用于编辑参照；空间壳仅在新建文档时写入。</p>
+
+        <template v-if="isScene !== false">
+          <div class="section-head">地面</div>
+          <el-form-item label="显示">
+            <el-switch v-model="floor().visible" @change="commit" />
+          </el-form-item>
+          <el-form-item label="铺设范围">
+            <el-select
+              :model-value="floor().coverage"
+              :disabled="!floor().visible"
+              @change="v => setFloorCoverage(v as FloorCoverage)"
+            >
+              <el-option label="工作区" value="bounds" />
+              <el-option label="仅封闭区域" value="closedRooms" />
+            </el-select>
+          </el-form-item>
+          <el-form-item label="纹理">
+            <el-select
+              :model-value="floor().presetId ?? 'none'"
+              :disabled="!floor().visible"
+              @change="v => setFloorPreset(String(v))"
+            >
+              <el-option
+                v-for="preset in FLOOR_PRESETS"
+                :key="preset.id"
+                :label="preset.label"
+                :value="preset.id"
+              />
+            </el-select>
+          </el-form-item>
+          <el-form-item v-if="isSolidFloor" label="颜色">
+            <el-color-picker
+              :model-value="floor().color"
+              :disabled="!floor().visible"
+              @change="
+                v => {
+                  floor().color = v || '#1a3048'
+                  commit()
+                }
+              "
+            />
+          </el-form-item>
+          <el-form-item label="透明度">
+            <div class="fov-row">
+              <el-slider
+                :model-value="floor().opacity ?? 1"
+                :min="0"
+                :max="1"
+                :step="0.05"
+                :disabled="!floor().visible"
+                @update:model-value="
+                  v => {
+                    floor().opacity = Number(v)
+                  }
+                "
+                @change="
+                  v => {
+                    floor().opacity = Number(v)
+                    commit()
+                  }
+                "
+              />
+              <el-input-number
+                class="fov-input"
+                :model-value="floor().opacity ?? 1"
+                :min="0"
+                :max="1"
+                :step="0.05"
+                :precision="2"
+                :disabled="!floor().visible"
+                controls-position="right"
+                :controls="false"
+                @change="
+                  v => {
+                    floor().opacity = Number(v)
+                    commit()
+                  }
+                "
+              />
+            </div>
+          </el-form-item>
+          <p class="hint">
+            「仅封闭区域」跟随闭合墙环（不规则房间）；纹理来自应用内置静态资源，可局域网加载。
+          </p>
+        </template>
       </el-form>
 
       <!-- 背景 -->
@@ -556,19 +673,6 @@ const navItems: Array<{ id: SectionId; icon: typeof Camera; title: string }> = [
         </el-form-item>
       </el-form>
 
-      <!-- 阴影 -->
-      <el-form v-show="section === 'shadow'" label-position="left" label-width="88px" size="small">
-        <div class="section-head">阴影</div>
-        <el-form-item label="启用">
-          <el-switch v-model="form.shadows.enabled" @change="commit" />
-        </el-form-item>
-        <el-form-item label="类型">
-          <el-select v-model="form.shadows.type" :disabled="!form.shadows.enabled" @change="commit">
-            <el-option label="PCF Soft" value="pcfsoft" />
-            <el-option label="Basic" value="basic" />
-          </el-select>
-        </el-form-item>
-      </el-form>
     </div>
   </div>
 </template>

@@ -62,6 +62,7 @@ const activeTab = ref('props')
           v-if="environment"
           :environment="environment"
           :view-mode="viewMode"
+          :is-scene="isScene"
           :live-camera-pose="liveCameraPose"
           @apply="emit('apply-environment', $event)"
         />

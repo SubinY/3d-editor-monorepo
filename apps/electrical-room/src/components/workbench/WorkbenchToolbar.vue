@@ -16,6 +16,7 @@ defineProps<{
   viewMode: ViewMode
   snapEnabled: boolean
   collisionEnabled: boolean
+  rulersEnabled: boolean
   transformMode: TransformMode
   canUndo: boolean
   canRedo: boolean
@@ -31,6 +32,7 @@ const emit = defineEmits<{
   'fit-view': []
   'toggle-snap': []
   'toggle-collision': []
+  'toggle-rulers': []
   'set-transform-mode': [mode: TransformMode]
   'set-view-mode': [mode: ViewMode]
   save: []
@@ -75,6 +77,9 @@ const emit = defineEmits<{
       </el-button>
       <el-button :type="collisionEnabled ? 'primary' : 'default'" @click="emit('toggle-collision')">
         碰撞
+      </el-button>
+      <el-button :type="rulersEnabled ? 'primary' : 'default'" @click="emit('toggle-rulers')">
+        标尺
       </el-button>
     </el-button-group>
 

@@ -119,7 +119,7 @@ interface EditorDocumentJSON {
     }>
   }
   nodes: EditorNodeJSON[]
-  environment: EnvironmentJSON   // 3D 呈现：背景/灯/阴影/grid|openBox/defaultView
+  environment: EnvironmentJSON   // 3D 呈现：背景/灯/阴影/地面/grid|openBox/defaultView
   metadata?: Record<string, unknown>   // 非契约扩展
 }
 
@@ -134,6 +134,16 @@ interface EnvironmentJSON {
   }>
   shadows: { enabled: boolean; type?: 'basic' | 'pcfsoft' }
   helpers: { grid: boolean; enclosure: 'none' | 'openBox' | 'openBoxDoor' }
+  /** 场景地面；单套材质；coverage 控制 bounds 或仅闭合墙区 */
+  floor: {
+    visible: boolean
+    coverage: 'bounds' | 'closedRooms'
+    color: string
+    opacity?: number
+    presetId?: string
+    mapUrl?: string
+    mapRepeat?: number
+  }
   defaultView?: {
     /** orbit=旋转相机；orthographic=正交平面图 */
     type?: 'orbit' | 'orthographic'
