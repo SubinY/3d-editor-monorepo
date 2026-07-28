@@ -4,13 +4,13 @@ import { ElMessage } from 'element-plus'
 import { CATALOG_ITEM_MIME, cloneEnvironment, createEditor } from '@3d-editor/editor'
 import type {
   CatalogItem,
+  CatalogProvider,
   DocumentKind,
   EditorDocument,
   EditorDocumentJSON,
   EditorNodeJSON,
   EditorSession,
   EnvironmentJSON,
-  MemoryCatalog,
   TransformMode,
   WallJSON
 } from '@3d-editor/editor'
@@ -29,12 +29,15 @@ import {
 
 const props = defineProps<{
   kind: DocumentKind
-  catalog: MemoryCatalog
+  catalog: CatalogProvider
   initial: EditorDocumentJSON
+  /** container 当前编辑版本，仅展示 */
+  editingVersion?: string
 }>()
 
 const emit = defineEmits<{
   save: [json: EditorDocumentJSON]
+  publish: [json: EditorDocumentJSON]
   back: []
 }>()
 
@@ -409,7 +412,13 @@ function save() {
   if (!d) return
   d.name = docName.value || d.name
   emit('save', d.toJSON())
-  showToast(isScene.value ? '已保存电柜室' : '已保存电柜（同时发布为柜资产）')
+}
+
+function publish() {
+  const d = doc.value
+  if (!d) return
+  d.name = docName.value || d.name
+  emit('publish', d.toJSON())
 }
 
 function onAssetDragStart(event: DragEvent, item: CatalogItem) {
@@ -532,6 +541,7 @@ function applyEnvironment(env: EnvironmentJSON) {
       :transform-mode="transformMode"
       :can-undo="canUndo"
       :can-redo="canRedo"
+      :editing-version="editingVersion"
       @back="emit('back')"
       @set-tool="setTool"
       @undo="undo"
@@ -544,6 +554,7 @@ function applyEnvironment(env: EnvironmentJSON) {
       @set-transform-mode="setTransformMode"
       @set-view-mode="setViewMode"
       @save="save"
+      @publish="publish"
     />
 
     <div class="body">

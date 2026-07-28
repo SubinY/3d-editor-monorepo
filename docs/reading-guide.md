@@ -4,7 +4,7 @@
 
 ## Overview
 
-本仓库是基于 Three.js 的 **通用 2D/3D 编辑器 monorepo**。对外必选包是 `packages/editor`（`@3d-editor/editor`）：`createEditor` + Document + Catalog + 双 Viewport（3D 为包内 ThreeRuntime）。`packages/engine` / `presets` / `extensions` 为 legacy。电柜 Host 范例在 `apps/electrical-room`（待迁新 API）。
+本仓库是基于 Three.js 的 **通用 2D/3D 编辑器 monorepo**。对外必选包是 `packages/editor`（`@3d-editor/editor`）：`createEditor` + Document + Catalog + 双 Viewport（3D 为包内 ThreeRuntime）。`packages/engine` / `presets` / `extensions` 为 legacy。电柜 Host 在 `apps/electrical-room`，数据经 `apps/electrical-room-api` JSON 落盘。
 
 架构与定稿决策见 [architecture.md](./architecture.md)；**用法**见 [sdk-guide.md](./sdk-guide.md)。
 
@@ -19,7 +19,7 @@
 | Language | TypeScript ~5.3 | Node ≥18，pnpm ≥8 |
 | 3D | three ^0.160 | editor 的 peerDependency |
 | 2D | Canvas 2D | `Viewport2D` 自管命中测试 |
-| Apps | Vue 3 + Vue Router + Vite 5 | `electrical-room`、`demo-vue3`、`demo-view` |
+| Apps | Vue 3 + Vue Router + Vite 5 | `electrical-room`、`electrical-room-api`、`demo-vue3`、`demo-view` |
 | Monorepo | pnpm workspaces + Turborepo | 根脚本 `dev` / `build` / `test` / `lint` |
 | Test | Vitest | `packages/editor` Document / 碰撞测试 |
 | Publish | Changesets | `changeset` / `version` / `release` |
@@ -32,7 +32,7 @@
 4. `packages/editor/src/document/types.ts` + `EditorDocument.ts`
 5. `packages/editor/src/viewport/canvas2d/Viewport2D.ts`
 6. `packages/editor/src/viewport/three/Viewport3D.ts` + `runtime/ThreeRuntime.ts`
-7. 按需：legacy `packages/engine`、`apps/electrical-room`（旧接入，待迁移）
+7. 按需：`apps/electrical-room` + `electrical-room-api`；legacy `packages/engine`
 
 ## Key Entry Points
 
@@ -53,7 +53,8 @@ packages/editor/src/        # ★ 对外必选包
   catalog/
   viewport/canvas2d/        # Facade + services / utils
   viewport/three/           # Facade + services / utils + runtime
-apps/electrical-room/       # Host 范例（createEditor）
+apps/electrical-room/       # Host：资产管理 / 编辑 / 发布 / 监控首页
+apps/electrical-room-api/   # Express JSON 落盘 API
 packages/engine|presets|extensions/  # legacy
 ```
 
@@ -61,20 +62,21 @@ packages/engine|presets|extensions/  # legacy
 
 ### 电柜室
 
-1. `/` → 创建电柜室（填名称）→ `/edit/scene/:id`
+1. `/manage/rooms` → 创建电柜室 → `/edit/scene/:id`
 2. 左侧点「画墙」：2D 左键连续落点，右键 / Esc 结束链
-3. 拖门/窗/柱到墙附近 → 贴墙吸附；拖电柜到画布 → AABB 碰撞拦截重叠
-4. 顶栏切换 2D / 并排 / 3D；保存写 localStorage
+3. 拖门/窗/柱到墙附近 → 贴墙吸附；拖电柜（最新 version）到画布 → AABB 碰撞拦截重叠
+4. 顶栏保存草稿；「发布」冻结 assetPack
+5. 管理页将已发布场景设为监控首页（`/home`）
 
 ### 电柜
 
-1. `/` → 创建电柜（填长宽高）→ `/edit/container/:id`
+1. `/manage/cabinets` → 创建电柜 → `/edit/container/:id`
 2. 拖元器件到柜内平面；右侧可改柜体尺寸（`setBounds`）
-3. 保存后自动作为场景侧 `equipment` Catalog 条目
+3. 保存弹窗：覆盖当前 version 或 semver 升版写入 Catalog
 
 ### 预览
 
-`/preview/:id` 只读 3D + mock 告警 → Host 色表映射后 `setNodeVisualState('柜/元件', { color })`
+`/preview/:id` 读已保存草稿 + 活 Catalog。`/home` 只读首页发布包（PackCatalog）。
 
 ## Conventions
 
@@ -89,7 +91,8 @@ packages/engine|presets|extensions/  # legacy
 
 ```bash
 pnpm install
-pnpm --filter electrical-room dev   # http://localhost:5175
+pnpm --filter electrical-room-api dev   # http://localhost:8787
+pnpm --filter electrical-room dev       # http://localhost:5175（/api 代理到 8787）
 pnpm --filter @3d-editor/editor test
 pnpm build
 ```
@@ -104,6 +107,7 @@ pnpm build
 | 改 3D 拾取 / gizmo 回写 | `viewport/three/services/selection.ts`、`transform-bridge.ts` |
 | 改素材分组约定 | `CatalogCategory` in `catalog/types.ts`；条目在 `apps/.../catalog.ts` |
 | 改列表 / 创建表单 / 编辑壳 UI | `apps/electrical-room/src/views/`、`components/Workbench.vue` |
+| 改落盘 API | `apps/electrical-room-api/src/` |
 | 加可选细则约束 | `document/constraints.ts`（可选；MVP 不必） |
 | 理解决策 | [architecture.md](./architecture.md) D1–D6 |
 

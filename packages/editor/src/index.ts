@@ -3,6 +3,12 @@
 
 export { createEditor } from './core/create-editor'
 export { createMemoryCatalog, MemoryCatalog } from './catalog/MemoryCatalog'
+export {
+  buildAssetPack,
+  buildPublishBundle,
+  createPackCatalog,
+  PackCatalog
+} from './catalog/publish'
 export { CATALOG_ITEM_MIME } from './viewport/canvas2d/types'
 export {
   SCHEMA_VERSION,
@@ -45,6 +51,7 @@ export type {
   FootprintSpec,
   Model3DSpec
 } from './catalog/types'
+export type { PublishBundle } from './catalog/publish'
 export type { Tool2D, Viewport2DOptions } from './viewport/canvas2d/types'
 export type { Viewport2D } from './viewport/canvas2d/Viewport2D'
 export type {

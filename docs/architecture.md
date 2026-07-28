@@ -45,14 +45,15 @@ apps ──► @3d-editor/editor（peer: three）
 ### D2. 复合资产（如电柜）：嵌套解析
 
 - `CatalogItem` 两型：`model` 型（`model3d` 指向 GLB / 内置几何）；`document` 型（`document` / `documentUrl` 指向一份 ContainerDocument JSON）。
-- 3D viewport 遇 `document` 型条目时**嵌套解析**：加载 container JSON，递归实例化内部元件；可选 `shell3d` 外壳半透明渲染。
+- 3D viewport 遇 `document` 型条目时**嵌套解析**：加载 container JSON，递归实例化内部元件；外壳优先级为 `gltf shell3d` > 内层 `environment.helpers.enclosure` > 其它 `shell3d`（半透明），与柜资产编辑态 enclosure 对齐。
 - 运行时寻址：柜内元件路径为 `sceneNodeId/childNodeId`，`setNodeVisualState(path, state)` 支持柜内元件级高亮。
 - 防护：解析深度上限 2 层（场景→柜→元件）；2D 视图对 `document` 型只画 footprint 占位。
+- **发布静态化（Host）**：编辑与 `/preview` 走已保存 `EditorDocumentJSON` + 活 Catalog；场景发布生成 `assetPack` 内容快照；**仅监控首页 `/home`** 用 `createPackCatalog(assetPack)`。柜资产按 `(id, version)` 钉死；场景拖放取最新 version 写入 `catalogRef`。
 
 ### D3. 发包拓扑：单 API 面 + 包内 3D Runtime
 
 - Host **只装** `@3d-editor/editor` + peer `three`。
-- 推荐入口：`createEditor`；`EditorDocumentJSON` 由 Host 落库（API/DB；demo 可用 localStorage）。
+- 推荐入口：`createEditor`；`EditorDocumentJSON` 由 Host 落库（API / 文件；electrical-room 经 `electrical-room-api` JSON 落盘）。
 - 3D 管线为 editor 内自维护的 `ThreeRuntime`（不再依赖 / re-export `@3d-editor/engine`）。
 - 不对外导出 `createDocument` / `loadDocument` / `create2DViewport` / `create3DViewport`（Session 内部使用）。
 - 主包不绑 vue/react。
@@ -91,7 +92,7 @@ apps ──► @3d-editor/editor（peer: three）
 |----|------|
 | VisualState | `viewport3d.setNodeVisualState(nodeIdPath, { color?, intensity? })`；有 color 则发光，省略/null 还原；**只作用于该 path 自身网格（含柜壳），不进入嵌套子 path**；**无业务 status 枚举**（色义由 Host 映射） |
 | 3D 交互事件 | `viewport3d.onInteraction`：`click` / `dblclick` / `longpress` / `hover`（`NodeInteractionEvent`）；**2D 本期未对齐** |
-| 性能 Info | `setPerfStatsVisible` / `viewport3d.perfStats`：左下角物体/顶点/三角形/帧时（会话态） |
+| 性能 Info | `setPerfStatsVisible` / `viewport3d.perfStats`：左下角物体/顶点/三角形/渲染时间（会话态；EMA + 低频刷新） |
 | 悬停描边 | EdgesGeometry + Line2（非 EffectComposer）；`viewport3d.hoverOutline` 默认开 |
 | 聚焦选中 | `focusSelection` / `focusNode`：沿当前视线 fit bbox，不写 `defaultView` |
 | 只读预览 | `createEditor({ viewport3d: { readonly: true, onInteraction } })`，不另设 createViewer |
@@ -272,9 +273,10 @@ const editor = await createEditor({
 | `/` 列表页 | 电柜 / 电柜室两栏；创建表单（电柜填长宽高，电柜室填基本资料）、编辑 / 预览 / 删除入口 |
 | `/edit/container/:id` 电柜编辑 | 柜体立体平面内拖放元器件；右侧可改柜尺寸（`setBounds`）；保存即发布为场景侧柜资产 |
 | `/edit/scene/:id` 电柜室编辑 | 空画布起步：连续画墙圈房间、拖放电柜与门窗柱（贴墙吸附）；2D / 3D / 并排三种视图模式 |
-| `/preview/:id?` 监控预览 | 只读加载场景；mock 告警随机驱动柜内元件高亮（验证 D2 寻址） |
+| `/preview/:id?` 监控预览 | 只读加载**已保存草稿** + 活 Catalog；mock 告警高亮 |
+| `/home` 监控首页 | 只读**发布包** PackCatalog（静态快照） |
 
-业务代码边界：壳 UI（`Workbench.vue` / `Home.vue`）、Catalog 数据（`business/catalog.ts`，含门窗柱 fixture 条目）、存储与发布（`business/storage.ts`）全部在 app 内，不回写主包。MVP 后 demo 不再注册细则约束，仅依赖内核碰撞（D5）。
+业务代码边界：壳 UI（`views/manage` / `Workbench.vue`）、Catalog 合成（`business/catalog.ts`）、HTTP 客户端（`business/api.ts`）在 app 内；落盘由 `apps/electrical-room-api` 承担。MVP 后 demo 不再注册细则约束，仅依赖内核碰撞（D5）。
 
 ## 10. engine 内部层（3D 运行时）
 

@@ -10,7 +10,8 @@
     "apps/*"
   ],
   "scripts": {
-    "dev": "turbo run dev",
+    "dev": "turbo run dev --filter=electrical-room --filter=electrical-room-api",
+    "dev:editor": "turbo run dev --filter=@3d-editor/editor",
     "build": "turbo run build",
     "test": "turbo run test",
     "lint": "turbo run lint",

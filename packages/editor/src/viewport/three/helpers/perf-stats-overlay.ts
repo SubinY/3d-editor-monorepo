@@ -1,14 +1,20 @@
 import type * as THREE from 'three'
 
+/** DOM 刷新间隔（ms）；游戏 FPS 面板常见 200–500ms */
+const UI_INTERVAL_MS = 250
+/** 指数滑动平均系数；越小越稳、响应越慢 */
+const EMA_ALPHA = 0.12
+
 /**
  * 3D 视口左下角性能 Info（对齐 Three.js 编辑器风格）。
- * 默认隐藏；由 Host / Viewport3D 开关。
+ * 「渲染时间」= 本帧 render 前后耗时；显示为 EMA + 低频刷新，避免数字狂跳。
  */
 export class PerfStatsOverlay {
   private el: HTMLDivElement
   private visible = false
-  private lastTime = 0
-  private frameMs = 0
+  private smoothedMs = 0
+  private lastUiAt = 0
+  private cachedCounts = { objects: 0, vertices: 0, triangles: 0 }
 
   constructor(container: HTMLElement) {
     this.el = document.createElement('div')
@@ -35,19 +41,30 @@ export class PerfStatsOverlay {
   setVisible(visible: boolean): void {
     this.visible = visible
     this.el.style.display = visible ? 'block' : 'none'
-    if (visible) this.lastTime = performance.now()
+    if (visible) {
+      this.smoothedMs = 0
+      this.lastUiAt = 0
+    }
   }
 
   isVisible(): boolean {
     return this.visible
   }
 
-  /** 在渲染环内调用；仅 visible 时更新 DOM */
-  update(scene: THREE.Scene): void {
+  /**
+   * @param renderMs 本帧 render 前后耗时（ms）
+   */
+  update(scene: THREE.Scene, renderMs: number): void {
     if (!this.visible) return
+
+    this.smoothedMs =
+      this.smoothedMs === 0
+        ? renderMs
+        : this.smoothedMs * (1 - EMA_ALPHA) + renderMs * EMA_ALPHA
+
     const now = performance.now()
-    if (this.lastTime > 0) this.frameMs = now - this.lastTime
-    this.lastTime = now
+    if (now - this.lastUiAt < UI_INTERVAL_MS && this.lastUiAt !== 0) return
+    this.lastUiAt = now
 
     let objects = 0
     let vertices = 0
@@ -65,12 +82,13 @@ export class PerfStatsOverlay {
         triangles += pos.count / 3
       }
     })
+    this.cachedCounts = { objects, vertices, triangles }
 
     this.el.textContent =
-      `${objects} 物体\n` +
-      `${vertices.toLocaleString('en-US')} 顶点\n` +
-      `${Math.floor(triangles).toLocaleString('en-US')} 三角形\n` +
-      `${this.frameMs.toFixed(2)} 帧时`
+      `${this.cachedCounts.objects} 物体\n` +
+      `${this.cachedCounts.vertices.toLocaleString('en-US')} 顶点\n` +
+      `${Math.floor(this.cachedCounts.triangles).toLocaleString('en-US')} 三角形\n` +
+      `${this.smoothedMs.toFixed(2)} 渲染时间`
   }
 
   dispose(): void {

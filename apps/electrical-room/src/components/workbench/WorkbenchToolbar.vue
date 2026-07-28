@@ -4,7 +4,8 @@ import {
   Delete,
   FullScreen,
   RefreshLeft,
-  RefreshRight
+  RefreshRight,
+  Upload
 } from '@element-plus/icons-vue'
 import type { TransformMode } from '@3d-editor/editor'
 import type { EditorTool, ViewMode } from './types'
@@ -20,6 +21,7 @@ defineProps<{
   transformMode: TransformMode
   canUndo: boolean
   canRedo: boolean
+  editingVersion?: string
 }>()
 
 const emit = defineEmits<{
@@ -36,6 +38,7 @@ const emit = defineEmits<{
   'set-transform-mode': [mode: TransformMode]
   'set-view-mode': [mode: ViewMode]
   save: []
+  publish: []
 }>()
 </script>
 
@@ -50,6 +53,9 @@ const emit = defineEmits<{
       @update:model-value="emit('update:docName', $event)"
     />
     <el-tag size="small" type="info" effect="plain">{{ isScene ? '电柜室' : '电柜' }}</el-tag>
+    <el-tag v-if="!isScene && editingVersion" size="small" effect="dark" type="warning">
+      v{{ editingVersion }}
+    </el-tag>
 
     <el-button-group>
       <el-button :type="tool === 'select' ? 'primary' : 'default'" @click="emit('set-tool', 'select')">
@@ -116,6 +122,7 @@ const emit = defineEmits<{
     </el-button-group>
 
     <el-button type="primary" @click="emit('save')">保存</el-button>
+    <el-button v-if="isScene" type="success" :icon="Upload" @click="emit('publish')">发布</el-button>
   </header>
 </template>
 

@@ -12,7 +12,8 @@
 
 - `packages/editor`：`@3d-editor/editor` **对外唯一必选包**（`createEditor`、Document、Catalog、2D/3D Viewport、包内 ThreeRuntime）
 - `packages/engine` / `extensions` / `presets`：**legacy**（本轮不跟进新 editor API）
-- `apps/electrical-room`：电柜业务 Host 范例（待迁 `createEditor`）
+- `apps/electrical-room`：电柜业务 Host（`createEditor` + 版本化柜资产 + 场景发布包）
+- `apps/electrical-room-api`：Express JSON 落盘（documents / catalog / publishes）
 - `apps/demo-vue3`：旧演示（直连 engine）
 - `apps/demo-view`：视图向演示
 - `docs`：正式文档（上述三篇）

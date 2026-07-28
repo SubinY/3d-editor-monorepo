@@ -1,16 +1,19 @@
 import {
   SCHEMA_VERSION,
   createMemoryCatalog,
-  createDefaultEnvironment
+  createDefaultEnvironment,
+  catalogKey,
+  MemoryCatalog
 } from '@3d-editor/editor'
 import type {
   CatalogItem,
+  CatalogProvider,
+  CatalogQuery,
   DocumentKind,
   EditorDocumentJSON,
-  EditorNodeJSON,
-  MemoryCatalog
+  EditorNodeJSON
 } from '@3d-editor/editor'
-import { listDocuments } from './storage'
+import * as api from './api'
 
 // ---------------------------------------------------------------------------
 // 墙构件（fixture 型：2D 放置贴墙吸附）
@@ -53,7 +56,7 @@ export const FIXTURE_ITEMS: CatalogItem[] = [
 ]
 
 // ---------------------------------------------------------------------------
-// 元器件（component 型，柜内放置）
+// 元器件（component 型，柜内放置）— 前端 seed，不入库
 // ---------------------------------------------------------------------------
 
 export const COMPONENT_ITEMS: CatalogItem[] = [
@@ -125,27 +128,48 @@ export const COMPONENT_ITEMS: CatalogItem[] = [
   }
 ]
 
-// ---------------------------------------------------------------------------
-// 柜资产（document 型，场景放置）
-// ---------------------------------------------------------------------------
-
-/** 新建电柜的默认净空尺寸（米），创建表单可改 */
 export const DEFAULT_CABINET_BOUNDS = { width: 0.8, depth: 0.6, height: 2 }
-
-/** 电柜室工作区默认尺寸（进入编辑器后仍可改） */
 export const DEFAULT_SCENE_BOUNDS = { width: 20, depth: 15, height: 3 }
 
-function componentNode(id: string, itemId: string, name: string, x: number, y: number): EditorNodeJSON {
+export const INITIAL_CABINET_VERSION = '1.0.0'
+
+export function cabinetCatalogId(documentId: string): string {
+  return `cabinet-${documentId}`
+}
+
+export function getEditingVersion(json: EditorDocumentJSON): string {
+  const v = json.metadata?.editingVersion
+  return typeof v === 'string' && v ? v : INITIAL_CABINET_VERSION
+}
+
+export function setEditingVersion(json: EditorDocumentJSON, version: string): EditorDocumentJSON {
+  return {
+    ...json,
+    metadata: { ...(json.metadata ?? {}), editingVersion: version }
+  }
+}
+
+function componentNode(
+  id: string,
+  itemId: string,
+  name: string,
+  x: number,
+  y: number
+): EditorNodeJSON {
   return {
     id,
     name,
     catalogRef: { id: itemId, version: '1.0.0' },
-    // container：x=水平（宽），y=离地高度（立面），z=进深（默认贴后壁前一点）
     transform: { position: [x, y, -0.15], rotation: [0, 0, 0], scale: [1, 1, 1] }
   }
 }
 
-function cabinetDocument(id: string, name: string, nodes: EditorNodeJSON[]): EditorDocumentJSON {
+export function cabinetDocument(
+  id: string,
+  name: string,
+  nodes: EditorNodeJSON[],
+  version = INITIAL_CABINET_VERSION
+): EditorDocumentJSON {
   const bounds = { ...DEFAULT_CABINET_BOUNDS }
   return {
     schemaVersion: SCHEMA_VERSION,
@@ -155,15 +179,20 @@ function cabinetDocument(id: string, name: string, nodes: EditorNodeJSON[]): Edi
     unit: 'm',
     bounds,
     nodes,
-    environment: createDefaultEnvironment('container', bounds)
+    environment: createDefaultEnvironment('container', bounds),
+    metadata: { editingVersion: version }
   }
 }
 
-/** 把一份 ContainerDocument 发布为场景侧可放置的 document 型 Catalog 条目 */
-export function cabinetItemFromDocument(json: EditorDocumentJSON, options?: { thumb?: string }): CatalogItem {
+/** 把 ContainerDocument 做成 scene 侧可放置的 document 型 Catalog 条目 */
+export function cabinetItemFromDocument(
+  json: EditorDocumentJSON,
+  version: string,
+  options?: { thumb?: string }
+): CatalogItem {
   return {
-    id: `cabinet-${json.id}`,
-    version: '1.0.0',
+    id: cabinetCatalogId(json.id),
+    version,
     name: json.name,
     kind: 'cabinet',
     category: 'equipment',
@@ -184,9 +213,7 @@ export function cabinetItemFromDocument(json: EditorDocumentJSON, options?: { th
   }
 }
 
-/** 内置两种柜型，保证空仓库也能演示 */
-export function builtinCabinetItems(): CatalogItem[] {
-  // 立面布置：x 左右、y 离地高度（柜高 2m）
+export function builtinCabinetDocuments(): EditorDocumentJSON[] {
   const power = cabinetDocument('builtin-power', '配电柜（内置）', [
     componentNode('brk-1', 'comp-breaker', '主断路器', -0.25, 1.4),
     componentNode('brk-2', 'comp-breaker', '支路断路器1', -0.08, 1.4),
@@ -202,40 +229,93 @@ export function builtinCabinetItems(): CatalogItem[] {
     componentNode('ctc-1', 'comp-contactor', '接触器', 0.05, 0.85),
     componentNode('term-2', 'comp-terminal', '端子排', -0.05, 0.3)
   ])
-  return [
-    cabinetItemFromDocument(power, { thumb: '#3f7fbf' }),
-    cabinetItemFromDocument(control, { thumb: '#3fae8a' })
-  ]
+  return [power, control]
 }
 
-/** 用户保存的电柜（container 文档）即发布为场景侧柜资产 */
-export function savedCabinetItems(): CatalogItem[] {
-  const palette = ['#4f8fd0', '#3fae8a', '#b8873d', '#9a6fd0', '#d06f6f']
-  return listDocuments('container').map((json, index) =>
-    cabinetItemFromDocument(json, { thumb: palette[index % palette.length] })
-  )
-}
+/** seed 元器件 + fixture + API 柜资产（latestOnly 控制 list 是否只出最新柜） */
+export class HostCatalog implements CatalogProvider {
+  private seed: MemoryCatalog
+  private remoteCache = new Map<string, CatalogItem>()
+  private latestOnly: boolean
 
-// ---------------------------------------------------------------------------
-// 组装 Catalog（业务注入，编辑器内核不感知任何电柜概念）
-// ---------------------------------------------------------------------------
-
-export function createEditorCatalog(kind: DocumentKind): MemoryCatalog {
-  const items: CatalogItem[] = [...COMPONENT_ITEMS]
-  if (kind === 'scene') {
-    items.push(...FIXTURE_ITEMS)
-    items.push(...builtinCabinetItems())
-    items.push(...savedCabinetItems())
+  constructor(options?: { latestOnly?: boolean }) {
+    this.latestOnly = options?.latestOnly ?? true
+    this.seed = createMemoryCatalog([...COMPONENT_ITEMS, ...FIXTURE_ITEMS])
   }
-  return createMemoryCatalog(items)
+
+  private cacheItem(item: CatalogItem): void {
+    this.remoteCache.set(catalogKey(item.id, item.version), item)
+  }
+
+  async warmup(): Promise<void> {
+    const remote = await api.listCatalog({
+      placeableIn: undefined,
+      latestOnly: false
+    })
+    this.remoteCache.clear()
+    for (const item of remote) this.cacheItem(item)
+  }
+
+  async list(query?: CatalogQuery): Promise<CatalogItem[]> {
+    const seedItems = await this.seed.list(query)
+    let remote = Array.from(this.remoteCache.values())
+    if (this.latestOnly) {
+      const latest = new Map<string, CatalogItem>()
+      for (const item of remote) {
+        const prev = latest.get(item.id)
+        if (!prev || compareVer(item.version, prev.version) > 0) latest.set(item.id, item)
+      }
+      remote = Array.from(latest.values())
+    }
+    if (query?.placeableIn) {
+      remote = remote.filter(i => i.placeableIn.includes(query.placeableIn!))
+    }
+    if (query?.kind) remote = remote.filter(i => i.kind === query.kind)
+    if (query?.category) remote = remote.filter(i => i.category === query.category)
+    if (query?.tag) remote = remote.filter(i => i.tags?.includes(query.tag!))
+    if (query?.text) {
+      const text = query.text.toLowerCase()
+      remote = remote.filter(i => i.name.toLowerCase().includes(text))
+    }
+    return [...seedItems, ...remote]
+  }
+
+  async get(id: string, version?: string): Promise<CatalogItem | undefined> {
+    const fromSeed = await this.seed.get(id, version)
+    if (fromSeed) return fromSeed
+
+    if (version) {
+      const cached = this.remoteCache.get(catalogKey(id, version))
+      if (cached) return cached
+      const fetched = await api.getCatalogVersion(id, version)
+      if (fetched) this.cacheItem(fetched)
+      return fetched
+    }
+
+    const latest = await api.getCatalogLatest(id)
+    if (latest) this.cacheItem(latest)
+    return latest
+  }
 }
 
-/** 预览页需要全量条目（场景引用柜 + 柜内引用元件） */
-export function createPreviewCatalog(): MemoryCatalog {
-  return createMemoryCatalog([
-    ...COMPONENT_ITEMS,
-    ...FIXTURE_ITEMS,
-    ...builtinCabinetItems(),
-    ...savedCabinetItems()
-  ])
+function compareVer(a: string, b: string): number {
+  const pa = a.split('.').map(Number)
+  const pb = b.split('.').map(Number)
+  for (let i = 0; i < 3; i++) {
+    if ((pa[i] ?? 0) > (pb[i] ?? 0)) return 1
+    if ((pa[i] ?? 0) < (pb[i] ?? 0)) return -1
+  }
+  return 0
+}
+
+export async function createEditorCatalog(kind: DocumentKind): Promise<HostCatalog> {
+  const catalog = new HostCatalog({ latestOnly: kind === 'scene' })
+  await catalog.warmup()
+  return catalog
+}
+
+export async function createPreviewCatalog(): Promise<HostCatalog> {
+  const catalog = new HostCatalog({ latestOnly: false })
+  await catalog.warmup()
+  return catalog
 }

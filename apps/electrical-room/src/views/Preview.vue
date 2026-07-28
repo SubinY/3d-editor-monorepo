@@ -4,8 +4,7 @@ import { createEditor, isDocumentItem } from '@3d-editor/editor'
 import type { EditorDocument, EditorSession, NodeInteractionEvent } from '@3d-editor/editor'
 import { useRoute, useRouter } from 'vue-router'
 import { createPreviewCatalog } from '@/business/catalog'
-import { getDocument, listDocuments } from '@/business/storage'
-import { createDemoSceneJSON } from '@/business/demo-scene'
+import * as api from '@/business/api'
 import { readNodeBindings, type NodeBindingsProps } from '@/business/node-bindings'
 import { fetchMockPointValues } from '@/business/mock-point-api'
 import { PointValueStore, evaluateNodeRules } from '@/business/point-runtime'
@@ -35,11 +34,11 @@ const logs = ref<AlarmLog[]>([])
 const running = ref(true)
 const lastInteraction = ref('')
 const lastValues = ref('')
+const sourceLabel = ref('')
 
 let session: EditorSession | undefined
 let doc: EditorDocument | undefined
 let timer = 0
-/** 上一轮已着色的 path，便于本轮还原 */
 let paintedPaths: string[] = []
 const store = new PointValueStore()
 
@@ -99,7 +98,6 @@ async function tick(targets: Target[]) {
   const now = new Date().toLocaleTimeString()
   for (const target of targets) {
     const status = evaluateNodeRules(target.bindings, values) ?? 'normal'
-    // 未命中 / normal：不刷色，保留 catalog 原色（上一轮高亮已在上方 clear）
     if (status === 'normal') continue
     viewport.setNodeVisualState(target.path, toVisualState(status))
     paintedPaths.push(target.path)
@@ -118,11 +116,16 @@ const route = useRoute()
 const router = useRouter()
 
 onMounted(async () => {
-  const catalog = createPreviewCatalog()
   const id = route.params.id as string | undefined
-  const json =
-    (id ? getDocument(id) : undefined) ?? listDocuments('scene')[0] ?? (await createDemoSceneJSON())
-
+  sourceLabel.value = '已保存草稿 + 活 Catalog'
+  const catalog = await createPreviewCatalog()
+  const rec = id ? await api.getDocument(id) : undefined
+  const list = id ? [] : await api.listDocuments('scene')
+  const json = rec?.json ?? list[0]?.json
+  if (!json) {
+    router.replace('/manage/rooms')
+    return
+  }
   session = await createEditor({
     catalog,
     document: json,
@@ -135,8 +138,8 @@ onMounted(async () => {
       }
     }
   })
-  doc = session.document
 
+  doc = session.document
   const targets = await collectTargets()
   timer = window.setInterval(() => {
     void tick(targets)
@@ -160,7 +163,8 @@ function toggle() {
     <div ref="el3d" class="stage" />
     <aside class="panel">
       <h3>监控预览（只读）</h3>
-      <button @click="router.push('/')">← 返回列表</button>
+      <p class="source">数据源：{{ sourceLabel }}</p>
+      <button @click="router.push('/manage/rooms')">← 返回列表</button>
       <div class="legend">
         <span v-for="item in legendItems" :key="item.status">
           <i class="dot" :style="{ background: item.color }" />{{ item.label }}
@@ -209,6 +213,11 @@ function toggle() {
 h3 {
   margin: 0;
   font-size: 14px;
+}
+.source {
+  margin: 0;
+  font-size: 12px;
+  color: #3dd6ff;
 }
 .legend {
   display: flex;

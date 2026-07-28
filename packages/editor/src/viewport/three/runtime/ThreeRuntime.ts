@@ -415,9 +415,11 @@ export class ThreeRuntime {
     const step = () => {
       this.orbit.update()
       this.viewGizmo.syncFromCamera(this._camera, this.orbit.target)
+      const t0 = performance.now()
       this.renderer.render(this.scene, this._camera)
       this.viewGizmo.render(this.renderer)
-      this.perfStats.update(this.scene)
+      const renderMs = performance.now() - t0
+      this.perfStats.update(this.scene, renderMs)
       this.loopId = requestAnimationFrame(step)
     }
     this.loopId = requestAnimationFrame(step)

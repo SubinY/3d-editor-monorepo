@@ -4,15 +4,34 @@ import {
   createMemoryCatalog
 } from '@3d-editor/editor'
 import type { EditorDocumentJSON } from '@3d-editor/editor'
-import { builtinCabinetItems } from './catalog'
+import {
+  builtinCabinetDocuments,
+  cabinetItemFromDocument,
+  INITIAL_CABINET_VERSION
+} from './catalog'
+import * as api from './api'
 import { createConditionEvent, createPointBinding } from './node-bindings'
 
 /**
- * 示例场景：20m × 15m 电柜室，两列各 5 台不同型号电柜（面向中间过道）。
- * 首次进入且无存档时使用。附带点位/条件事件样例供预览轮询验证。
+ * 示例场景：写入 API（文档 + 柜 Catalog），返回 scene JSON。
  */
 export async function createDemoSceneJSON(): Promise<EditorDocumentJSON> {
-  const cabinets = builtinCabinetItems()
+  const docs = builtinCabinetDocuments()
+  const thumbs = ['#3f7fbf', '#3fae8a']
+  const cabinets = []
+
+  for (let i = 0; i < docs.length; i++) {
+    const docJson = docs[i]
+    await api.saveDocument(docJson)
+    const item = cabinetItemFromDocument(docJson, INITIAL_CABINET_VERSION, { thumb: thumbs[i] })
+    try {
+      await api.postCatalogItem(item)
+    } catch {
+      await api.putCatalogItem(item)
+    }
+    cabinets.push(item)
+  }
+
   const editor = await createEditor({
     catalog: createMemoryCatalog(cabinets),
     document: createEmptyDocumentJSON({
@@ -72,5 +91,6 @@ export async function createDemoSceneJSON(): Promise<EditorDocumentJSON> {
 
   const json = doc.toJSON()
   editor.dispose()
+  await api.saveDocument(json)
   return json
 }

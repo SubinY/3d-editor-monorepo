@@ -27,6 +27,7 @@ import {
   scaleWallBoxUVs,
   type WallMaterialHandle
 } from './helpers/wall-material'
+import { buildEnclosure } from './helpers/enclosure'
 import { findClosedWallLoops } from '../canvas2d/utils/closed-loops'
 import type { NodeInteractionHandler } from '../interaction-events'
 import { isObjectUnder } from './utils/node-path'
@@ -417,33 +418,17 @@ export class Viewport3D {
     const group = new THREE.Group()
     group.name = `${item.name}(document)`
 
-    if (item.shell3d) {
-      const shell = await this.buildModel(item.shell3d, item)
-      shell.userData.isShell = true
-      // 外壳半透明，保证柜内元件可见、可高亮
-      shell.traverse(child => {
-        child.userData.isShell = true
-        const mesh = child as THREE.Mesh
-        if (mesh.isMesh) {
-          const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material]
-          materials.forEach(mat => {
-            mat.transparent = true
-            mat.opacity = 0.68
-            mat.depthWrite = false
-          })
-        }
-      })
-      group.add(shell)
-    }
-
     const json = await this.resolveItemDocument(item)
+    const shell = await this.buildDocumentShell(item, json)
+    if (shell) group.add(shell)
+
     if (!json) {
-      group.add(this.buildFootprintBox(item))
+      if (!shell) group.add(this.buildFootprintBox(item))
       return group
     }
     if (json.kind !== 'container') {
       console.warn(`[viewport3d] document item "${item.id}" is not a container, skip nesting`)
-      group.add(this.buildFootprintBox(item))
+      if (!shell) group.add(this.buildFootprintBox(item))
       return group
     }
 
@@ -460,6 +445,51 @@ export class Viewport3D {
       this.pathObjects.set(childPath, childObject)
     }
     return group
+  }
+
+  /**
+   * 嵌套柜外壳优先级：gltf shell3d > 内层 document.enclosure > 其它 shell3d。
+   * enclosure 与资产编辑态 helpers 对齐，保证场景摆放 WYSIWYG。
+   */
+  private async buildDocumentShell(
+    item: CatalogItem,
+    json: EditorDocumentJSON | undefined
+  ): Promise<THREE.Object3D | undefined> {
+    const shell3d = item.shell3d
+    if (shell3d?.type === 'gltf') {
+      return this.styleAsShell(await this.buildModel(shell3d, item))
+    }
+
+    const enclosure = json?.environment?.helpers?.enclosure
+    if (enclosure && enclosure !== 'none') {
+      const width = json?.bounds.width ?? item.footprint.width
+      const depth = json?.bounds.depth ?? item.footprint.depth
+      const height = json?.bounds.height ?? item.footprint.height ?? 2
+      const built = buildEnclosure(enclosure, width, height, depth)
+      if (built) return this.styleAsShell(built)
+    }
+
+    if (shell3d) {
+      return this.styleAsShell(await this.buildModel(shell3d, item))
+    }
+    return undefined
+  }
+
+  /** 外壳半透明，保证柜内元件可见、可高亮 */
+  private styleAsShell(shell: THREE.Object3D): THREE.Object3D {
+    shell.userData.isShell = true
+    shell.traverse(child => {
+      child.userData.isShell = true
+      const mesh = child as THREE.Mesh
+      if (!mesh.isMesh) return
+      const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material]
+      materials.forEach(mat => {
+        mat.transparent = true
+        mat.opacity = 0.68
+        mat.depthWrite = false
+      })
+    })
+    return shell
   }
 
   private async buildModel(spec: Model3DSpec, item: CatalogItem): Promise<THREE.Object3D> {

@@ -57,6 +57,11 @@ export class MemoryCatalog implements CatalogProvider {
     if (!v) return undefined
     return this.items.get(catalogKey(id, v))
   }
+
+  /** 该 id 当前登记的最新 version；无则 undefined */
+  getLatestVersion(id: string): string | undefined {
+    return this.latest.get(id)
+  }
 }
 
 export function createMemoryCatalog(items: CatalogItem[] = []): MemoryCatalog {

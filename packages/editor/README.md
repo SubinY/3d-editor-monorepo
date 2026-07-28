@@ -215,6 +215,10 @@ env.background = { type: 'color', value: '#0c1420' }
 env.floor.visible = false
 editor.document.commands.setEnvironment(env)
 
+// —— 发布静态包（预览/监控与活 Catalog 解耦）——
+const bundle = await buildPublishBundle(editor.document.toJSON(), catalog)
+// Host 落库后：createPackCatalog(bundle.assetPack) 作为只读 Catalog
+
 // —— 监听 Document ——
 editor.document.on('change', () => {
   // 刷新 Host 属性面板 / 图层树
@@ -356,7 +360,7 @@ type Model3DSpec =
 | `clearVisualStates()` | 清除高亮 |
 | `onCameraPoseChange(handler)` | Orbit 位姿变化 |
 | `setTransformMode` / `setTransformModes` | gizmo（只读写会话时由 Session 转发） |
-| `setPerfStatsVisible(boolean)` | 左下角性能 Info（物体/顶点/三角形/帧时）；亦可 `viewport3d.perfStats` |
+| `setPerfStatsVisible(boolean)` | 左下角性能 Info（物体/顶点/三角形/渲染时间）；亦可 `viewport3d.perfStats` |
 | `setHoverOutlineEnabled(boolean)` | 悬停 Edges/Line2 描边；默认开（`viewport3d.hoverOutline`） |
 | `focusSelection` / `focusNode(path)` | 沿当前视线框住包围盒（不写 `defaultView`） |
 
@@ -373,7 +377,7 @@ type Model3DSpec =
 type InteractionEventType = 'click' | 'dblclick' | 'longpress' | 'hover'
 ```
 
-悬停描边为几何边缘线（非 `EffectComposer` / `OutlinePass`）。帧时 ≈ 上一帧到当前帧耗时（ms）；约 16.7ms ≈ 60FPS。
+悬停描边为几何边缘线（非 `EffectComposer` / `OutlinePass`）。渲染时间 = 本帧 `render` 前后耗时（EMA + 约 250ms 刷新一次）。
 
 ---
 

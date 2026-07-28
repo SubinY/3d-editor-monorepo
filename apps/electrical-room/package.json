@@ -4,6 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "vite",
+    "dev:all": "echo Run electrical-room-api on :8787 and vite on :5175",
     "build": "vite build",
     "preview": "vite preview"
   },

@@ -86,7 +86,7 @@ function setWallPreset(id: string) {
         @update:model-value="emit('update:perfStatsVisible', $event)"
       />
     </el-form-item>
-    <p class="hint">性能信息为会话开关，左下角显示物体 / 顶点 / 三角形 / 帧时（不落库）。</p>
+    <p class="hint">性能信息为会话开关，左下角显示物体 / 顶点 / 三角形 / 渲染时间（不落库）。</p>
     <el-form-item v-if="isScene === false" label="空间壳">
       <el-select v-model="form.helpers.enclosure" @change="commit">
         <el-option label="无" value="none" />
