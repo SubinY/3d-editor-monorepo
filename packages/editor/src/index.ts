@@ -47,7 +47,11 @@ export type {
 } from './catalog/types'
 export type { Tool2D, Viewport2DOptions } from './viewport/canvas2d/types'
 export type { Viewport2D } from './viewport/canvas2d/Viewport2D'
-export type { Viewport3D, Viewport3DOptions } from './viewport/three/Viewport3D'
+export type {
+  Viewport3D,
+  Viewport3DOptions,
+  FocusCameraOptions
+} from './viewport/three/Viewport3D'
 export type {
   InteractionEventType,
   NodeInteractionEvent,

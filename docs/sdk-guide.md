@@ -175,8 +175,9 @@ editor.document.commands.setEnvironment({
 - **Catalog**：Host 注入 `CatalogItem[]`；`model` / `document` 两型；`placeableIn` 必填。
 - **碰撞**：内建 AABB；会话 `setCollisionEnabled` / `interaction.collisionEnabled`；`onDenied` 接收 `collision:…`。
 - **吸附**：会话 `snapEnabled` 控制 2D 贴边对齐（懒生效）；画墙工具内置端点吸附始终可用。硬网格 `gridSnapConstraint` 仍可供 Host 自行注册，但不随会话吸附自动开启。
-- **3D**：包内 `ThreeRuntime`；环境由 Document.environment 投影；`floor.coverage`：`bounds`（工作区）| `closedRooms`（仅闭合墙围合，不规则跟随墙）；`wall`：场景级墙色/贴图（所有墙共用）；`defaultView.type`：`orbit` | `orthographic`；`helpers.enclosure`：`none` | `openBox` | `openBoxDoor`。视口右下角世界坐标轴角标（点轴切视角 / 拖拽环绕，不进 helpers）。地板/墙体贴图由 Host 同源静态资源提供（`mapUrl` / `presetId`），内核不内置纹理文件。
-- **交互事件 vs VisualState vs props**：`onInteraction` 只报告指针手势（3D 先行）；`setNodeVisualState({ color, intensity })` 是运行时呈现（不落库，色值由 Host 传入）；点位/条件规则与业务四态由 Host 写入 `props` 并自行映射，内核不解释。
+- **3D**：包内 `ThreeRuntime`；环境由 Document.environment 投影；`floor.coverage`：`bounds`（工作区）| `closedRooms`（仅闭合墙围合，不规则跟随墙）；`wall`：场景级墙色/贴图（所有墙共用）；`defaultView.type`：`orbit` | `orthographic`；`helpers.enclosure`：`none` | `openBox` | `openBoxDoor` | `openBoxDoubleDoor`。视口右下角世界坐标轴角标（点轴切视角 / 拖拽环绕，不进 helpers）。地板/墙体贴图由 Host 同源静态资源提供（`mapUrl` / `presetId`），内核不内置纹理文件。
+- **交互事件 vs VisualState vs props**：`onInteraction` 只报告指针手势（`click` / `dblclick` / `longpress` / `hover`，3D 先行）；`setNodeVisualState({ color, intensity })` 是运行时呈现（不落库，色值由 Host 传入）；点位/条件规则与业务四态由 Host 写入 `props` 并自行映射，内核不解释。
+- **3D 辅助**：`setPerfStatsVisible` / `viewport3d.perfStats` 开左下角性能 Info（物体/顶点/三角形/帧时；帧时高则卡顿，主要取决于三角面、材质、分辨率与主线程工作）；`hoverOutline` 默认开悬停描边（Edges/Line2，非后处理）；`focusSelection` / `focusNode` 沿当前视线框住选中（Host 可绑 `F`）。
 
 ---
 

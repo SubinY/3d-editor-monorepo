@@ -1,10 +1,11 @@
-/** 3D 拾取写 selection，并同步 gizmo 附着；识别 click / dblclick / longpress */
+/** 3D 拾取写 selection，并同步 gizmo 附着；识别 click / dblclick / longpress / hover */
 import type * as THREE from 'three'
 import type { EditorDocument } from '../../../document/EditorDocument'
 import type { EditorNodeJSON } from '../../../document/types'
 import type { NodeInteractionHandler } from '../../interaction-events'
 import type { ThreeRuntime } from '../runtime/ThreeRuntime'
 import { findNodePath } from '../utils/node-path'
+import type { HoverHighlight } from './hover-highlight'
 
 const MOVE_THRESHOLD_PX = 5
 const LONGPRESS_MS = 500
@@ -15,6 +16,9 @@ export interface SelectionServiceOptions {
   runtime: ThreeRuntime
   readonly: boolean
   nodeRoots: Map<string, THREE.Object3D>
+  pathObjects: Map<string, THREE.Object3D>
+  hoverOutline: boolean
+  hoverHighlight: HoverHighlight
   onInteraction?: NodeInteractionHandler
   /** @deprecated 请用 onInteraction；仍会作为 click 转发 */
   onNodeClick?: (nodePath: string, node: EditorNodeJSON | undefined) => void
@@ -26,11 +30,18 @@ export class SelectionService {
   private longPressTimer: ReturnType<typeof setTimeout> | null = null
   private longPressFired = false
   private lastClick: { path: string; at: number } | null = null
+  private hoverPath: string | null = null
 
   constructor(private opts: SelectionServiceOptions) {}
 
   dispose(): void {
     this.clearLongPressTimer()
+    this.clearHover()
+  }
+
+  setHoverOutlineEnabled(enabled: boolean): void {
+    this.opts.hoverOutline = enabled
+    if (!enabled) this.clearHover()
   }
 
   syncGizmo(ids: string[]): void {
@@ -72,11 +83,36 @@ export class SelectionService {
   }
 
   handlePointerMove = (event: PointerEvent): void => {
-    if (!this.pointerDownAt || this.longPressFired) return
-    const moved = Math.hypot(event.clientX - this.pointerDownAt.x, event.clientY - this.pointerDownAt.y)
-    if (moved > MOVE_THRESHOLD_PX) {
-      this.clearLongPressTimer()
+    if (this.pointerDownAt && !this.longPressFired) {
+      const moved = Math.hypot(event.clientX - this.pointerDownAt.x, event.clientY - this.pointerDownAt.y)
+      if (moved > MOVE_THRESHOLD_PX) {
+        this.clearLongPressTimer()
+      }
+      return
     }
+
+    // 未按下：悬停描边
+    if (this.pointerDownAt) return
+    if (!this.opts.hoverOutline) return
+    if (this.opts.runtime.isCapturingPointer()) {
+      this.clearHover()
+      return
+    }
+
+    const pick = this.pickAt(event.clientX, event.clientY)
+    const nextPath = pick?.path ?? null
+    if (nextPath === this.hoverPath) return
+    this.hoverPath = nextPath
+    if (!nextPath) {
+      this.opts.hoverHighlight.clear()
+      return
+    }
+    this.applyHover(nextPath)
+    this.emit('hover', nextPath, event, { x: event.clientX, y: event.clientY, button: event.button })
+  }
+
+  handlePointerLeave = (): void => {
+    this.clearHover()
   }
 
   handlePointerUp = (event: PointerEvent): void => {
@@ -123,6 +159,26 @@ export class SelectionService {
     this.emit('click', pick.path, event, { x: event.clientX, y: event.clientY, button: event.button })
   }
 
+  private applyHover(path: string): void {
+    const root = this.opts.pathObjects.get(path)
+    if (!root) {
+      this.opts.hoverHighlight.clear()
+      return
+    }
+    const nestedRoots: THREE.Object3D[] = []
+    const prefix = `${path}/`
+    this.opts.pathObjects.forEach((obj, p) => {
+      if (p.startsWith(prefix)) nestedRoots.push(obj)
+    })
+    this.opts.hoverHighlight.setTarget(root, nestedRoots)
+  }
+
+  private clearHover(): void {
+    if (this.hoverPath === null) return
+    this.hoverPath = null
+    this.opts.hoverHighlight.clear()
+  }
+
   private pickAt(clientX: number, clientY: number): { path: string } | null {
     const pickables = Array.from(this.opts.nodeRoots.values())
     const result = this.opts.runtime.pick(clientX, clientY, pickables)
@@ -139,7 +195,7 @@ export class SelectionService {
   }
 
   private emit(
-    type: 'click' | 'dblclick' | 'longpress',
+    type: 'click' | 'dblclick' | 'longpress' | 'hover',
     path: string,
     originalEvent: PointerEvent,
     pointer: { x: number; y: number; button: number }

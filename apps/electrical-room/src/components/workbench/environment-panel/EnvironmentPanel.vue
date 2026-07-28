@@ -16,10 +16,12 @@ const props = defineProps<{
   viewMode: '2d' | '3d' | 'split'
   isScene?: boolean
   liveCameraPose?: LiveCameraPose | null
+  perfStatsVisible?: boolean
 }>()
 
 const emit = defineEmits<{
   apply: [env: EnvironmentJSON]
+  'update:perfStatsVisible': [value: boolean]
 }>()
 
 const section = ref<EnvSectionId>('camera')
@@ -93,7 +95,9 @@ const navItems: Array<{ id: EnvSectionId; icon: typeof Camera; title: string }> 
         v-show="section === 'helpers'"
         :form="form"
         :is-scene="isScene"
+        :perf-stats-visible="perfStatsVisible"
         @commit="commit"
+        @update:perf-stats-visible="emit('update:perfStatsVisible', $event)"
       />
       <BackgroundSection v-show="section === 'background'" :form="form" @commit="commit" />
     </div>

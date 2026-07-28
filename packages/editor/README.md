@@ -83,7 +83,7 @@ EditorDocumentJSON  ◄── toJSON / load ──►  EditorDocument
 | 会话 | `CreateEditorOptions` · `EditorSession` · `EditorInteractionOptions` · `EditorInteractionState` · `TransformMode` |
 | Document | `EditorDocumentJSON` · `EditorDocument` · `EditorNodeJSON` · `DocumentKind` · `BoundsJSON` · `WallJSON` · `TransformJSON` · `EnvironmentJSON` · `VisualState` · `PlaceOptions` · `PlaceResult` · … |
 | Catalog | `CatalogItem` · `CatalogProvider` · `CatalogCategory` · `Model3DSpec` · `FootprintSpec` · … |
-| 视口 | `Viewport2D` · `Viewport3D` · `Tool2D` · `Viewport2DOptions` · `Viewport3DOptions` |
+| 视口 | `Viewport2D` · `Viewport3D` · `Tool2D` · `Viewport2DOptions` · `Viewport3DOptions` · `FocusCameraOptions` |
 | 交互 | `InteractionEventType` · `NodeInteractionEvent` · `NodeInteractionHandler` |
 
 ### 不导出（内部积木）
@@ -210,7 +210,7 @@ editor.viewport2d?.fitBounds()
 
 // —— 3D 呈现（进历史；可用 { history: false } 静默）——
 const env = cloneEnvironment(editor.document.environment)
-env.helpers = { grid: false, enclosure: 'openBoxDoor' }
+env.helpers = { grid: false, enclosure: 'openBoxDoubleDoor' }
 env.background = { type: 'color', value: '#0c1420' }
 env.floor.visible = false
 editor.document.commands.setEnvironment(env)
@@ -356,6 +356,9 @@ type Model3DSpec =
 | `clearVisualStates()` | 清除高亮 |
 | `onCameraPoseChange(handler)` | Orbit 位姿变化 |
 | `setTransformMode` / `setTransformModes` | gizmo（只读写会话时由 Session 转发） |
+| `setPerfStatsVisible(boolean)` | 左下角性能 Info（物体/顶点/三角形/帧时）；亦可 `viewport3d.perfStats` |
+| `setHoverOutlineEnabled(boolean)` | 悬停 Edges/Line2 描边；默认开（`viewport3d.hoverOutline`） |
+| `focusSelection` / `focusNode(path)` | 沿当前视线框住包围盒（不写 `defaultView`） |
 
 `VisualState`（纯呈现，无业务枚举；色值由 Host 传入）：
 
@@ -367,8 +370,10 @@ type Model3DSpec =
 交互事件（`viewport3d.onInteraction`）：
 
 ```ts
-type InteractionEventType = 'click' | 'dblclick' | 'longpress'
+type InteractionEventType = 'click' | 'dblclick' | 'longpress' | 'hover'
 ```
+
+悬停描边为几何边缘线（非 `EffectComposer` / `OutlinePass`）。帧时 ≈ 上一帧到当前帧耗时（ms）；约 16.7ms ≈ 60FPS。
 
 ---
 

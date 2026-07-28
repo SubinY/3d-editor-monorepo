@@ -98,6 +98,68 @@ export function buildOpenBoxDoorEnclosure(
   return group
 }
 
+/**
+ * 五面开口盒 + 双扇外开前柜门：
+ * 左门铰在 -X，右门铰在 +X，各外开约 100°；中缝留薄隙。
+ */
+export function buildOpenBoxDoubleDoorEnclosure(
+  width: number,
+  height: number,
+  depth: number
+): THREE.Group {
+  const group = buildOpenBoxEnclosure(width, height, depth)
+  group.name = '__openBoxDoubleDoor__'
+
+  const t = Math.min(0.04, Math.min(width, depth, height) * 0.08)
+  const gap = t * 0.5
+  const doorW = Math.max((width - t * 2 - gap) / 2, width * 0.4)
+  const doorH = Math.max(height - t * 2, height * 0.9)
+  const openY = Math.PI * (100 / 180)
+  const handleMat = new THREE.MeshStandardMaterial({
+    color: '#c0c8d0',
+    roughness: 0.35,
+    metalness: 0.7
+  })
+
+  // 右门：铰在开口右前棱，沿本地 -X 铺开
+  const rightHinge = new THREE.Group()
+  rightHinge.name = '__doorHingeRight__'
+  rightHinge.position.set(width / 2 - t, height / 2, depth / 2)
+  rightHinge.rotation.y = openY
+  const rightDoor = new THREE.Mesh(new THREE.BoxGeometry(doorW, doorH, t), doorMaterial())
+  rightDoor.position.set(-doorW / 2, 0, 0)
+  markShell(rightDoor)
+  rightHinge.add(rightDoor)
+  const rightHandle = new THREE.Mesh(
+    new THREE.BoxGeometry(t * 0.6, doorH * 0.12, t * 1.2),
+    handleMat
+  )
+  rightHandle.position.set(-(doorW - t * 2), 0, t * 0.9)
+  markShell(rightHandle)
+  rightHinge.add(rightHandle)
+  group.add(rightHinge)
+
+  // 左门：铰在开口左前棱，沿本地 +X 铺开
+  const leftHinge = new THREE.Group()
+  leftHinge.name = '__doorHingeLeft__'
+  leftHinge.position.set(-(width / 2 - t), height / 2, depth / 2)
+  leftHinge.rotation.y = -openY
+  const leftDoor = new THREE.Mesh(new THREE.BoxGeometry(doorW, doorH, t), doorMaterial().clone())
+  leftDoor.position.set(doorW / 2, 0, 0)
+  markShell(leftDoor)
+  leftHinge.add(leftDoor)
+  const leftHandle = new THREE.Mesh(
+    new THREE.BoxGeometry(t * 0.6, doorH * 0.12, t * 1.2),
+    handleMat.clone()
+  )
+  leftHandle.position.set(doorW - t * 2, 0, t * 0.9)
+  markShell(leftHandle)
+  leftHinge.add(leftHandle)
+  group.add(leftHinge)
+
+  return group
+}
+
 /** 按 environment.helpers.enclosure 构建；none 返回 null */
 export function buildEnclosure(
   kind: EnclosureKind,
@@ -107,5 +169,6 @@ export function buildEnclosure(
 ): THREE.Group | null {
   if (kind === 'openBox') return buildOpenBoxEnclosure(width, height, depth)
   if (kind === 'openBoxDoor') return buildOpenBoxDoorEnclosure(width, height, depth)
+  if (kind === 'openBoxDoubleDoor') return buildOpenBoxDoubleDoorEnclosure(width, height, depth)
   return null
 }

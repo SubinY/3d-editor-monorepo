@@ -12,10 +12,13 @@ import { WALL_PRESETS, resolveWallPreset } from '@/business/wall-presets'
 const props = defineProps<{
   form: EnvironmentJSON
   isScene?: boolean
+  /** 会话态：3D 左下角性能 Info（不落库） */
+  perfStatsVisible?: boolean
 }>()
 
 const emit = defineEmits<{
   commit: []
+  'update:perfStatsVisible': [value: boolean]
 }>()
 
 function commit() {
@@ -77,7 +80,22 @@ function setWallPreset(id: string) {
     <el-form-item label="网格">
       <el-switch v-model="form.helpers.grid" @change="commit" />
     </el-form-item>
-    <p class="hint">网格用于编辑参照；空间壳仅在新建文档时写入。</p>
+    <el-form-item label="性能信息">
+      <el-switch
+        :model-value="perfStatsVisible ?? false"
+        @update:model-value="emit('update:perfStatsVisible', $event)"
+      />
+    </el-form-item>
+    <p class="hint">性能信息为会话开关，左下角显示物体 / 顶点 / 三角形 / 帧时（不落库）。</p>
+    <el-form-item v-if="isScene === false" label="空间壳">
+      <el-select v-model="form.helpers.enclosure" @change="commit">
+        <el-option label="无" value="none" />
+        <el-option label="开口盒" value="openBox" />
+        <el-option label="单开门" value="openBoxDoor" />
+        <el-option label="双开门" value="openBoxDoubleDoor" />
+      </el-select>
+    </el-form-item>
+    <p class="hint">网格用于编辑参照；柜体空间壳也可在属性面板切换。</p>
 
     <template v-if="isScene !== false">
       <div class="section-head">地面</div>

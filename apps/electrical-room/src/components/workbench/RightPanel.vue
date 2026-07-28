@@ -19,6 +19,7 @@ const props = defineProps<{
   environment: EnvironmentJSON | null
   viewMode: ViewMode
   liveCameraPose?: LiveCameraPose | null
+  perfStatsVisible?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -26,8 +27,10 @@ const emit = defineEmits<{
   'update:name': []
   'update:transform': []
   'update:bindings': [value: NodeBindingsProps]
+  'update:enclosure': [env: EnvironmentJSON]
   remove: []
   'apply-environment': [env: EnvironmentJSON]
+  'update:perfStatsVisible': [value: boolean]
 }>()
 
 const activeTab = ref('props')
@@ -57,9 +60,11 @@ watch(
           :bounds-form="boundsForm"
           :selected-node="selectedNode"
           :selected-wall="selectedWall"
+          :environment="environment"
           @update:bounds="emit('update:bounds')"
           @update:name="emit('update:name')"
           @update:transform="emit('update:transform')"
+          @update:enclosure="emit('update:enclosure', $event)"
           @remove="emit('remove')"
         />
       </el-tab-pane>
@@ -77,7 +82,9 @@ watch(
           :view-mode="viewMode"
           :is-scene="isScene"
           :live-camera-pose="liveCameraPose"
+          :perf-stats-visible="perfStatsVisible"
           @apply="emit('apply-environment', $event)"
+          @update:perf-stats-visible="emit('update:perfStatsVisible', $event)"
         />
         <el-empty v-else description="编辑器未就绪" :image-size="48" />
       </el-tab-pane>

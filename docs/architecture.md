@@ -90,7 +90,10 @@ apps ──► @3d-editor/editor（peer: three）
 | 项 | 决策 |
 |----|------|
 | VisualState | `viewport3d.setNodeVisualState(nodeIdPath, { color?, intensity? })`；有 color 则发光，省略/null 还原；**只作用于该 path 自身网格（含柜壳），不进入嵌套子 path**；**无业务 status 枚举**（色义由 Host 映射） |
-| 3D 交互事件 | `viewport3d.onInteraction`：`click` / `dblclick` / `longpress`（`NodeInteractionEvent`）；**2D 本期未对齐** |
+| 3D 交互事件 | `viewport3d.onInteraction`：`click` / `dblclick` / `longpress` / `hover`（`NodeInteractionEvent`）；**2D 本期未对齐** |
+| 性能 Info | `setPerfStatsVisible` / `viewport3d.perfStats`：左下角物体/顶点/三角形/帧时（会话态） |
+| 悬停描边 | EdgesGeometry + Line2（非 EffectComposer）；`viewport3d.hoverOutline` 默认开 |
+| 聚焦选中 | `focusSelection` / `focusNode`：沿当前视线 fit bbox，不写 `defaultView` |
 | 只读预览 | `createEditor({ viewport3d: { readonly: true, onInteraction } })`，不另设 createViewer |
 | props | `node.props` 不透明业务袋（点位/事件配置由 Host 约定）；内核不解释 |
 | environment | Document 同级契约字段；背景/灯/阴影/helpers/defaultView；经 `commands.setEnvironment` |
@@ -135,7 +138,7 @@ interface EnvironmentJSON {
     castShadow?: boolean
   }>
   shadows: { enabled: boolean; type?: 'basic' | 'pcfsoft' }
-  helpers: { grid: boolean; enclosure: 'none' | 'openBox' | 'openBoxDoor' }
+  helpers: { grid: boolean; enclosure: 'none' | 'openBox' | 'openBoxDoor' | 'openBoxDoubleDoor' }
   /** 场景地面；单套材质；coverage 控制 bounds 或仅闭合墙区 */
   floor: {
     visible: boolean
@@ -237,7 +240,7 @@ Viewport 内：`utils/` 纯函数，`services/` 有状态职责；门面只做�
 | CatalogProvider 接口 + 内存实现 | Catalog 数据（柜型/元器件 或 机床/工位） |
 | ConstraintEngine + 通用规则 | 行业约束（墙内放置、通道宽度…） |
 | 双 Viewport + VisualState（color/intensity） | Inspector 表单；设备状态色表 → setNodeVisualState |
-| 3D `onInteraction`（click/dblclick/longpress） | 点位/条件事件配置（`node.props`）与运行时求值 |
+| 3D `onInteraction`（click/dblclick/longpress/hover）+ 悬停描边 / 聚焦 / 性能 Info | 点位/条件事件配置（`node.props`）与运行时求值；Host 快捷键（如 F） |
 | EditorDocumentJSON 合同 | 运行时大屏（告警订阅 → Host 映射色 → setNodeVisualState） |
 
 不同 DocumentKind 只有 `scene` / `container` 两种：工厂车间是 `scene`，设备内部模块是 `container`——**不新建 FactoryDocument**。

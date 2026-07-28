@@ -10,6 +10,7 @@ import {
   WorldViewGizmo,
   type AxisHit
 } from '../helpers/world-view-gizmo'
+import { PerfStatsOverlay } from '../helpers/perf-stats-overlay'
 
 export interface TransformSnapshot {
   position: [number, number, number]
@@ -67,6 +68,7 @@ export class ThreeRuntime {
   private translationSnapSize = DEFAULT_TRANSLATION_SNAP
 
   private viewGizmo = new WorldViewGizmo()
+  private perfStats: PerfStatsOverlay
   private gizmoPointer: {
     pointerId: number
     startX: number
@@ -121,9 +123,19 @@ export class ThreeRuntime {
     window.addEventListener('pointerup', this.handleGizmoPointerUp)
     window.addEventListener('pointercancel', this.handleGizmoPointerUp)
 
+    this.perfStats = new PerfStatsOverlay(options.container)
+
     window.addEventListener('resize', this.handleResize)
     this.handleResize()
     this.startLoop()
+  }
+
+  setPerfStatsVisible(visible: boolean): void {
+    this.perfStats.setVisible(visible)
+  }
+
+  isPerfStatsVisible(): boolean {
+    return this.perfStats.isVisible()
   }
 
   get camera(): THREE.PerspectiveCamera | THREE.OrthographicCamera {
@@ -295,6 +307,40 @@ export class ThreeRuntime {
     this.orbit.update()
   }
 
+  /** 沿当前视线方向框住物体（透视调距离；正交调 orthoSize） */
+  focusObject(object: THREE.Object3D, padding = 1.4): void {
+    const box = new THREE.Box3().setFromObject(object)
+    if (box.isEmpty()) return
+
+    const center = new THREE.Vector3()
+    const size = new THREE.Vector3()
+    box.getCenter(center)
+    box.getSize(size)
+    const maxDim = Math.max(size.x, size.y, size.z, 0.01)
+
+    const dir = this._camera.position.clone().sub(this.orbit.target)
+    if (dir.lengthSq() < 1e-8) dir.set(1, 0.8, 1)
+    dir.normalize()
+
+    if (this._camera instanceof THREE.PerspectiveCamera) {
+      const fov = THREE.MathUtils.degToRad(this._camera.fov)
+      const distance = Math.max(0.5, (maxDim / (2 * Math.tan(fov / 2))) * padding)
+      this.orbit.target.copy(center)
+      this._camera.position.copy(center).addScaledVector(dir, distance)
+      this._camera.lookAt(center)
+    } else {
+      this.orbit.target.copy(center)
+      const distance = this._camera.position.distanceTo(center) || maxDim * 2
+      this._camera.position.copy(center).addScaledVector(dir, Math.max(distance, maxDim))
+      this.orthoSize = Math.max(maxDim * padding, 0.5)
+      this.syncOrthoFrustum()
+      this._camera.lookAt(center)
+    }
+
+    this.orbit.update()
+    this.handleOrbitChange()
+  }
+
   pick(
     clientX: number,
     clientY: number,
@@ -323,6 +369,7 @@ export class ThreeRuntime {
     window.removeEventListener('pointerup', this.handleGizmoPointerUp)
     window.removeEventListener('pointercancel', this.handleGizmoPointerUp)
     this.viewGizmo.dispose()
+    this.perfStats.dispose()
     this.gizmoPointer = null
     this.orbit.removeEventListener('change', this.handleOrbitChange)
     if (this.transform) {
@@ -370,6 +417,7 @@ export class ThreeRuntime {
       this.viewGizmo.syncFromCamera(this._camera, this.orbit.target)
       this.renderer.render(this.scene, this._camera)
       this.viewGizmo.render(this.renderer)
+      this.perfStats.update(this.scene)
       this.loopId = requestAnimationFrame(step)
     }
     this.loopId = requestAnimationFrame(step)

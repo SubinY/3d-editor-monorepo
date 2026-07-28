@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import type { WallJSON } from '@3d-editor/editor'
+import { cloneEnvironment } from '@3d-editor/editor'
+import type { EnvironmentJSON, EnvironmentHelpersJSON, WallJSON } from '@3d-editor/editor'
 
 export interface SelectedNodeForm {
   id: string
@@ -17,22 +18,40 @@ export interface BoundsForm {
   height: number
 }
 
-defineProps<{
+type EnclosureKind = EnvironmentHelpersJSON['enclosure']
+
+const ENCLOSURE_OPTIONS: Array<{ value: EnclosureKind; label: string }> = [
+  { value: 'none', label: '无' },
+  { value: 'openBox', label: '开口盒' },
+  { value: 'openBoxDoor', label: '单开门' },
+  { value: 'openBoxDoubleDoor', label: '双开门' }
+]
+
+const props = defineProps<{
   isScene: boolean
   boundsForm: BoundsForm
   selectedNode: SelectedNodeForm
   selectedWall: WallJSON | null
+  environment: EnvironmentJSON | null
 }>()
 
 const emit = defineEmits<{
   'update:bounds': []
   'update:name': []
   'update:transform': []
+  'update:enclosure': [env: EnvironmentJSON]
   remove: []
 }>()
 
 function wallLength(wall: WallJSON): string {
   return Math.hypot(wall.b[0] - wall.a[0], wall.b[1] - wall.a[1]).toFixed(2)
+}
+
+function setEnclosure(kind: EnclosureKind) {
+  if (!props.environment) return
+  const env = cloneEnvironment(props.environment)
+  env.helpers.enclosure = kind
+  emit('update:enclosure', env)
 }
 </script>
 
@@ -72,6 +91,27 @@ function wallLength(wall: WallJSON): string {
         </div>
       </el-form>
       <p v-if="isScene" class="hint">影响 3D 底图与网格范围；房间轮廓仍由画墙决定。</p>
+    </section>
+
+    <section v-if="!isScene" class="section">
+      <div class="section-title">柜体外观</div>
+      <el-form label-position="top" size="small">
+        <el-form-item label="空间壳">
+          <el-select
+            :model-value="environment?.helpers.enclosure ?? 'openBoxDoor'"
+            :disabled="!environment"
+            @change="v => setEnclosure(v as EnclosureKind)"
+          >
+            <el-option
+              v-for="opt in ENCLOSURE_OPTIONS"
+              :key="opt.value"
+              :label="opt.label"
+              :value="opt.value"
+            />
+          </el-select>
+        </el-form-item>
+      </el-form>
+      <p class="hint">编辑态柜壳（不可选中）；双开门为左右对开约 100°。</p>
     </section>
 
     <section class="section">
@@ -185,6 +225,10 @@ function wallLength(wall: WallJSON): string {
 .bounds-form :deep(.el-input-number),
 .row2 :deep(.el-input-number),
 .row3 :deep(.el-input-number) {
+  width: 100%;
+}
+
+.property-panel :deep(.el-select) {
   width: 100%;
 }
 

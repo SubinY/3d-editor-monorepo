@@ -100,7 +100,9 @@ export class EditorSessionImpl implements EditorSession {
       onNodeClick: this.viewport3dOptions?.onNodeClick,
       transformModes: this.transformModes,
       transformMode: this.transformMode,
-      snapEnabled: this.snapEnabled
+      snapEnabled: this.snapEnabled,
+      perfStats: this.viewport3dOptions?.perfStats,
+      hoverOutline: this.viewport3dOptions?.hoverOutline
     }
     this.viewport3d = new Viewport3D(el, options)
     return this.viewport3d

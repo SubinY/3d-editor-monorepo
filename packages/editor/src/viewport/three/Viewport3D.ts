@@ -14,6 +14,7 @@ import type {
 import { ThreeRuntime } from './runtime/ThreeRuntime'
 import { EnvironmentService } from './services/environment'
 import { SelectionService } from './services/selection'
+import { HoverHighlight } from './services/hover-highlight'
 import { createTransformBridge } from './services/transform-bridge'
 import {
   createFloorMaterial,
@@ -41,6 +42,15 @@ export interface Viewport3DOptions {
   transformModes?: TransformMode[]
   transformMode?: TransformMode
   snapEnabled?: boolean
+  /** 左下角性能 Info；默认 false */
+  perfStats?: boolean
+  /** 悬停描边；默认 true */
+  hoverOutline?: boolean
+}
+
+export interface FocusCameraOptions {
+  /** 框住包围盒的余量倍数；默认 1.4 */
+  padding?: number
 }
 
 /** 嵌套解析深度上限（D2：场景→柜→元件） */
@@ -77,6 +87,7 @@ export class Viewport3D {
   private disposed = false
   private visualStates = new Map<string, VisualState>()
   private selection: SelectionService
+  private hoverHighlight: HoverHighlight
   private environment: EnvironmentService
   /** 上次已写入的位姿键；仅 type/position/target 变化时才重置 Orbit */
   private lastCameraPoseKey: string | null = null
@@ -103,6 +114,7 @@ export class Viewport3D {
       // 会话吸附是 2D 贴边对齐；3D gizmo 不做硬网格，避免一格一格跳
       this.runtime.setTranslationSnap(false)
     }
+    if (options.perfStats) this.runtime.setPerfStatsVisible(true)
 
     this.envGroup.name = '__editorEnv__'
     this.wallGroup.name = '__editorWalls__'
@@ -122,11 +134,16 @@ export class Viewport3D {
     void this.rebuildWalls()
     void this.buildAllNodes()
 
+    this.hoverHighlight = new HoverHighlight(this.runtime.renderer)
+    const hoverOutline = options.hoverOutline ?? false
     this.selection = new SelectionService({
       doc: this.doc,
       runtime: this.runtime,
       readonly: this.readonly,
       nodeRoots: this.nodeRoots,
+      pathObjects: this.pathObjects,
+      hoverOutline,
+      hoverHighlight: this.hoverHighlight,
       onInteraction: this.onInteraction,
       onNodeClick: this.onNodeClick
     })
@@ -169,6 +186,9 @@ export class Viewport3D {
     dom.addEventListener('pointerdown', this.selection.handlePointerDown)
     dom.addEventListener('pointermove', this.selection.handlePointerMove)
     dom.addEventListener('pointerup', this.selection.handlePointerUp)
+    dom.addEventListener('pointerleave', this.selection.handlePointerLeave)
+    window.addEventListener('resize', this.handleHoverResize)
+    this.handleHoverResize()
   }
 
   // -- 环境 / 相机 -------------------------------------------------------------
@@ -369,6 +389,7 @@ export class Viewport3D {
     path: string,
     depth: number
   ): Promise<THREE.Object3D | undefined> {
+    console.log(node, 'node123')
     if (!node.catalogRef) {
       return this.buildFallbackMesh(undefined)
     }
@@ -545,6 +566,32 @@ export class Viewport3D {
     this.runtime.setMode(mode)
   }
 
+  setPerfStatsVisible(visible: boolean): void {
+    this.runtime.setPerfStatsVisible(visible)
+  }
+
+  isPerfStatsVisible(): boolean {
+    return this.runtime.isPerfStatsVisible()
+  }
+
+  setHoverOutlineEnabled(enabled: boolean): void {
+    this.selection.setHoverOutlineEnabled(enabled)
+  }
+
+  /** 聚焦当前 Document 选中（取首个 id） */
+  focusSelection(options?: FocusCameraOptions): void {
+    const id = this.doc.selection.get()[0]
+    if (!id) return
+    this.focusNode(id, options)
+  }
+
+  /** 路径寻址聚焦：顶层 nodeId 或 柜/元件 */
+  focusNode(nodePath: string, options?: FocusCameraOptions): void {
+    const object = this.pathObjects.get(nodePath) ?? this.nodeRoots.get(nodePath)
+    if (!object) return
+    this.runtime.focusObject(object, options?.padding ?? 1.4)
+  }
+
   // -- 运行时可视状态（监控预览） --------------------------------------------------
 
   /**
@@ -633,7 +680,10 @@ export class Viewport3D {
     dom.removeEventListener('pointerdown', this.selection.handlePointerDown)
     dom.removeEventListener('pointermove', this.selection.handlePointerMove)
     dom.removeEventListener('pointerup', this.selection.handlePointerUp)
+    dom.removeEventListener('pointerleave', this.selection.handlePointerLeave)
+    window.removeEventListener('resize', this.handleHoverResize)
     this.selection.dispose()
+    this.hoverHighlight.dispose()
     Array.from(this.nodeRoots.keys()).forEach(id => this.removeNodeObject(id))
     if (this.wallMaterialHandle) {
       this.wallMaterialHandle.dispose()
@@ -641,6 +691,12 @@ export class Viewport3D {
     }
     this.environment.dispose()
     this.runtime.dispose()
+  }
+
+  private handleHoverResize = (): void => {
+    const width = this.runtime.domElement.clientWidth
+    const height = this.runtime.domElement.clientHeight
+    this.hoverHighlight.setSize(width, height)
   }
 }
 

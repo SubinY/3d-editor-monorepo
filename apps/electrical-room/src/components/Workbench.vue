@@ -49,6 +49,7 @@ const viewMode = ref<ViewMode>('split')
 const snapEnabled = ref(true)
 const collisionEnabled = ref(true)
 const rulersEnabled = ref(true)
+const perfStatsVisible = ref(false)
 const transformMode = ref<TransformMode>('translate')
 const canUndo = ref(false)
 const canRedo = ref(false)
@@ -210,6 +211,9 @@ onMounted(async () => {
       canvas2d: el2d.value,
       canvas3d: el3d.value
     },
+    viewport3d: {
+      hoverOutline: true
+    },
     interaction: {
       transformModes: ['translate', 'rotate']
     },
@@ -335,6 +339,12 @@ function onKeyDown(event: KeyboardEvent) {
   if (isScene.value && (event.key === 'w' || event.key === 'W') && !mod) {
     event.preventDefault()
     setTool(tool.value === 'wall' ? 'select' : 'wall')
+    return
+  }
+
+  if ((event.key === 'f' || event.key === 'F') && !mod) {
+    event.preventDefault()
+    session?.viewport3d?.focusSelection()
   }
 }
 
@@ -376,6 +386,11 @@ function toggleRulers() {
   const next = !rulersEnabled.value
   rulersEnabled.value = next
   session?.viewport2d?.setRulersVisible(next)
+}
+
+function setPerfStatsVisible(visible: boolean) {
+  perfStatsVisible.value = visible
+  session?.viewport3d?.setPerfStatsVisible(visible)
 }
 
 function toggleCollision() {
@@ -563,12 +578,15 @@ function applyEnvironment(env: EnvironmentJSON) {
         :environment="environment"
         :view-mode="viewMode"
         :live-camera-pose="liveCameraPose"
+        :perf-stats-visible="perfStatsVisible"
         @update:bounds="applyBounds"
         @update:name="applyNodeName"
         @update:transform="applyNodeTransform"
         @update:bindings="applyNodeBindings"
+        @update:enclosure="applyEnvironment"
         @remove="removeSelected"
         @apply-environment="applyEnvironment"
+        @update:perf-stats-visible="setPerfStatsVisible"
       />
     </div>
   </div>

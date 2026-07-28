@@ -1,7 +1,7 @@
 import type { EditorNodeJSON } from '../document/types'
 
-/** 3D 视口指针交互事件（首期；hover 可后续扩展） */
-export type InteractionEventType = 'click' | 'dblclick' | 'longpress'
+/** 3D 视口指针交互事件 */
+export type InteractionEventType = 'click' | 'dblclick' | 'longpress' | 'hover'
 
 export interface NodeInteractionEvent {
   type: InteractionEventType

@@ -129,6 +129,7 @@ onMounted(async () => {
     mount: { canvas3d: el3d.value },
     viewport3d: {
       readonly: true,
+      hoverOutline: false,
       onInteraction: (event: NodeInteractionEvent) => {
         lastInteraction.value = `${event.type} → ${event.nodePath}`
       }

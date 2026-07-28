@@ -36,10 +36,14 @@ export interface CreateEditorOptions {
   }
   viewport3d?: {
     readonly?: boolean
-    /** 3D 指针交互统一出口（click / dblclick / longpress） */
+    /** 3D 指针交互统一出口（click / dblclick / longpress / hover） */
     onInteraction?: NodeInteractionHandler
     /** @deprecated 请用 onInteraction；仍会作为 click 转发 */
     onNodeClick?: (nodePath: string, node: EditorNodeJSON | undefined) => void
+    /** 左下角性能 Info（物体/顶点/三角形/帧时）；默认 false */
+    perfStats?: boolean
+    /** 鼠标悬停描边；默认不显示 */
+    hoverOutline?: boolean
   }
   /** 会话级交互：吸附 / 碰撞 / 3D gizmo mode */
   interaction?: EditorInteractionOptions

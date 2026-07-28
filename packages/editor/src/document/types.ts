@@ -74,9 +74,10 @@ export interface EnvironmentHelpersJSON {
    * 编辑态空间壳（不可选中）：
    * - none：无壳
    * - openBox：五面开口盒（缺 +Z）
-   * - openBoxDoor：五面开口盒 + 外开前柜门
+   * - openBoxDoor：五面开口盒 + 单扇外开前柜门
+   * - openBoxDoubleDoor：五面开口盒 + 双扇对开前柜门
    */
-  enclosure: 'none' | 'openBox' | 'openBoxDoor'
+  enclosure: 'none' | 'openBox' | 'openBoxDoor' | 'openBoxDoubleDoor'
 }
 
 /** 地面铺设范围 */
