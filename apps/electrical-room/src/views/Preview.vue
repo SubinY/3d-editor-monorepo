@@ -1,71 +1,116 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref } from 'vue'
 import { createEditor, isDocumentItem } from '@3d-editor/editor'
-import type { EditorDocument, EditorSession, VisualState } from '@3d-editor/editor'
+import type { EditorDocument, EditorSession, NodeInteractionEvent } from '@3d-editor/editor'
 import { useRoute, useRouter } from 'vue-router'
 import { createPreviewCatalog } from '@/business/catalog'
 import { getDocument, listDocuments } from '@/business/storage'
 import { createDemoSceneJSON } from '@/business/demo-scene'
+import { readNodeBindings, type NodeBindingsProps } from '@/business/node-bindings'
+import { fetchMockPointValues } from '@/business/mock-point-api'
+import { PointValueStore, evaluateNodeRules } from '@/business/point-runtime'
+import {
+  DEVICE_STATUS_META,
+  clearVisualState,
+  toVisualState,
+  type DeviceStatus
+} from '@/business/device-status'
 
 interface AlarmLog {
   time: string
   path: string
   label: string
-  status: VisualState['status']
+  status: DeviceStatus
+  detail: string
+}
+
+interface Target {
+  path: string
+  label: string
+  bindings: NodeBindingsProps
 }
 
 const el3d = ref<HTMLElement>()
 const logs = ref<AlarmLog[]>([])
 const running = ref(true)
-const clicked = ref('')
+const lastInteraction = ref('')
+const lastValues = ref('')
 
 let session: EditorSession | undefined
 let doc: EditorDocument | undefined
 let timer = 0
-let activeFaults: string[] = []
+/** 上一轮已着色的 path，便于本轮还原 */
+let paintedPaths: string[] = []
+const store = new PointValueStore()
 
-interface Target {
-  path: string
-  label: string
-}
+const legendItems = (Object.keys(DEVICE_STATUS_META) as DeviceStatus[]).map(status => ({
+  status,
+  label: DEVICE_STATUS_META[status].label,
+  color: DEVICE_STATUS_META[status].color
+}))
 
 async function collectTargets(): Promise<Target[]> {
   if (!doc) return []
   const catalog = doc.getCatalog()
   const targets: Target[] = []
+
   for (const node of doc.getNodes()) {
+    const selfBindings = readNodeBindings(node)
+    if (selfBindings.events.length > 0) {
+      targets.push({
+        path: node.id,
+        label: node.name ?? node.id,
+        bindings: selfBindings
+      })
+    }
+
     if (!node.catalogRef || !catalog) continue
     const item = await catalog.get(node.catalogRef.id, node.catalogRef.version)
     if (!item || !isDocumentItem(item) || !item.document) continue
     for (const child of item.document.nodes) {
+      const childBindings = readNodeBindings(child)
+      if (childBindings.events.length === 0) continue
       targets.push({
         path: `${node.id}/${child.id}`,
-        label: `${node.name ?? node.id} / ${child.name ?? child.id}`
+        label: `${node.name ?? node.id} / ${child.name ?? child.id}`,
+        bindings: childBindings
       })
     }
   }
   return targets
 }
 
-function tick(targets: Target[]) {
+async function tick(targets: Target[]) {
   const viewport = session?.viewport3d
   if (!viewport || !running.value || targets.length === 0) return
-  activeFaults.forEach(path => viewport.setNodeVisualState(path, { status: 'normal' }))
-  activeFaults = []
 
-  const count = 1 + Math.floor(Math.random() * 2)
-  const picked = new Set<number>()
-  for (let i = 0; i < count; i++) {
-    picked.add(Math.floor(Math.random() * targets.length))
+  try {
+    const values = await fetchMockPointValues()
+    store.setMany(values)
+    lastValues.value = `temp=${values.temp} alarm=${values.alarm}`
+  } catch {
+    return
   }
+
+  const values = store.getAll()
+  paintedPaths.forEach(path => viewport.setNodeVisualState(path, clearVisualState()))
+  paintedPaths = []
+
   const now = new Date().toLocaleTimeString()
-  Array.from(picked).forEach((index, order) => {
-    const target = targets[index]
-    const status: VisualState['status'] = order === 0 ? 'fault' : 'warning'
-    viewport.setNodeVisualState(target.path, { status, intensity: 1 })
-    activeFaults.push(target.path)
-    logs.value.unshift({ time: now, path: target.path, label: target.label, status })
-  })
+  for (const target of targets) {
+    const status = evaluateNodeRules(target.bindings, values) ?? 'normal'
+    // 未命中 / normal：不刷色，保留 catalog 原色（上一轮高亮已在上方 clear）
+    if (status === 'normal') continue
+    viewport.setNodeVisualState(target.path, toVisualState(status))
+    paintedPaths.push(target.path)
+    logs.value.unshift({
+      time: now,
+      path: target.path,
+      label: target.label,
+      status,
+      detail: lastValues.value
+    })
+  }
   logs.value = logs.value.slice(0, 30)
 }
 
@@ -75,7 +120,8 @@ const router = useRouter()
 onMounted(async () => {
   const catalog = createPreviewCatalog()
   const id = route.params.id as string | undefined
-  const json = (id ? getDocument(id) : undefined) ?? listDocuments('scene')[0] ?? (await createDemoSceneJSON())
+  const json =
+    (id ? getDocument(id) : undefined) ?? listDocuments('scene')[0] ?? (await createDemoSceneJSON())
 
   session = await createEditor({
     catalog,
@@ -83,15 +129,18 @@ onMounted(async () => {
     mount: { canvas3d: el3d.value },
     viewport3d: {
       readonly: true,
-      onNodeClick: path => {
-        clicked.value = path
+      onInteraction: (event: NodeInteractionEvent) => {
+        lastInteraction.value = `${event.type} → ${event.nodePath}`
       }
     }
   })
   doc = session.document
 
   const targets = await collectTargets()
-  timer = window.setInterval(() => tick(targets), 2500)
+  timer = window.setInterval(() => {
+    void tick(targets)
+  }, 2000)
+  void tick(targets)
 })
 
 onBeforeUnmount(() => {
@@ -112,16 +161,23 @@ function toggle() {
       <h3>监控预览（只读）</h3>
       <button @click="router.push('/')">← 返回列表</button>
       <div class="legend">
-        <span><i class="dot fault" />故障</span>
-        <span><i class="dot warning" />告警</span>
-        <span><i class="dot normal" />正常</span>
+        <span v-for="item in legendItems" :key="item.status">
+          <i class="dot" :style="{ background: item.color }" />{{ item.label }}
+        </span>
       </div>
-      <button @click="toggle">{{ running ? '暂停 mock 告警' : '恢复 mock 告警' }}</button>
-      <p v-if="clicked" class="clicked">点击节点：{{ clicked }}</p>
+      <button @click="toggle">{{ running ? '暂停点位轮询' : '恢复点位轮询' }}</button>
+      <p v-if="lastValues" class="meta">最新点位：{{ lastValues }}</p>
+      <p v-if="lastInteraction" class="clicked">交互：{{ lastInteraction }}</p>
       <div class="logs">
-        <div v-for="(log, index) in logs" :key="index" class="log" :class="log.status">
+        <div
+          v-for="(log, index) in logs"
+          :key="index"
+          class="log"
+          :style="{ borderLeftColor: DEVICE_STATUS_META[log.status].color }"
+        >
           <span class="time">{{ log.time }}</span>
           <span class="label">{{ log.label }}</span>
+          <div class="detail">{{ DEVICE_STATUS_META[log.status].label }} · {{ log.detail }}</div>
         </div>
       </div>
     </aside>
@@ -155,7 +211,8 @@ h3 {
 }
 .legend {
   display: flex;
-  gap: 14px;
+  flex-wrap: wrap;
+  gap: 10px 14px;
   font-size: 12px;
   color: #8ea4bd;
 }
@@ -166,15 +223,6 @@ h3 {
   border-radius: 50%;
   margin-right: 4px;
 }
-.dot.fault {
-  background: #ff4d4f;
-}
-.dot.warning {
-  background: #f5a623;
-}
-.dot.normal {
-  background: #3fae8a;
-}
 button {
   background: #1d2a3a;
   color: #cfe0f0;
@@ -183,10 +231,15 @@ button {
   padding: 6px 12px;
   cursor: pointer;
 }
-.clicked {
+.clicked,
+.meta {
   font-size: 12px;
   color: #39d2ff;
   word-break: break-all;
+  margin: 0;
+}
+.meta {
+  color: #8ea4bd;
 }
 .logs {
   flex: 1;
@@ -202,14 +255,13 @@ button {
   background: #16212e;
   border-left: 3px solid #3fae8a;
 }
-.log.fault {
-  border-left-color: #ff4d4f;
-}
-.log.warning {
-  border-left-color: #f5a623;
-}
 .time {
   color: #6d8199;
   margin-right: 8px;
+}
+.detail {
+  margin-top: 4px;
+  color: #6d8199;
+  font-size: 11px;
 }
 </style>

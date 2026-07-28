@@ -89,8 +89,10 @@ apps ──► @3d-editor/editor（peer: three）
 
 | 项 | 决策 |
 |----|------|
-| VisualState | `viewport3d.setNodeVisualState(nodeIdPath, { status, intensity })`，status: normal/warning/fault/offline |
-| 只读预览 | `create3DViewport({ readonly: true })`，点击经 `onNodeClick` 通知 Host，不另设 createViewer |
+| VisualState | `viewport3d.setNodeVisualState(nodeIdPath, { color?, intensity? })`；有 color 则发光，省略/null 还原；**只作用于该 path 自身网格（含柜壳），不进入嵌套子 path**；**无业务 status 枚举**（色义由 Host 映射） |
+| 3D 交互事件 | `viewport3d.onInteraction`：`click` / `dblclick` / `longpress`（`NodeInteractionEvent`）；**2D 本期未对齐** |
+| 只读预览 | `createEditor({ viewport3d: { readonly: true, onInteraction } })`，不另设 createViewer |
+| props | `node.props` 不透明业务袋（点位/事件配置由 Host 约定）；内核不解释 |
 | environment | Document 同级契约字段；背景/灯/阴影/helpers/defaultView；经 `commands.setEnvironment` |
 | camera 交互位姿 | `defaultView` 存类型/目标/位姿种子与距离限制；编辑态 Orbit 变化可静默回写目标与半径（不入历史）；无阻尼，操作立刻到位 |
 | 约束时机 | 交互（place/transform）强制（内建碰撞 + 可选规则）；`loadDocument` 只校验产出警告列表，不阻塞加载 |
@@ -234,8 +236,9 @@ Viewport 内：`utils/` 纯函数，`services/` 有状态职责；门面只做�
 | Document 内核、命令/历史/选中 | Shell UI（左中右、工具条、权限） |
 | CatalogProvider 接口 + 内存实现 | Catalog 数据（柜型/元器件 或 机床/工位） |
 | ConstraintEngine + 通用规则 | 行业约束（墙内放置、通道宽度…） |
-| 双 Viewport + VisualState | Inspector 表单（回路号、节拍…） |
-| EditorDocumentJSON 合同 | 运行时大屏（告警订阅 → setNodeVisualState） |
+| 双 Viewport + VisualState（color/intensity） | Inspector 表单；设备状态色表 → setNodeVisualState |
+| 3D `onInteraction`（click/dblclick/longpress） | 点位/条件事件配置（`node.props`）与运行时求值 |
+| EditorDocumentJSON 合同 | 运行时大屏（告警订阅 → Host 映射色 → setNodeVisualState） |
 
 不同 DocumentKind 只有 `scene` / `container` 两种：工厂车间是 `scene`，设备内部模块是 `container`——**不新建 FactoryDocument**。
 

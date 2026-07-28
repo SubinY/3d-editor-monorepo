@@ -169,10 +169,11 @@ export interface EditorDocumentJSON {
   metadata?: Record<string, unknown>
 }
 
-/** 运行时可视状态（监控预览用），编辑器不定义业务告警协议 */
+/** 运行时可视呈现；不含业务状态枚举（色值由 Host 传入） */
 export interface VisualState {
-  status: 'normal' | 'warning' | 'fault' | 'offline'
-  /** 0-1，发光强度缩放 */
+  /** 发光色；省略或 null = 还原材质 */
+  color?: string | null
+  /** 0–1，仅在有 color 时生效，默认 1 */
   intensity?: number
 }
 

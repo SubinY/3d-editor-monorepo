@@ -1,6 +1,7 @@
 import type { CatalogProvider } from '../catalog/types'
 import type { CreateDocumentOptions, EditorDocument } from '../document/EditorDocument'
 import type { EditorDocumentJSON, EditorNodeJSON } from '../document/types'
+import type { NodeInteractionHandler } from '../viewport/interaction-events'
 import type { Viewport2D } from '../viewport/canvas2d/Viewport2D'
 import type { Viewport3D } from '../viewport/three/Viewport3D'
 
@@ -35,6 +36,9 @@ export interface CreateEditorOptions {
   }
   viewport3d?: {
     readonly?: boolean
+    /** 3D 指针交互统一出口（click / dblclick / longpress） */
+    onInteraction?: NodeInteractionHandler
+    /** @deprecated 请用 onInteraction；仍会作为 click 转发 */
     onNodeClick?: (nodePath: string, node: EditorNodeJSON | undefined) => void
   }
   /** 会话级交互：吸附 / 碰撞 / 3D gizmo mode */

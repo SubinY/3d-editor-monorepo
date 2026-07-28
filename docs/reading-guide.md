@@ -74,7 +74,7 @@ packages/engine|presets|extensions/  # legacy
 
 ### 预览
 
-`/preview/:id` 只读 3D + mock 告警 → `setNodeVisualState('柜/元件', { status })`
+`/preview/:id` 只读 3D + mock 告警 → Host 色表映射后 `setNodeVisualState('柜/元件', { color })`
 
 ## Conventions
 

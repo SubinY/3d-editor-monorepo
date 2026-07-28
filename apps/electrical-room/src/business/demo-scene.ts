@@ -5,10 +5,11 @@ import {
 } from '@3d-editor/editor'
 import type { EditorDocumentJSON } from '@3d-editor/editor'
 import { builtinCabinetItems } from './catalog'
+import { createConditionEvent, createPointBinding } from './node-bindings'
 
 /**
  * 示例场景：20m × 15m 电柜室，两列各 5 台不同型号电柜（面向中间过道）。
- * 首次进入且无存档时使用。
+ * 首次进入且无存档时使用。附带点位/条件事件样例供预览轮询验证。
  */
 export async function createDemoSceneJSON(): Promise<EditorDocumentJSON> {
   const cabinets = builtinCabinetItems()
@@ -28,11 +29,36 @@ export async function createDemoSceneJSON(): Promise<EditorDocumentJSON> {
   const rows = [-5, -2.5, 0, 2.5, 5]
 
   rows.forEach((z, index) => {
+    const sampleBindings =
+      index === 0
+        ? {
+            bindings: [createPointBinding('temp', '柜温')],
+            events: [
+              createConditionEvent({
+                name: '过温故障',
+                when: { pointKey: 'temp', op: 'gt', value: 60 },
+                then: { highlight: 'fault' }
+              })
+            ]
+          }
+        : index === 1
+          ? {
+              bindings: [createPointBinding('alarm', '告警')],
+              events: [
+                createConditionEvent({
+                  name: '告警码',
+                  when: { pointKey: 'alarm', op: 'eq', value: 1 },
+                  then: { highlight: 'warning' }
+                })
+              ]
+            }
+          : undefined
+
     doc.commands.placeItem(index % 2 === 0 ? power : control, {
       position: [-4, 0, z],
       rotation: [0, Math.PI / 2, 0],
       name: `左列柜-${index + 1}`,
-      props: { circuit: `L-${index + 1}` },
+      props: { circuit: `L-${index + 1}`, ...sampleBindings },
       select: false
     })
     doc.commands.placeItem(index % 2 === 0 ? control : power, {

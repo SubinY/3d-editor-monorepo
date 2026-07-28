@@ -27,12 +27,16 @@ import {
   type WallMaterialHandle
 } from './helpers/wall-material'
 import { findClosedWallLoops } from '../canvas2d/utils/closed-loops'
+import type { NodeInteractionHandler } from '../interaction-events'
+import { isObjectUnder } from './utils/node-path'
 
 export interface Viewport3DOptions {
   document: EditorDocument
   catalog?: CatalogProvider
-  /** 只读预览：无 gizmo、不写 document；点击经 onNodeClick 通知 Host */
+  /** 只读预览：无 gizmo、不写 document；交互经 onInteraction 通知 Host */
   readonly?: boolean
+  onInteraction?: NodeInteractionHandler
+  /** @deprecated 请用 onInteraction；仍会作为 click 转发 */
   onNodeClick?: (nodePath: string, node: EditorNodeJSON | undefined) => void
   transformModes?: TransformMode[]
   transformMode?: TransformMode
@@ -41,12 +45,6 @@ export interface Viewport3DOptions {
 
 /** 嵌套解析深度上限（D2：场景→柜→元件） */
 const MAX_RESOLVE_DEPTH = 2
-
-const STATUS_COLORS: Record<Exclude<VisualState['status'], 'normal'>, number> = {
-  warning: 0xf5a623,
-  fault: 0xff4d4f,
-  offline: 0x8c8c8c
-}
 
 interface MaterialBackup {
   emissive?: THREE.Color
@@ -66,6 +64,7 @@ export class Viewport3D {
   private doc: EditorDocument
   private catalog?: CatalogProvider
   private readonly readonly: boolean
+  private onInteraction?: NodeInteractionHandler
   private onNodeClick?: Viewport3DOptions['onNodeClick']
 
   private nodeRoots = new Map<string, THREE.Object3D>()
@@ -90,6 +89,7 @@ export class Viewport3D {
     this.doc = options.document
     this.catalog = options.catalog ?? options.document.getCatalog()
     this.readonly = options.readonly ?? false
+    this.onInteraction = options.onInteraction
     this.onNodeClick = options.onNodeClick
 
     this.runtime = new ThreeRuntime({
@@ -127,6 +127,7 @@ export class Viewport3D {
       runtime: this.runtime,
       readonly: this.readonly,
       nodeRoots: this.nodeRoots,
+      onInteraction: this.onInteraction,
       onNodeClick: this.onNodeClick
     })
 
@@ -166,6 +167,7 @@ export class Viewport3D {
 
     const dom = this.runtime.domElement
     dom.addEventListener('pointerdown', this.selection.handlePointerDown)
+    dom.addEventListener('pointermove', this.selection.handlePointerMove)
     dom.addEventListener('pointerup', this.selection.handlePointerUp)
   }
 
@@ -405,7 +407,7 @@ export class Viewport3D {
           const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material]
           materials.forEach(mat => {
             mat.transparent = true
-            mat.opacity = 0.28
+            mat.opacity = 0.68
             mat.depthWrite = false
           })
         }
@@ -555,7 +557,7 @@ export class Viewport3D {
 
   clearVisualStates(): void {
     Array.from(this.visualStates.keys()).forEach(path => {
-      this.applyVisualState(path, { status: 'normal' })
+      this.applyVisualState(path, { color: null })
     })
     this.visualStates.clear()
   }
@@ -564,10 +566,20 @@ export class Viewport3D {
     const object = this.pathObjects.get(nodePath)
     if (!object) return
     const intensity = state.intensity ?? 1
+    const highlightColor = state.color ?? null
+
+    // 嵌套 path（如 柜id/元件id）的根物体：柜级高亮不得进入其子树
+    const nestedRoots: THREE.Object3D[] = []
+    const prefix = `${nodePath}/`
+    this.pathObjects.forEach((obj, path) => {
+      if (path.startsWith(prefix)) nestedRoots.push(obj)
+    })
 
     object.traverse(child => {
       const mesh = child as THREE.Mesh
-      if (!mesh.isMesh || mesh.userData.isShell) return
+      if (!mesh.isMesh) return
+      if (nestedRoots.some(root => isObjectUnder(mesh, root))) return
+
       const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material]
       materials.forEach((mat, index) => {
         const std = mat as THREE.MeshStandardMaterial
@@ -587,13 +599,13 @@ export class Viewport3D {
         ] as THREE.MeshStandardMaterial
         const backups = mesh.userData.__origEmissive as MaterialBackup[] | undefined
 
-        if (state.status === 'normal') {
+        if (!highlightColor) {
           const backup = backups?.[index]
           if (backup?.emissive) current.emissive.copy(backup.emissive)
           else current.emissive.setHex(0x000000)
           current.emissiveIntensity = backup?.emissiveIntensity ?? 1
         } else {
-          current.emissive.setHex(STATUS_COLORS[state.status])
+          current.emissive.set(highlightColor)
           current.emissiveIntensity = 0.6 * intensity + 0.2
         }
       })
@@ -619,7 +631,9 @@ export class Viewport3D {
     this.unsubscribers.forEach(off => off())
     const dom = this.runtime.domElement
     dom.removeEventListener('pointerdown', this.selection.handlePointerDown)
+    dom.removeEventListener('pointermove', this.selection.handlePointerMove)
     dom.removeEventListener('pointerup', this.selection.handlePointerUp)
+    this.selection.dispose()
     Array.from(this.nodeRoots.keys()).forEach(id => this.removeNodeObject(id))
     if (this.wallMaterialHandle) {
       this.wallMaterialHandle.dispose()

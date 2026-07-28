@@ -20,6 +20,12 @@ import ViewportArea from './workbench/ViewportArea.vue'
 import RightPanel from './workbench/RightPanel.vue'
 import type { LiveCameraPose } from './workbench/environment-panel/types'
 import type { AssetGroup, EditorTool, LayerTreeItem, ViewMode } from './workbench/types'
+import {
+  emptyNodeBindings,
+  readNodeBindings,
+  writeNodeBindings,
+  type NodeBindingsProps
+} from '@/business/node-bindings'
 
 const props = defineProps<{
   kind: DocumentKind
@@ -60,6 +66,7 @@ const selectedNode = reactive({
   yawDeg: 0,
   catalog: ''
 })
+const nodeBindings = reactive<NodeBindingsProps>(emptyNodeBindings())
 const selectedWall = shallowRef<WallJSON | null>(null)
 const boundsForm = reactive({ width: 0, depth: 0, height: 0 })
 const environment = shallowRef<EnvironmentJSON | null>(null)
@@ -151,6 +158,15 @@ async function refreshLayers() {
   selectedId.value = d.selection.first() ?? ''
 }
 
+function syncBindingsFrom(next: NodeBindingsProps) {
+  nodeBindings.bindings = next.bindings.map(b => ({ ...b }))
+  nodeBindings.events = next.events.map(e => ({
+    ...e,
+    when: { ...e.when },
+    then: { ...e.then }
+  }))
+}
+
 function refreshSelected() {
   const d = doc.value
   const id = d?.selection.first()
@@ -158,6 +174,7 @@ function refreshSelected() {
   selectedId.value = id ?? ''
   if (!d || !id) {
     selectedNode.id = ''
+    syncBindingsFrom(emptyNodeBindings())
     return
   }
   const node = d.getNode(id)
@@ -176,9 +193,11 @@ function refreshSelected() {
     selectedNode.catalog = node.catalogRef
       ? `${node.catalogRef.id}@${node.catalogRef.version}`
       : '-'
+    syncBindingsFrom(readNodeBindings(node))
     return
   }
   selectedNode.id = ''
+  syncBindingsFrom(emptyNodeBindings())
   const wall = d.getWall(id)
   if (wall) selectedWall.value = { ...wall }
 }
@@ -415,6 +434,12 @@ function applyNodeName() {
   doc.value?.commands.updateNode(selectedNode.id, { name: selectedNode.name })
 }
 
+function applyNodeBindings(next: NodeBindingsProps) {
+  if (!selectedNode.id || !doc.value) return
+  writeNodeBindings(doc.value, selectedNode.id, next)
+  syncBindingsFrom(next)
+}
+
 function removeSelected() {
   const d = doc.value
   if (!d) return
@@ -534,12 +559,14 @@ function applyEnvironment(env: EnvironmentJSON) {
         :bounds-form="boundsForm"
         :selected-node="selectedNode"
         :selected-wall="selectedWall"
+        :node-bindings="nodeBindings"
         :environment="environment"
         :view-mode="viewMode"
         :live-camera-pose="liveCameraPose"
         @update:bounds="applyBounds"
         @update:name="applyNodeName"
         @update:transform="applyNodeTransform"
+        @update:bindings="applyNodeBindings"
         @remove="removeSelected"
         @apply-environment="applyEnvironment"
       />

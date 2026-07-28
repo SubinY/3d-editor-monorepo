@@ -1,18 +1,21 @@
 <script setup lang="ts">
-import { ref } from 'vue'
-import { Setting, Monitor } from '@element-plus/icons-vue'
+import { ref, watch } from 'vue'
+import { Setting, Monitor, DataLine } from '@element-plus/icons-vue'
 import type { EnvironmentJSON, WallJSON } from '@3d-editor/editor'
 import type { ViewMode } from './types'
 import PropertyPanel from './PropertyPanel.vue'
+import DataPanel from './DataPanel.vue'
 import EnvironmentPanel from './environment-panel/EnvironmentPanel.vue'
 import type { LiveCameraPose } from './environment-panel/types'
 import type { BoundsForm, SelectedNodeForm } from './PropertyPanel.vue'
+import type { NodeBindingsProps } from '@/business/node-bindings'
 
-defineProps<{
+const props = defineProps<{
   isScene: boolean
   boundsForm: BoundsForm
   selectedNode: SelectedNodeForm
   selectedWall: WallJSON | null
+  nodeBindings: NodeBindingsProps
   environment: EnvironmentJSON | null
   viewMode: ViewMode
   liveCameraPose?: LiveCameraPose | null
@@ -22,11 +25,21 @@ const emit = defineEmits<{
   'update:bounds': []
   'update:name': []
   'update:transform': []
+  'update:bindings': [value: NodeBindingsProps]
   remove: []
   'apply-environment': [env: EnvironmentJSON]
 }>()
 
 const activeTab = ref('props')
+
+watch(
+  () => props.selectedNode.id,
+  id => {
+    if (!id && activeTab.value === 'data') {
+      activeTab.value = 'props'
+    }
+  }
+)
 </script>
 
 <template>
@@ -67,6 +80,20 @@ const activeTab = ref('props')
           @apply="emit('apply-environment', $event)"
         />
         <el-empty v-else description="编辑器未就绪" :image-size="48" />
+      </el-tab-pane>
+
+      <el-tab-pane v-if="selectedNode.id" name="data">
+        <template #label>
+          <span class="tab-label">
+            <el-icon><DataLine /></el-icon>
+            数据
+          </span>
+        </template>
+        <DataPanel
+          :node-id="selectedNode.id"
+          :model-value="nodeBindings"
+          @update:model-value="emit('update:bindings', $event)"
+        />
       </el-tab-pane>
     </el-tabs>
   </aside>
