@@ -12,6 +12,7 @@ export default defineConfig({
     }
   },
   server: {
+    host: true, // 监听 0.0.0.0，可用局域网 IP 访问
     port: 5175,
     proxy: {
       '/api': {

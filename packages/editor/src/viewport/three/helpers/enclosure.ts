@@ -21,6 +21,33 @@ function doorMaterial(): THREE.MeshStandardMaterial {
   })
 }
 
+/** 户外柜：浅灰漆面（参考图） */
+function outdoorShellMaterial(): THREE.MeshStandardMaterial {
+  return new THREE.MeshStandardMaterial({
+    color: '#c9cbc9',
+    roughness: 0.78,
+    metalness: 0.12,
+    side: THREE.DoubleSide
+  })
+}
+
+function outdoorDoorMaterial(): THREE.MeshStandardMaterial {
+  return new THREE.MeshStandardMaterial({
+    color: '#d0d2d0',
+    roughness: 0.74,
+    metalness: 0.1,
+    side: THREE.DoubleSide
+  })
+}
+
+function outdoorMetalMaterial(): THREE.MeshStandardMaterial {
+  return new THREE.MeshStandardMaterial({
+    color: '#9aa0a4',
+    roughness: 0.42,
+    metalness: 0.65
+  })
+}
+
 function markShell(mesh: THREE.Mesh): void {
   mesh.castShadow = true
   mesh.receiveShadow = true
@@ -160,6 +187,168 @@ export function buildOpenBoxDoubleDoorEnclosure(
   return group
 }
 
+/**
+ * 户外双门电柜（参考图重建，参数化）：
+ * 五面开口壳体 + 双坡顶盖 + 底座百叶 + 铆钉门板 + 中缝锁扣；双门外开约 100°。
+ */
+export function buildOutdoorCabinetEnclosure(
+  width: number,
+  height: number,
+  depth: number
+): THREE.Group {
+  const group = new THREE.Group()
+  group.name = '__outdoorCabinet__'
+
+  const t = Math.min(0.04, Math.min(width, depth, height) * 0.06)
+  const roofH = height * 0.07
+  const plinthH = height * 0.12
+  const bodyH = height - roofH - plinthH
+  const bodyY0 = plinthH
+  const bodyY1 = plinthH + bodyH
+  const shellMat = outdoorShellMaterial()
+  const doorMat = outdoorDoorMaterial()
+  const metalMat = outdoorMetalMaterial()
+
+  // —— 底座 ——
+  const plinth = new THREE.Mesh(new THREE.BoxGeometry(width, plinthH, depth), shellMat)
+  plinth.position.set(0, plinthH / 2, 0)
+  markShell(plinth)
+  group.add(plinth)
+
+  // 前脸百叶（水平条）
+  const louverCount = 5
+  const louverGap = plinthH * 0.08
+  const louverH = Math.max((plinthH - louverGap * (louverCount + 1)) / louverCount, t * 0.2)
+  const louverW = width * 0.88
+  const louverD = t * 0.55
+  for (let i = 0; i < louverCount; i++) {
+    const bar = new THREE.Mesh(new THREE.BoxGeometry(louverW, louverH, louverD), shellMat)
+    const y = louverGap + louverH / 2 + i * (louverH + louverGap)
+    bar.position.set(0, y, depth / 2 + louverD * 0.35)
+    markShell(bar)
+    group.add(bar)
+  }
+
+  // —— 壳体：顶 / 后 / 左 / 右（前脸开口）——
+  const top = new THREE.Mesh(new THREE.BoxGeometry(width, t, depth), shellMat)
+  top.position.set(0, bodyY1 - t / 2, 0)
+
+  const back = new THREE.Mesh(new THREE.BoxGeometry(width, bodyH, t), shellMat)
+  back.position.set(0, bodyY0 + bodyH / 2, -depth / 2 + t / 2)
+
+  const left = new THREE.Mesh(new THREE.BoxGeometry(t, bodyH, depth), shellMat)
+  left.position.set(-width / 2 + t / 2, bodyY0 + bodyH / 2, 0)
+
+  const right = new THREE.Mesh(new THREE.BoxGeometry(t, bodyH, depth), shellMat)
+  right.position.set(width / 2 - t / 2, bodyY0 + bodyH / 2, 0)
+
+  ;[top, back, left, right].forEach(mesh => {
+    markShell(mesh)
+    group.add(mesh)
+  })
+
+  // 侧板浅浮雕铭牌区（-X）
+  const badge = new THREE.Mesh(
+    new THREE.BoxGeometry(t * 0.35, bodyH * 0.08, depth * 0.22),
+    shellMat
+  )
+  badge.position.set(-width / 2 - t * 0.05, bodyY0 + bodyH * 0.78, -depth * 0.08)
+  markShell(badge)
+  group.add(badge)
+
+  // —— 浅双坡顶盖：XY 剖面挤出沿 Z ——
+  const overhang = Math.min(width, depth) * 0.035
+  const roofW = width + overhang * 2
+  const roofD = depth + overhang * 2
+  const halfW = roofW / 2
+
+  const roofShape = new THREE.Shape()
+  roofShape.moveTo(-halfW, 0)
+  roofShape.lineTo(halfW, 0)
+  roofShape.lineTo(halfW * 0.94, roofH * 0.45)
+  roofShape.lineTo(0, roofH)
+  roofShape.lineTo(-halfW * 0.94, roofH * 0.45)
+  roofShape.closePath()
+
+  const roofGeo = new THREE.ExtrudeGeometry(roofShape, {
+    depth: roofD,
+    bevelEnabled: false
+  })
+  const roof = new THREE.Mesh(roofGeo, shellMat)
+  roof.position.set(0, bodyY1, -roofD / 2)
+  markShell(roof)
+  group.add(roof)
+
+  // 顶盖中缝
+  const seam = new THREE.Mesh(new THREE.BoxGeometry(t * 0.4, roofH * 0.18, roofD * 0.98), shellMat)
+  seam.position.set(0, bodyY1 + roofH * 0.9, 0)
+  markShell(seam)
+  group.add(seam)
+
+  // —— 双扇外开门 ——
+  const gap = t * 0.45
+  const doorW = Math.max((width - t * 2 - gap) / 2, width * 0.38)
+  const doorH = Math.max(bodyH - t * 1.5, bodyH * 0.9)
+  const doorY = bodyY0 + bodyH / 2
+  const openY = Math.PI * (100 / 180)
+  const rivetR = Math.min(t * 0.28, 0.012)
+  const rivetGeo = new THREE.SphereGeometry(rivetR, 6, 4)
+
+  function addDoor(hingeX: number, sign: 1 | -1, name: string, withLatch: boolean): void {
+    const hinge = new THREE.Group()
+    hinge.name = name
+    hinge.position.set(hingeX, doorY, depth / 2)
+    hinge.rotation.y = sign * openY
+
+    const door = new THREE.Mesh(new THREE.BoxGeometry(doorW, doorH, t), doorMat)
+    door.position.set(-sign * (doorW / 2), 0, 0)
+    markShell(door)
+    hinge.add(door)
+
+    const cols = 3
+    const rows = 4
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++) {
+        const rivet = new THREE.Mesh(rivetGeo, metalMat)
+        const u = (c + 0.5) / cols
+        const v = (r + 0.5) / rows
+        rivet.position.set(
+          -sign * (doorW * (0.12 + u * 0.76)),
+          doorH * (v - 0.5) * 0.82,
+          t * 0.55
+        )
+        markShell(rivet)
+        hinge.add(rivet)
+      }
+    }
+
+    if (withLatch) {
+      const latchBody = new THREE.Mesh(
+        new THREE.BoxGeometry(t * 1.1, doorH * 0.1, t * 1.4),
+        metalMat
+      )
+      latchBody.position.set(-sign * (doorW - t * 1.2), 0, t * 0.9)
+      markShell(latchBody)
+      hinge.add(latchBody)
+
+      const latchHandle = new THREE.Mesh(
+        new THREE.BoxGeometry(t * 0.45, doorH * 0.14, t * 0.55),
+        metalMat
+      )
+      latchHandle.position.set(-sign * (doorW - t * 1.2), -doorH * 0.02, t * 1.5)
+      markShell(latchHandle)
+      hinge.add(latchHandle)
+    }
+
+    group.add(hinge)
+  }
+
+  addDoor(width / 2 - t, 1, '__doorHingeRight__', true)
+  addDoor(-(width / 2 - t), -1, '__doorHingeLeft__', false)
+
+  return group
+}
+
 /** 按 environment.helpers.enclosure 构建；none 返回 null */
 export function buildEnclosure(
   kind: EnclosureKind,
@@ -170,5 +359,6 @@ export function buildEnclosure(
   if (kind === 'openBox') return buildOpenBoxEnclosure(width, height, depth)
   if (kind === 'openBoxDoor') return buildOpenBoxDoorEnclosure(width, height, depth)
   if (kind === 'openBoxDoubleDoor') return buildOpenBoxDoubleDoorEnclosure(width, height, depth)
+  if (kind === 'outdoorCabinet') return buildOutdoorCabinetEnclosure(width, height, depth)
   return null
 }

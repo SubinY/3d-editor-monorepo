@@ -139,7 +139,7 @@ interface EnvironmentJSON {
     castShadow?: boolean
   }>
   shadows: { enabled: boolean; type?: 'basic' | 'pcfsoft' }
-  helpers: { grid: boolean; enclosure: 'none' | 'openBox' | 'openBoxDoor' | 'openBoxDoubleDoor' }
+  helpers: { grid: boolean; enclosure: 'none' | 'openBox' | 'openBoxDoor' | 'openBoxDoubleDoor' | 'outdoorCabinet' }
   /** 场景地面；单套材质；coverage 控制 bounds 或仅闭合墙区 */
   floor: {
     visible: boolean

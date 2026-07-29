@@ -24,7 +24,8 @@ const ENCLOSURE_OPTIONS: Array<{ value: EnclosureKind; label: string }> = [
   { value: 'none', label: '无' },
   { value: 'openBox', label: '开口盒' },
   { value: 'openBoxDoor', label: '单开门' },
-  { value: 'openBoxDoubleDoor', label: '双开门' }
+  { value: 'openBoxDoubleDoor', label: '双开门' },
+  { value: 'outdoorCabinet', label: '户外双门柜' }
 ]
 
 const props = defineProps<{
@@ -111,7 +112,7 @@ function setEnclosure(kind: EnclosureKind) {
           </el-select>
         </el-form-item>
       </el-form>
-      <p class="hint">编辑态柜壳（不可选中）；双开门为左右对开约 100°。</p>
+      <p class="hint">编辑态柜壳（不可选中）；双开门 / 户外柜为左右对开约 100°。</p>
     </section>
 
     <section class="section">

@@ -76,8 +76,14 @@ export interface EnvironmentHelpersJSON {
    * - openBox：五面开口盒（缺 +Z）
    * - openBoxDoor：五面开口盒 + 单扇外开前柜门
    * - openBoxDoubleDoor：五面开口盒 + 双扇对开前柜门
+   * - outdoorCabinet：户外双门柜（坡顶 + 底通气 + 铆钉锁扣，双门外开）
    */
-  enclosure: 'none' | 'openBox' | 'openBoxDoor' | 'openBoxDoubleDoor'
+  enclosure:
+    | 'none'
+    | 'openBox'
+    | 'openBoxDoor'
+    | 'openBoxDoubleDoor'
+    | 'outdoorCabinet'
 }
 
 /** 地面铺设范围 */
