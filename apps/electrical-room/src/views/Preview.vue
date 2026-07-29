@@ -15,6 +15,7 @@ import {
   type DeviceStatus
 } from '@/business/device-status'
 import { createProceduralResolver } from '@/models/registry'
+import CabinetDetailModal from '@/components/CabinetDetailModal.vue'
 
 interface AlarmLog {
   time: string
@@ -36,6 +37,8 @@ const running = ref(true)
 const lastInteraction = ref('')
 const lastValues = ref('')
 const sourceLabel = ref('')
+const cabinetDetailVisible = ref(false)
+const cabinetDetailName = ref('')
 
 let session: EditorSession | undefined
 let doc: EditorDocument | undefined
@@ -136,6 +139,11 @@ onMounted(async () => {
       hoverOutline: false,
       onInteraction: (event: NodeInteractionEvent) => {
         lastInteraction.value = `${event.type} → ${event.nodePath}`
+        if (event.type !== 'click') return
+        const node = event.node ?? doc?.getNode(event.nodeId)
+        if (!node) return
+        cabinetDetailName.value = node.name || event.nodeId
+        cabinetDetailVisible.value = true
       }
     },
     procedural: {
@@ -190,6 +198,8 @@ function toggle() {
         </div>
       </div>
     </aside>
+
+    <CabinetDetailModal v-model="cabinetDetailVisible" :cabinet-name="cabinetDetailName" />
   </div>
 </template>
 
