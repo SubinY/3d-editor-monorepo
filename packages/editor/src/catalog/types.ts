@@ -11,10 +11,39 @@ export interface FootprintSpec {
  * 3D 表现：
  * - gltf：外链模型（CDN 后期接入时只换 url 来源）
  * - primitive：内置几何（demo / 无资产环境可用）
+ * - procedural：Host 注册的工厂（Catalog 只存 id；几何由 resolve 注入）
  */
 export type Model3DSpec =
   | { type: 'gltf'; url: string }
   | { type: 'primitive'; primitive: 'box'; size: [number, number, number]; color?: string }
+  | { type: 'procedural'; id: string }
+
+/** Catalog 中的 procedural 引用（可 JSON 序列化） */
+export interface ProceduralModelRef {
+  id: string
+}
+
+/**
+ * Host / Runtime 解析上下文。
+ * `THREE` 为与视口同一份 three 命名空间，工厂勿再打包第二份。
+ */
+export interface ProceduralResolveContext {
+  item: CatalogItem
+  THREE: typeof import('three')
+}
+
+/**
+ * Host 注入：按 id 返回 Object3D（通常为 Group）。
+ * 返回 null/undefined 时视口回退 footprint 盒子。
+ */
+export type ProceduralModelResolver = (
+  ref: ProceduralModelRef,
+  ctx: ProceduralResolveContext
+) =>
+  | import('three').Object3D
+  | null
+  | undefined
+  | Promise<import('three').Object3D | null | undefined>
 
 /**
  * 左侧素材面板分组 / 交互语义约定：

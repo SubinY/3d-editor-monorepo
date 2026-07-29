@@ -26,6 +26,7 @@ import {
   writeNodeBindings,
   type NodeBindingsProps
 } from '@/business/node-bindings'
+import { createProceduralResolver } from '@/models/registry'
 
 const props = defineProps<{
   kind: DocumentKind
@@ -216,6 +217,9 @@ onMounted(async () => {
     },
     viewport3d: {
       hoverOutline: true
+    },
+    procedural: {
+      resolve: createProceduralResolver()
     },
     interaction: {
       transformModes: ['translate', 'rotate']

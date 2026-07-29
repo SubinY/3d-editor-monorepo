@@ -44,8 +44,9 @@ apps ──► @3d-editor/editor（peer: three）
   - document 变更事件 → 映射回 Object3D 增删/更新
 ### D2. 复合资产（如电柜）：嵌套解析
 
-- `CatalogItem` 两型：`model` 型（`model3d` 指向 GLB / 内置几何）；`document` 型（`document` / `documentUrl` 指向一份 ContainerDocument JSON）。
+- `CatalogItem` 两型：`model` 型（`model3d` 指向 GLB / 内置几何 / Host `procedural` id）；`document` 型（`document` / `documentUrl` 指向一份 ContainerDocument JSON）。
 - 3D viewport 遇 `document` 型条目时**嵌套解析**：加载 container JSON，递归实例化内部元件；外壳优先级为 `gltf shell3d` > 内层 `environment.helpers.enclosure` > 其它 `shell3d`（半透明），与柜资产编辑态 enclosure 对齐。
+- **程序化模型**：`model3d: { type: 'procedural', id }` 可 JSON 序列化；几何由 Host 经 `createEditor({ procedural: { resolve } })` 注入。无 resolve / 解析失败时回退 footprint 盒子。行业几何不进 editor 包。
 - 运行时寻址：柜内元件路径为 `sceneNodeId/childNodeId`，`setNodeVisualState(path, state)` 支持柜内元件级高亮。
 - 防护：解析深度上限 2 层（场景→柜→元件）；2D 视图对 `document` 型只画 footprint 占位。
 - **发布静态化（Host）**：编辑与 `/preview` 走已保存 `EditorDocumentJSON` + 活 Catalog；场景发布生成 `assetPack` 内容快照；**仅监控首页 `/home`** 用 `createPackCatalog(assetPack)`。柜资产按 `(id, version)` 钉死；场景拖放取最新 version 写入 `catalogRef`。

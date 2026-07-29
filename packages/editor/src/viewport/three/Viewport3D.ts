@@ -1,5 +1,5 @@
 import * as THREE from 'three'
-import type { CatalogItem, CatalogProvider, Model3DSpec } from '../../catalog/types'
+import type { CatalogItem, CatalogProvider, Model3DSpec, ProceduralModelResolver } from '../../catalog/types'
 import { catalogKey, isDocumentItem } from '../../catalog/types'
 import type { TransformMode } from '../../core/types'
 import type { EditorDocument } from '../../document/EditorDocument'
@@ -47,6 +47,8 @@ export interface Viewport3DOptions {
   perfStats?: boolean
   /** 悬停描边；默认 true */
   hoverOutline?: boolean
+  /** Host 程序化模型解析（model3d.type === 'procedural'） */
+  proceduralResolve?: ProceduralModelResolver
 }
 
 export interface FocusCameraOptions {
@@ -77,6 +79,7 @@ export class Viewport3D {
   private readonly readonly: boolean
   private onInteraction?: NodeInteractionHandler
   private onNodeClick?: Viewport3DOptions['onNodeClick']
+  private proceduralResolve?: ProceduralModelResolver
 
   private nodeRoots = new Map<string, THREE.Object3D>()
   private pathObjects = new Map<string, THREE.Object3D>()
@@ -103,6 +106,7 @@ export class Viewport3D {
     this.readonly = options.readonly ?? false
     this.onInteraction = options.onInteraction
     this.onNodeClick = options.onNodeClick
+    this.proceduralResolve = options.proceduralResolve
 
     this.runtime = new ThreeRuntime({
       container,
@@ -507,6 +511,22 @@ export class Viewport3D {
         console.warn(`[viewport3d] failed to load gltf "${spec.url}"`, error)
         return this.buildFootprintBox(item)
       }
+    }
+    if (spec.type === 'procedural') {
+      if (!this.proceduralResolve) {
+        console.warn(
+          `[viewport3d] procedural model "${spec.id}" but no procedural.resolve injected; fallback box`
+        )
+        return this.buildFootprintBox(item)
+      }
+      try {
+        const built = await this.proceduralResolve({ id: spec.id }, { item, THREE })
+        if (built) return built
+        console.warn(`[viewport3d] procedural resolve returned empty for "${spec.id}"; fallback box`)
+      } catch (error) {
+        console.warn(`[viewport3d] procedural resolve failed for "${spec.id}"`, error)
+      }
+      return this.buildFootprintBox(item)
     }
     const [w, h, d] = spec.size
     const mesh = new THREE.Mesh(

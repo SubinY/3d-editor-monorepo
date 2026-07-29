@@ -49,7 +49,10 @@ export type {
   CatalogProvider,
   CatalogQuery,
   FootprintSpec,
-  Model3DSpec
+  Model3DSpec,
+  ProceduralModelRef,
+  ProceduralResolveContext,
+  ProceduralModelResolver
 } from './catalog/types'
 export type { PublishBundle } from './catalog/publish'
 export type { Tool2D, Viewport2DOptions } from './viewport/canvas2d/types'

@@ -13,6 +13,7 @@ import {
   toVisualState,
   type DeviceStatus
 } from '@/business/device-status'
+import { createProceduralResolver } from '@/models/registry'
 
 interface Target {
   path: string
@@ -121,6 +122,9 @@ onMounted(async () => {
       onInteraction: (_event: NodeInteractionEvent) => {
         /* click-through ok */
       }
+    },
+    procedural: {
+      resolve: createProceduralResolver()
     }
   })
   doc = session.document

@@ -1,4 +1,4 @@
-import type { CatalogProvider } from '../catalog/types'
+import type { CatalogProvider, ProceduralModelResolver } from '../catalog/types'
 import type { CreateDocumentOptions, EditorDocument } from '../document/EditorDocument'
 import type { EditorDocumentJSON, EditorNodeJSON } from '../document/types'
 import type { NodeInteractionHandler } from '../viewport/interaction-events'
@@ -44,6 +44,13 @@ export interface CreateEditorOptions {
     perfStats?: boolean
     /** 鼠标悬停描边；默认不显示 */
     hoverOutline?: boolean
+  }
+  /**
+   * Host 程序化模型：Catalog `model3d.type === 'procedural'` 时按 id 解析。
+   * 几何资产留在 Host；内核只认可序列化 id。
+   */
+  procedural?: {
+    resolve: ProceduralModelResolver
   }
   /** 会话级交互：吸附 / 碰撞 / 3D gizmo mode */
   interaction?: EditorInteractionOptions

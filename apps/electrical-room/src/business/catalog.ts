@@ -69,7 +69,7 @@ export const COMPONENT_ITEMS: CatalogItem[] = [
     placeableIn: ['container'],
     footprint: { width: 0.1, depth: 0.09, height: 0.14 },
     thumb: '#e67e22',
-    model3d: { type: 'primitive', primitive: 'box', size: [0.1, 0.14, 0.09], color: '#e67e22' }
+    model3d: { type: 'procedural', id: 'comp-breaker' }
   },
   {
     id: 'comp-contactor',

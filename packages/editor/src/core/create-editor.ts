@@ -1,4 +1,4 @@
-import type { CatalogProvider } from '../catalog/types'
+import type { CatalogProvider, ProceduralModelResolver } from '../catalog/types'
 import type { CreateDocumentOptions, EditorDocument } from '../document/EditorDocument'
 import { createDocument, loadDocument } from '../document/serialize'
 import type { EditorDocumentJSON } from '../document/types'
@@ -33,6 +33,7 @@ export class EditorSessionImpl implements EditorSession {
   private catalog?: CatalogProvider
   private onDenied?: (reason: string) => void
   private viewport3dOptions?: CreateEditorOptions['viewport3d']
+  private proceduralResolve?: ProceduralModelResolver
   private disposed = false
 
   private snapEnabled: boolean
@@ -45,6 +46,7 @@ export class EditorSessionImpl implements EditorSession {
     this.catalog = options.catalog
     this.onDenied = options.onDenied
     this.viewport3dOptions = options.viewport3d
+    this.proceduralResolve = options.procedural?.resolve
 
     const interaction = options.interaction
     this.snapEnabled = interaction?.snapEnabled ?? true
@@ -102,7 +104,8 @@ export class EditorSessionImpl implements EditorSession {
       transformMode: this.transformMode,
       snapEnabled: this.snapEnabled,
       perfStats: this.viewport3dOptions?.perfStats,
-      hoverOutline: this.viewport3dOptions?.hoverOutline
+      hoverOutline: this.viewport3dOptions?.hoverOutline,
+      proceduralResolve: this.proceduralResolve
     }
     this.viewport3d = new Viewport3D(el, options)
     return this.viewport3d

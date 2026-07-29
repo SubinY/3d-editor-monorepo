@@ -78,6 +78,7 @@ const editor = await createEditor({
   catalog,
   document: draft,
   mount: { canvas2d: el2d, canvas3d: el3d },
+  procedural: { resolve }, // model3d.type==='procedural' 时按 id 建 Group
   onDenied: reason => toast(reason),
 })
 
@@ -163,7 +164,7 @@ editor.document.commands.setEnvironment({
 
 **导出（值）：** `createEditor`、`createMemoryCatalog`、`createEmptyDocumentJSON`、`SCHEMA_VERSION`、`CATALOG_ITEM_MIME`、`createDefaultEnvironment`、`cloneEnvironment`
 
-**导出（类型）：** `CreateEditorOptions`、`EditorSession`、`EditorInteractionOptions`、`EditorInteractionState`、`TransformMode`、合同类型（含 `EnvironmentJSON` / `BackgroundJSON` / `LightJSON`）、`CatalogItem`…、`InteractionEventType` / `NodeInteractionEvent` / `NodeInteractionHandler`、以及 `EditorDocument` / `Viewport2D` / `Viewport3D` **仅作类型标注**
+**导出（类型）：** `CreateEditorOptions`、`EditorSession`、`EditorInteractionOptions`、`EditorInteractionState`、`TransformMode`、合同类型（含 `EnvironmentJSON` / `BackgroundJSON` / `LightJSON`）、`CatalogItem`…、`ProceduralModelRef` / `ProceduralResolveContext` / `ProceduralModelResolver`、`InteractionEventType` / `NodeInteractionEvent` / `NodeInteractionHandler`、以及 `EditorDocument` / `Viewport2D` / `Viewport3D` **仅作类型标注**
 
 **不导出：** `createDocument`、`loadDocument`、`create2DViewport`、`create3DViewport`、`ThreeRuntime`、commands/collision 实现、约束注册 API 等。积木仅供 `createEditor` 内部使用。
 
@@ -172,7 +173,7 @@ editor.document.commands.setEnvironment({
 ## 7. Document / Catalog / Viewport（摘要）
 
 - **Document**：写操作走 `doc.commands.*`；历史 `doc.history`；选中 `doc.selection`；3D 呈现 `doc.commands.setEnvironment`；`node.props` 为不透明业务扩展。
-- **Catalog**：Host 注入 `CatalogProvider`；`model` / `document` 两型；`placeableIn` 必填。发布交付：`buildPublishBundle` → `PublishBundle.assetPack`；只读 `createPackCatalog`。
+- **Catalog**：Host 注入 `CatalogProvider`；`model` / `document` 两型；`placeableIn` 必填。`model3d`：`gltf` | `primitive` | `procedural`（仅 id；几何经 `createEditor({ procedural: { resolve } })`）。发布交付：`buildPublishBundle` → `PublishBundle.assetPack`；只读 `createPackCatalog`。
 - **碰撞**：内建 AABB；会话 `setCollisionEnabled` / `interaction.collisionEnabled`；`onDenied` 接收 `collision:…`。
 - **吸附**：会话 `snapEnabled` 控制 2D 贴边对齐（懒生效）；画墙工具内置端点吸附始终可用。硬网格 `gridSnapConstraint` 仍可供 Host 自行注册，但不随会话吸附自动开启。
 - **3D**：包内 `ThreeRuntime`；环境由 Document.environment 投影；`floor.coverage`：`bounds`（工作区）| `closedRooms`（仅闭合墙围合，不规则跟随墙）；`wall`：场景级墙色/贴图（所有墙共用）；`defaultView.type`：`orbit` | `orthographic`；`helpers.enclosure`：`none` | `openBox` | `openBoxDoor` | `openBoxDoubleDoor` | `outdoorCabinet`。视口右下角世界坐标轴角标（点轴切视角 / 拖拽环绕，不进 helpers）。地板/墙体贴图由 Host 同源静态资源提供（`mapUrl` / `presetId`），内核不内置纹理文件。

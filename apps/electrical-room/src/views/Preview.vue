@@ -14,6 +14,7 @@ import {
   toVisualState,
   type DeviceStatus
 } from '@/business/device-status'
+import { createProceduralResolver } from '@/models/registry'
 
 interface AlarmLog {
   time: string
@@ -136,6 +137,9 @@ onMounted(async () => {
       onInteraction: (event: NodeInteractionEvent) => {
         lastInteraction.value = `${event.type} → ${event.nodePath}`
       }
+    },
+    procedural: {
+      resolve: createProceduralResolver()
     }
   })
 
