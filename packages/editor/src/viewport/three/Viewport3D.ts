@@ -394,7 +394,6 @@ export class Viewport3D {
     path: string,
     depth: number
   ): Promise<THREE.Object3D | undefined> {
-    console.log(node, 'node123')
     if (!node.catalogRef) {
       return this.buildFallbackMesh(undefined)
     }
