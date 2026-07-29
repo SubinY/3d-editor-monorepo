@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Monitor, OfficeBuilding, Box, HomeFilled } from '@element-plus/icons-vue'
+import { Monitor, OfficeBuilding, Box, HomeFilled, Brush } from '@element-plus/icons-vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -15,6 +15,7 @@ const active = computed(() => {
 function go(name: string) {
   if (name === 'home') router.push('/home')
   else if (name === 'cabinets') router.push('/manage/cabinets')
+  else if (name === 'ux-demo') router.push('/ux-demo')
   else router.push('/manage/rooms')
 }
 </script>
@@ -41,6 +42,10 @@ function go(name: string) {
         <button :class="{ active: active === 'home' }" type="button" @click="go('home')">
           <el-icon><HomeFilled /></el-icon>
           监控首页
+        </button>
+        <button type="button" @click="go('ux-demo')">
+          <el-icon><Brush /></el-icon>
+          产品壳 Demo
         </button>
       </nav>
       <div class="rail-foot">

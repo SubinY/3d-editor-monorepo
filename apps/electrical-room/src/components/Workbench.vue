@@ -18,6 +18,9 @@ import WorkbenchToolbar from './workbench/WorkbenchToolbar.vue'
 import LeftPanel from './workbench/LeftPanel.vue'
 import ViewportArea from './workbench/ViewportArea.vue'
 import RightPanel from './workbench/RightPanel.vue'
+import ContextToolbar from './workbench/ContextToolbar.vue'
+import ViewModeBar from './workbench/ViewModeBar.vue'
+import BottomBar from './workbench/BottomBar.vue'
 import type { LiveCameraPose } from './workbench/environment-panel/types'
 import type { AssetGroup, EditorTool, LayerTreeItem, ViewMode } from './workbench/types'
 import {
@@ -80,6 +83,8 @@ let unsubCameraPose: (() => void) | undefined
 let cameraPosePersistTimer: number | undefined
 
 const isScene = computed(() => props.kind === 'scene')
+const objectCount = computed(() => doc.value?.getNodes().length ?? 0)
+const showRulers = computed(() => viewMode.value !== '3d')
 
 function deniedMessage(reason: string): string {
   if (reason.startsWith('collision:')) {
@@ -383,16 +388,14 @@ function fitView() {
   session?.viewport2d?.fitBounds()
 }
 
-function toggleSnap() {
-  const next = !snapEnabled.value
-  session?.setSnapEnabled(next)
-  snapEnabled.value = session?.getInteraction().snapEnabled ?? next
+function setSnapEnabled(enabled: boolean) {
+  session?.setSnapEnabled(enabled)
+  snapEnabled.value = session?.getInteraction().snapEnabled ?? enabled
 }
 
-function toggleRulers() {
-  const next = !rulersEnabled.value
-  rulersEnabled.value = next
-  session?.viewport2d?.setRulersVisible(next)
+function setRulersEnabled(enabled: boolean) {
+  rulersEnabled.value = enabled
+  session?.viewport2d?.setRulersVisible(enabled)
 }
 
 function setPerfStatsVisible(visible: boolean) {
@@ -400,10 +403,9 @@ function setPerfStatsVisible(visible: boolean) {
   session?.viewport3d?.setPerfStatsVisible(visible)
 }
 
-function toggleCollision() {
-  const next = !collisionEnabled.value
-  session?.setCollisionEnabled(next)
-  collisionEnabled.value = session?.getInteraction().collisionEnabled ?? next
+function setCollisionEnabled(enabled: boolean) {
+  session?.setCollisionEnabled(enabled)
+  collisionEnabled.value = session?.getInteraction().collisionEnabled ?? enabled
 }
 
 function setTransformMode(mode: TransformMode) {
@@ -481,6 +483,34 @@ function removeSelected() {
   }
 }
 
+async function duplicateSelected() {
+  const d = doc.value
+  if (!d || !selectedNode.id) return
+  const node = d.getNode(selectedNode.id)
+  if (!node?.catalogRef) {
+    showToast('当前选中不支持复制', 'error')
+    return
+  }
+  const item =
+    d.getCachedItem(node) ??
+    (await props.catalog.get(node.catalogRef.id, node.catalogRef.version))
+  if (!item) {
+    showToast('找不到可复制的资源', 'error')
+    return
+  }
+  const p = node.transform.position
+  const result = d.commands.placeItem(item, {
+    position: [p[0] + 0.7, p[1], p[2] + 0.4],
+    rotation: [...node.transform.rotation] as [number, number, number],
+    name: `${node.name ?? item.name} 副本`
+  })
+  if (result.denied) {
+    showToast(deniedMessage(result.denied), 'error')
+    return
+  }
+  showToast('已复制')
+}
+
 function applyBounds() {
   doc.value?.commands.setBounds({
     width: boundsForm.width || undefined,
@@ -538,25 +568,14 @@ function applyEnvironment(env: EnvironmentJSON) {
       v-model:doc-name="docName"
       :is-scene="isScene"
       :tool="tool"
-      :view-mode="viewMode"
-      :snap-enabled="snapEnabled"
-      :collision-enabled="collisionEnabled"
-      :rulers-enabled="rulersEnabled"
-      :transform-mode="transformMode"
       :can-undo="canUndo"
       :can-redo="canRedo"
       :editing-version="editingVersion"
       @back="emit('back')"
-      @set-tool="setTool"
       @undo="undo"
       @redo="redo"
-      @remove="removeSelected"
       @fit-view="fitView"
-      @toggle-snap="toggleSnap"
-      @toggle-collision="toggleCollision"
-      @toggle-rulers="toggleRulers"
-      @set-transform-mode="setTransformMode"
-      @set-view-mode="setViewMode"
+      @set-tool="setTool"
       @save="save"
       @publish="publish"
     />
@@ -564,11 +583,8 @@ function applyEnvironment(env: EnvironmentJSON) {
     <div class="body">
       <LeftPanel
         :groups="groups"
-        :is-scene="isScene"
-        :tool="tool"
         :nodes="layerNodes"
         :selected-id="selectedId"
-        @set-tool="setTool"
         @drag-start="onAssetDragStart"
         @drag-end="onAssetDragEnd"
         @select-layer="selectLayer"
@@ -581,6 +597,17 @@ function applyEnvironment(env: EnvironmentJSON) {
         </template>
         <template #canvas3d>
           <div ref="el3d" class="viewport-host" />
+        </template>
+        <template #chrome>
+          <ContextToolbar
+            :visible="!!selectedId"
+            :transform-mode="transformMode"
+            @move="setTransformMode('translate')"
+            @rotate="setTransformMode('rotate')"
+            @duplicate="duplicateSelected"
+            @delete="removeSelected"
+          />
+          <ViewModeBar :view-mode="viewMode" @update:view-mode="setViewMode" />
         </template>
       </ViewportArea>
 
@@ -604,6 +631,19 @@ function applyEnvironment(env: EnvironmentJSON) {
         @update:perf-stats-visible="setPerfStatsVisible"
       />
     </div>
+
+    <BottomBar
+      :snap-enabled="snapEnabled"
+      :collision-enabled="collisionEnabled"
+      :rulers-enabled="rulersEnabled"
+      :show-rulers="showRulers"
+      :object-count="objectCount"
+      :perf-visible="perfStatsVisible"
+      @update:snap-enabled="setSnapEnabled"
+      @update:collision-enabled="setCollisionEnabled"
+      @update:rulers-enabled="setRulersEnabled"
+      @update:perf-visible="setPerfStatsVisible"
+    />
   </div>
 </template>
 

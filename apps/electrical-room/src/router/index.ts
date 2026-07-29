@@ -36,6 +36,11 @@ export const router = createRouter({
       name: 'preview',
       component: () => import('@/views/Preview.vue')
     },
+    {
+      path: '/ux-demo',
+      name: 'ux-demo',
+      component: () => import('@/views/UxDemoView.vue')
+    },
     { path: '/:pathMatch(.*)*', redirect: '/manage/rooms' }
   ]
 })

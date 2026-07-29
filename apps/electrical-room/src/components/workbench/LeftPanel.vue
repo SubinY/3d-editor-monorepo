@@ -2,20 +2,17 @@
 import { ref } from 'vue'
 import { Box, Share } from '@element-plus/icons-vue'
 import type { CatalogItem } from '@3d-editor/editor'
-import type { AssetGroup, EditorTool, LayerTreeItem } from './types'
+import type { AssetGroup, LayerTreeItem } from './types'
 import ResourcePanel from './ResourcePanel.vue'
 import LayerTreePanel from './LayerTreePanel.vue'
 
 defineProps<{
   groups: AssetGroup[]
-  isScene: boolean
-  tool: EditorTool
   nodes: LayerTreeItem[]
   selectedId: string
 }>()
 
 const emit = defineEmits<{
-  'set-tool': [tool: EditorTool]
   'drag-start': [event: DragEvent, item: CatalogItem]
   'drag-end': []
   'select-layer': [id: string]
@@ -37,9 +34,6 @@ const activeTab = ref('resources')
         </template>
         <ResourcePanel
           :groups="groups"
-          :is-scene="isScene"
-          :tool="tool"
-          @set-tool="emit('set-tool', $event)"
           @drag-start="(e, item) => emit('drag-start', e, item)"
           @drag-end="emit('drag-end')"
         />

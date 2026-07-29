@@ -4,10 +4,6 @@ import type { ViewMode } from './types'
 defineProps<{
   viewMode: ViewMode
 }>()
-
-defineExpose({
-  // refs forwarded via template refs from parent — parent keeps el2d/el3d
-})
 </script>
 
 <template>
@@ -24,6 +20,7 @@ defineExpose({
         <slot name="canvas3d" />
       </div>
     </div>
+    <slot name="chrome" />
   </main>
 </template>
 
@@ -34,6 +31,7 @@ defineExpose({
   min-width: 0;
   gap: 1px;
   background: #1d2c3e;
+  position: relative;
 }
 
 .pane {

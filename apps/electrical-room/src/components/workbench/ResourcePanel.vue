@@ -1,16 +1,13 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
 import type { CatalogItem } from '@3d-editor/editor'
-import type { AssetGroup, EditorTool } from './types'
+import type { AssetGroup } from './types'
 
 const props = defineProps<{
   groups: AssetGroup[]
-  isScene: boolean
-  tool: EditorTool
 }>()
 
 const emit = defineEmits<{
-  'set-tool': [tool: EditorTool]
   'drag-start': [event: DragEvent, item: CatalogItem]
   'drag-end': []
 }>()
@@ -21,34 +18,14 @@ watch(
   () => props.groups,
   groups => {
     activeNames.value = groups.map(g => g.key)
-    if (props.isScene && !activeNames.value.includes('tools')) {
-      activeNames.value = ['tools', ...activeNames.value]
-    }
   },
   { immediate: true }
 )
-
-function toggleWallTool() {
-  emit('set-tool', props.tool === 'wall' ? 'select' : 'wall')
-}
 </script>
 
 <template>
   <div class="resource-panel">
     <el-collapse v-model="activeNames" class="resource-collapse">
-      <el-collapse-item v-if="isScene" title="工具" name="tools">
-        <div class="resource-grid">
-          <div
-            class="resource-item"
-            :class="{ active: tool === 'wall' }"
-            @click="toggleWallTool"
-          >
-            <div class="icon-box wall-icon">▭</div>
-            <span class="label">画墙</span>
-          </div>
-        </div>
-      </el-collapse-item>
-
       <el-collapse-item v-for="group in groups" :key="group.key" :title="group.label" :name="group.key">
         <div v-if="group.items.length" class="resource-grid">
           <div
@@ -126,11 +103,6 @@ function toggleWallTool() {
   border-color: #4dabf7;
 }
 
-.resource-item.active .icon-box {
-  border-color: #39d2ff;
-  box-shadow: 0 0 0 1px rgba(57, 210, 255, 0.35);
-}
-
 .icon-box {
   width: 56px;
   height: 56px;
@@ -139,11 +111,6 @@ function toggleWallTool() {
   background: #131e2b;
   display: grid;
   place-items: center;
-}
-
-.wall-icon {
-  color: #9db4c8;
-  font-size: 22px;
 }
 
 .label {
