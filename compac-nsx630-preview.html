@@ -1,0 +1,570 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>ComPacT NSX630HB2 — procedural preview</title>
+  <style>
+    html, body { margin: 0; height: 100%; overflow: hidden; background: #1a1c20; font-family: "Segoe UI", system-ui, sans-serif; }
+    #c { display: block; width: 100%; height: 100%; }
+    .hud {
+      position: fixed; left: 16px; bottom: 16px; z-index: 2;
+      color: #c8ccd2; font-size: 12px; line-height: 1.45;
+      background: rgba(12, 14, 18, 0.72); padding: 10px 12px; border-radius: 8px;
+      pointer-events: none; max-width: 360px;
+    }
+    .hud b { color: #7dcea0; font-weight: 600; }
+    .hud code { color: #9ab0c8; }
+  </style>
+</head>
+<body>
+  <canvas id="c"></canvas>
+  <div class="hud">
+    <b>ComPacT NSX630HB2</b>（程序化重建 · 单视角近似）<br />
+    拖拽旋转 · 滚轮缩放 · 右键平移<br />
+    隐藏面（背面/侧面细节）为推断，非实拍还原
+  </div>
+
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+      "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+    }
+  }
+  </script>
+  <script type="module">
+import * as THREE from 'three'
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js'
+
+/* ─── real-ish NSX630 3P envelope (meters) ─── */
+const W = 0.140
+const H = 0.255
+const D = 0.110
+
+/* ─── materials ─── */
+const shellMat = new THREE.MeshStandardMaterial({
+  color: 0x2f3238, roughness: 0.78, metalness: 0.05
+})
+const shellDarkMat = new THREE.MeshStandardMaterial({
+  color: 0x23262b, roughness: 0.72, metalness: 0.06
+})
+const greenMat = new THREE.MeshStandardMaterial({
+  color: 0x00a651, roughness: 0.52, metalness: 0.04
+})
+const greenDeepMat = new THREE.MeshStandardMaterial({
+  color: 0x008f45, roughness: 0.48, metalness: 0.04
+})
+const blackMat = new THREE.MeshStandardMaterial({
+  color: 0x121417, roughness: 0.62, metalness: 0.08
+})
+const softBlackMat = new THREE.MeshStandardMaterial({
+  color: 0x1a1c20, roughness: 0.7, metalness: 0.05
+})
+const metalMat = new THREE.MeshStandardMaterial({
+  color: 0x9aa0a8, roughness: 0.35, metalness: 0.85
+})
+const orangeMat = new THREE.MeshStandardMaterial({
+  color: 0xe87722, roughness: 0.45, metalness: 0.05
+})
+const coverMat = new THREE.MeshPhysicalMaterial({
+  color: 0x3a3e46,
+  roughness: 0.22,
+  metalness: 0.0,
+  transmission: 0.55,
+  thickness: 0.004,
+  transparent: true,
+  opacity: 0.55,
+  ior: 1.5,
+  side: THREE.DoubleSide
+})
+const dialWhiteMat = new THREE.MeshStandardMaterial({
+  color: 0xe8eaee, roughness: 0.55, metalness: 0.0
+})
+const panelInnerMat = new THREE.MeshStandardMaterial({
+  color: 0x4a4e56, roughness: 0.65, metalness: 0.05
+})
+
+function mark(mesh) {
+  mesh.castShadow = true
+  mesh.receiveShadow = true
+  return mesh
+}
+
+function box(w, h, d, mat, name) {
+  const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat)
+  if (name) m.name = name
+  return mark(m)
+}
+
+function canvasTex(draw, w = 256, h = 128) {
+  const c = document.createElement('canvas')
+  c.width = w
+  c.height = h
+  const ctx = c.getContext('2d')
+  draw(ctx, w, h)
+  const tex = new THREE.CanvasTexture(c)
+  tex.colorSpace = THREE.SRGBColorSpace
+  tex.anisotropy = 8
+  return tex
+}
+
+function labelPlane(w, h, tex, name) {
+  const mat = new THREE.MeshStandardMaterial({
+    map: tex,
+    transparent: true,
+    roughness: 0.55,
+    metalness: 0.0,
+    depthWrite: false
+  })
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), mat)
+  if (name) m.name = name
+  return m
+}
+
+/* ─── label textures ─── */
+const texGreenHeader = canvasTex((ctx, w, h) => {
+  ctx.clearRect(0, 0, w, h)
+  ctx.fillStyle = '#00A651'
+  ctx.fillRect(0, 0, w, h)
+  ctx.fillStyle = '#ffffff'
+  ctx.font = 'bold 36px Arial, sans-serif'
+  ctx.textBaseline = 'middle'
+  ctx.fillText('ComPacT', 18, h * 0.52)
+  ctx.font = 'bold 22px Arial, sans-serif'
+  ctx.textAlign = 'right'
+  ctx.fillText('Schneider Electric', w - 14, h * 0.52)
+}, 512, 96)
+
+const texOff = canvasTex((ctx, w, h) => {
+  ctx.clearRect(0, 0, w, h)
+  ctx.fillStyle = '#00A651'
+  ctx.fillRect(0, 0, w, h)
+  ctx.fillStyle = '#ffffff'
+  ctx.font = 'bold 54px Arial, sans-serif'
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  ctx.fillText('OFF', w / 2, h / 2 + 2)
+}, 256, 96)
+
+const texIO = canvasTex((ctx, w, h) => {
+  ctx.clearRect(0, 0, w, h)
+  ctx.fillStyle = '#00A651'
+  ctx.fillRect(0, 0, w, h)
+  ctx.fillStyle = '#ffffff'
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  // I (ON) top, O (OFF) bottom — vertical strip
+  ctx.font = 'bold 42px Arial, sans-serif'
+  ctx.fillText('I', w * 0.5, h * 0.22)
+  ctx.beginPath()
+  ctx.moveTo(w * 0.35, h * 0.38)
+  ctx.lineTo(w * 0.35, h * 0.62)
+  ctx.lineTo(w * 0.65, h * 0.5)
+  ctx.closePath()
+  ctx.fill()
+  ctx.font = 'bold 38px Arial, sans-serif'
+  ctx.fillText('O', w * 0.5, h * 0.82)
+}, 96, 256)
+
+const texRating = canvasTex((ctx, w, h) => {
+  ctx.fillStyle = '#d8dbe0'
+  ctx.fillRect(0, 0, w, h)
+  ctx.strokeStyle = '#8a9098'
+  ctx.lineWidth = 2
+  ctx.strokeRect(1, 1, w - 2, h - 2)
+  ctx.fillStyle = '#1a1c20'
+  ctx.font = 'bold 22px Arial, sans-serif'
+  ctx.fillText('NSX630HB2', 10, 28)
+  ctx.font = '14px Arial, sans-serif'
+  const lines = [
+    'Ui 800 V   Uimp 8 kV',
+    'Ue (V)  220/240  380/415  440',
+    'Icu(kA)   70      70      65',
+    'Ics = 100% Icu',
+    'Cat A   50/60 Hz'
+  ]
+  lines.forEach((t, i) => ctx.fillText(t, 10, 52 + i * 20))
+}, 320, 160)
+
+const texMicro = canvasTex((ctx, w, h) => {
+  ctx.clearRect(0, 0, w, h)
+  ctx.fillStyle = 'rgba(40,44,50,0.35)'
+  ctx.fillRect(0, 0, w, h)
+  ctx.fillStyle = '#e8eaee'
+  ctx.font = 'bold 28px Arial, sans-serif'
+  ctx.textAlign = 'left'
+  ctx.fillText('MicroLogic 2.3', 16, 36)
+  // trip curve sketch
+  ctx.strokeStyle = '#c8ccd2'
+  ctx.lineWidth = 2
+  ctx.beginPath()
+  ctx.moveTo(w * 0.55, h * 0.85)
+  ctx.lineTo(w * 0.55, h * 0.35)
+  ctx.lineTo(w * 0.72, h * 0.35)
+  ctx.lineTo(w * 0.88, h * 0.55)
+  ctx.stroke()
+  ctx.font = '12px Arial, sans-serif'
+  ctx.fillText('Ir   tr   Isd', 16, h - 18)
+}, 512, 160)
+
+const texLine = canvasTex((ctx, w, h) => {
+  ctx.clearRect(0, 0, w, h)
+  ctx.fillStyle = '#ffffff'
+  ctx.font = 'bold 48px Arial, sans-serif'
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  ctx.fillText('LINE', w / 2, h / 2)
+}, 128, 48)
+
+const texLoad = canvasTex((ctx, w, h) => {
+  ctx.clearRect(0, 0, w, h)
+  ctx.fillStyle = '#ffffff'
+  ctx.font = 'bold 48px Arial, sans-serif'
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  ctx.fillText('LOAD', w / 2, h / 2)
+}, 128, 48)
+
+const texTerm = (n) => canvasTex((ctx, w, h) => {
+  ctx.clearRect(0, 0, w, h)
+  ctx.fillStyle = '#ffffff'
+  ctx.font = 'bold 64px Arial, sans-serif'
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  ctx.fillText(String(n), w / 2, h / 2 + 4)
+}, 64, 64)
+
+/**
+ * Procedural ComPacT NSX630HB2 MCCB.
+ * Origin: bottom-face center. +Y up, +Z front.
+ * Single-view reconstruction — sides/back inferred.
+ */
+function createCompacNsx630Model() {
+  const root = new THREE.Group()
+  root.name = 'compac-nsx630hb2'
+
+  // ── macro: main shell ──
+  const body = box(W, H * 0.88, D * 0.92, shellMat, 'body-shell')
+  body.position.set(0, H * 0.50, -D * 0.02)
+  root.add(body)
+
+  // side cheek bevels (meso — read as molded plastic steps)
+  for (const sx of [-1, 1]) {
+    const cheek = box(W * 0.04, H * 0.70, D * 0.78, shellDarkMat, sx < 0 ? 'cheek-L' : 'cheek-R')
+    cheek.position.set(sx * W * 0.48, H * 0.48, -D * 0.04)
+    root.add(cheek)
+  }
+
+  // rear plate
+  const rear = box(W * 0.98, H * 0.86, D * 0.08, shellDarkMat, 'rear-plate')
+  rear.position.set(0, H * 0.48, -D * 0.48)
+  root.add(rear)
+
+  // ── top LINE terminal bank (deep frontal recesses like reference) ──
+  const topBank = new THREE.Group()
+  topBank.name = 'line-terminals'
+  topBank.position.set(0, H * 0.935, 0)
+
+  const topHood = box(W * 0.98, H * 0.095, D * 0.72, softBlackMat, 'line-hood')
+  topHood.position.set(0, 0, -D * 0.10)
+  topBank.add(topHood)
+
+  // front terminal face plate
+  const topFace = box(W * 0.98, H * 0.09, D * 0.06, softBlackMat, 'line-face')
+  topFace.position.set(0, 0, D * 0.28)
+  topBank.add(topFace)
+
+  const topNums = [1, 3, 5]
+  for (let i = 0; i < 3; i++) {
+    const x = (i - 1) * W * 0.30
+    // deep recessed well opening toward +Z
+    const well = box(W * 0.24, H * 0.075, D * 0.48, blackMat, `line-well-${topNums[i]}`)
+    well.position.set(x, H * 0.005, D * 0.08)
+    topBank.add(well)
+    // copper-ish bus stub deeper in well
+    const bus = box(W * 0.11, H * 0.028, D * 0.30, metalMat, `line-bus-${topNums[i]}`)
+    bus.position.set(x, H * 0.02, -D * 0.02)
+    topBank.add(bus)
+    // terminal number on front lip
+    const num = labelPlane(W * 0.055, W * 0.055, texTerm(topNums[i]), `line-num-${topNums[i]}`)
+    num.position.set(x, H * 0.01, D * 0.32)
+    topBank.add(num)
+  }
+  const lineLbl = labelPlane(W * 0.16, H * 0.022, texLine, 'line-label')
+  lineLbl.position.set(W * 0.38, H * 0.03, D * 0.32)
+  topBank.add(lineLbl)
+  root.add(topBank)
+
+  // ── bottom LOAD terminal bank ──
+  const botBank = new THREE.Group()
+  botBank.name = 'load-terminals'
+  botBank.position.set(0, H * 0.06, 0)
+
+  const botHood = box(W * 0.96, H * 0.08, D * 0.70, softBlackMat, 'load-hood')
+  botHood.position.set(0, 0, D * 0.02)
+  botBank.add(botHood)
+
+  const botNums = [2, 4, 6]
+  for (let i = 0; i < 3; i++) {
+    const x = (i - 1) * W * 0.30
+    const well = box(W * 0.22, H * 0.055, D * 0.36, blackMat, `load-well-${botNums[i]}`)
+    well.position.set(x, -H * 0.01, D * 0.18)
+    botBank.add(well)
+    const bus = box(W * 0.10, H * 0.02, D * 0.24, metalMat, `load-bus-${botNums[i]}`)
+    bus.position.set(x, H * 0.01, D * 0.14)
+    botBank.add(bus)
+    const num = labelPlane(W * 0.055, W * 0.055, texTerm(botNums[i]), `load-num-${botNums[i]}`)
+    num.position.set(x, H * 0.03, D * 0.36)
+    botBank.add(num)
+  }
+  const loadLbl = labelPlane(W * 0.18, H * 0.022, texLoad, 'load-label')
+  loadLbl.position.set(W * 0.36, H * 0.025, D * 0.40)
+  botBank.add(loadLbl)
+  root.add(botBank)
+
+  // ── front recess frame (dark inset around green + micro) ──
+  const frontFaceZ = D * 0.44
+  const recess = box(W * 0.88, H * 0.55, D * 0.05, shellDarkMat, 'front-recess')
+  recess.position.set(0, H * 0.50, frontFaceZ - D * 0.05)
+  root.add(recess)
+
+  // dark surround that frames the green (reference: green sits in a pocket)
+  const pocket = box(W * 0.82, H * 0.34, D * 0.03, blackMat, 'green-pocket')
+  pocket.position.set(-W * 0.02, H * 0.58, frontFaceZ - D * 0.02)
+  root.add(pocket)
+
+  // ── green faceplate assembly (identity-defining) ──
+  const face = new THREE.Group()
+  face.name = 'green-faceplate'
+  face.position.set(-W * 0.04, H * 0.58, frontFaceZ)
+
+  // T-shaped green: wide header + narrower toggle channel
+  const greenWide = box(W * 0.58, H * 0.26, D * 0.04, greenMat, 'green-plate')
+  greenWide.position.set(0, H * 0.02, 0)
+  face.add(greenWide)
+
+  const greenChannel = box(W * 0.26, H * 0.20, D * 0.045, greenDeepMat, 'green-channel')
+  greenChannel.position.set(0, -H * 0.07, D * 0.004)
+  face.add(greenChannel)
+
+  // header brand strip
+  const header = labelPlane(W * 0.54, H * 0.04, texGreenHeader, 'brand-header')
+  header.position.set(0, H * 0.12, D * 0.022)
+  face.add(header)
+
+  // OFF window above handle
+  const offWin = box(W * 0.18, H * 0.032, D * 0.01, greenDeepMat, 'off-window')
+  offWin.position.set(0, H * 0.035, D * 0.024)
+  face.add(offWin)
+  const offLbl = labelPlane(W * 0.14, H * 0.025, texOff, 'off-label')
+  offLbl.position.set(0, H * 0.035, D * 0.03)
+  face.add(offLbl)
+
+  // I / O symbol strips
+  for (const sx of [-1, 1]) {
+    const io = labelPlane(W * 0.032, H * 0.12, texIO, sx < 0 ? 'io-L' : 'io-R')
+    io.position.set(sx * W * 0.16, -H * 0.05, D * 0.025)
+    face.add(io)
+  }
+
+  // toggle handle — OFF = down / protruding
+  const handlePivot = new THREE.Group()
+  handlePivot.name = 'handle-pivot'
+  handlePivot.position.set(0, -H * 0.05, D * 0.015)
+  handlePivot.rotation.x = 0.62
+
+  const handleBase = box(W * 0.15, H * 0.045, D * 0.055, blackMat, 'handle-base')
+  handleBase.position.set(0, 0, D * 0.025)
+  handlePivot.add(handleBase)
+
+  const handleLever = box(W * 0.13, H * 0.11, D * 0.05, blackMat, 'handle-lever')
+  handleLever.position.set(0, -H * 0.055, D * 0.045)
+  handlePivot.add(handleLever)
+
+  for (let i = 0; i < 3; i++) {
+    const ridge = box(W * 0.11, H * 0.007, D * 0.007, softBlackMat, `handle-ridge-${i}`)
+    ridge.position.set(0, -H * 0.025 - i * H * 0.025, D * 0.072)
+    handlePivot.add(ridge)
+  }
+  face.add(handlePivot)
+  root.add(face)
+
+  // rating sticker flush on front, right of green (not a side fin)
+  const silver = box(W * 0.20, H * 0.17, D * 0.008, new THREE.MeshStandardMaterial({
+    color: 0xc4c8d0, roughness: 0.42, metalness: 0.5
+  }), 'rating-plate')
+  silver.position.set(W * 0.36, H * 0.58, frontFaceZ - D * 0.005)
+  root.add(silver)
+  const rating = labelPlane(W * 0.18, H * 0.15, texRating, 'rating-sticker')
+  rating.position.set(W * 0.36, H * 0.58, frontFaceZ + D * 0.002)
+  root.add(rating)
+
+  // orange trip button below green, left
+  const trip = box(W * 0.042, H * 0.026, D * 0.018, orangeMat, 'trip-button')
+  trip.position.set(-W * 0.26, H * 0.405, frontFaceZ + D * 0.008)
+  root.add(trip)
+  const tripLbl = canvasTex((ctx, w, h) => {
+    ctx.clearRect(0, 0, w, h)
+    ctx.fillStyle = '#E87722'
+    ctx.fillRect(0, 0, w, h)
+    ctx.fillStyle = '#111'
+    ctx.font = 'bold 28px Arial, sans-serif'
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+    ctx.fillText('trip', w / 2, h / 2 + 2)
+  }, 96, 48)
+  const tripText = labelPlane(W * 0.048, H * 0.016, tripLbl, 'trip-label')
+  tripText.position.set(-W * 0.26, H * 0.405, frontFaceZ + D * 0.02)
+  root.add(tripText)
+
+  // ── MicroLogic 2.3 bay ──
+  const micro = new THREE.Group()
+  micro.name = 'micrologic-bay'
+  micro.position.set(0, H * 0.26, frontFaceZ)
+
+  const bayBack = box(W * 0.78, H * 0.16, D * 0.04, panelInnerMat, 'micro-bay')
+  bayBack.position.set(0, 0, -D * 0.01)
+  micro.add(bayBack)
+
+  // rotary dials Ir / tr / Isd
+  for (let i = 0; i < 3; i++) {
+    const dial = new THREE.Mesh(
+      new THREE.CylinderGeometry(W * 0.028, W * 0.028, D * 0.02, 24),
+      dialWhiteMat
+    )
+    dial.rotation.x = Math.PI / 2
+    dial.position.set(-W * 0.22 + i * W * 0.12, H * 0.01, D * 0.01)
+    dial.name = `dial-${i}`
+    mark(dial)
+    micro.add(dial)
+    const tick = box(W * 0.006, W * 0.018, D * 0.004, blackMat, `dial-tick-${i}`)
+    tick.position.set(-W * 0.22 + i * W * 0.12, H * 0.01 + W * 0.01, D * 0.022)
+    micro.add(tick)
+  }
+
+  // LED
+  const led = new THREE.Mesh(
+    new THREE.CircleGeometry(W * 0.008, 16),
+    new THREE.MeshStandardMaterial({ color: 0x22c55e, emissive: 0x116633, roughness: 0.3 })
+  )
+  led.position.set(W * 0.18, H * 0.04, D * 0.02)
+  led.name = 'status-led'
+  micro.add(led)
+
+  // smoked cover
+  const cover = box(W * 0.80, H * 0.17, D * 0.012, coverMat, 'micro-cover')
+  cover.position.set(0, 0, D * 0.03)
+  micro.add(cover)
+
+  const microLbl = labelPlane(W * 0.72, H * 0.12, texMicro, 'micro-label')
+  microLbl.position.set(0, 0, D * 0.038)
+  micro.add(microLbl)
+
+  root.add(micro)
+
+  // front lower lip under MicroLogic
+  const lip = box(W * 0.92, H * 0.04, D * 0.08, shellMat, 'front-lip')
+  lip.position.set(0, H * 0.145, D * 0.36)
+  root.add(lip)
+
+  // mounting rails hint on sides (inferred)
+  for (const sx of [-1, 1]) {
+    const rail = box(W * 0.02, H * 0.55, D * 0.04, softBlackMat, sx < 0 ? 'rail-L' : 'rail-R')
+    rail.position.set(sx * W * 0.51, H * 0.50, -D * 0.15)
+    root.add(rail)
+  }
+
+  // runtime metadata for explode / pick
+  root.userData.sculptRuntime = {
+    objectId: 'compac-nsx630hb2',
+    parts: [
+      'body-shell', 'line-terminals', 'load-terminals',
+      'green-faceplate', 'handle-pivot', 'micrologic-bay', 'trip-button'
+    ],
+    notes: 'Single frontal reference; rear/side geometry inferred.'
+  }
+
+  return root
+}
+
+/* ─── scene ─── */
+const canvas = document.getElementById('c')
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false })
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2))
+renderer.setSize(innerWidth, innerHeight)
+renderer.shadowMap.enabled = true
+renderer.shadowMap.type = THREE.PCFSoftShadowMap
+renderer.toneMapping = THREE.ACESFilmicToneMapping
+renderer.toneMappingExposure = 1.05
+renderer.outputColorSpace = THREE.SRGBColorSpace
+
+const scene = new THREE.Scene()
+scene.background = new THREE.Color(0x1a1c20)
+
+const pmrem = new THREE.PMREMGenerator(renderer)
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture
+
+const camera = new THREE.PerspectiveCamera(35, innerWidth / innerHeight, 0.01, 20)
+// match reference three-quarter: slightly above / right of front
+camera.position.set(0.22, 0.20, 0.48)
+
+const controls = new OrbitControls(camera, canvas)
+controls.target.set(0, H * 0.48, 0.02)
+controls.enableDamping = true
+controls.minDistance = 0.18
+controls.maxDistance = 1.2
+controls.update()
+
+const hemi = new THREE.HemisphereLight(0xdde4f0, 0x2a2c32, 0.55)
+scene.add(hemi)
+
+const key = new THREE.DirectionalLight(0xffffff, 1.35)
+key.position.set(0.45, 0.7, 0.55)
+key.castShadow = true
+key.shadow.mapSize.set(2048, 2048)
+key.shadow.camera.near = 0.1
+key.shadow.camera.far = 3
+key.shadow.camera.left = -0.4
+key.shadow.camera.right = 0.4
+key.shadow.camera.top = 0.4
+key.shadow.camera.bottom = -0.4
+scene.add(key)
+
+const fill = new THREE.DirectionalLight(0xb0c4de, 0.35)
+fill.position.set(-0.5, 0.3, 0.2)
+scene.add(fill)
+
+const rim = new THREE.DirectionalLight(0xffffff, 0.25)
+rim.position.set(0.1, 0.4, -0.6)
+scene.add(rim)
+
+// ground shadow catcher
+const ground = new THREE.Mesh(
+  new THREE.CircleGeometry(0.45, 64),
+  new THREE.ShadowMaterial({ opacity: 0.35 })
+)
+ground.rotation.x = -Math.PI / 2
+ground.position.y = 0
+ground.receiveShadow = true
+scene.add(ground)
+
+const model = createCompacNsx630Model()
+scene.add(model)
+
+addEventListener('resize', () => {
+  camera.aspect = innerWidth / innerHeight
+  camera.updateProjectionMatrix()
+  renderer.setSize(innerWidth, innerHeight)
+})
+
+function frame() {
+  controls.update()
+  renderer.render(scene, camera)
+  requestAnimationFrame(frame)
+}
+frame()
+  </script>
+</body>
+</html>

@@ -335,6 +335,7 @@ type Model3DSpec =
 
 - `fixture`：2D 放置靠近墙时贴墙吸附  
 - `document` 型：3D 嵌套解析内部 nodes（路径 `parentId/childId`）
+- Host `get()` 对 document 型须**内联 `document`**（publish / 3D 主路径）；`documentUrl` 仅作可选外链，假定裸 `EditorDocumentJSON`
 
 ---
 

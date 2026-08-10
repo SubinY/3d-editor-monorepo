@@ -1,14 +1,14 @@
 /** 画墙模式：连续落点成链，写回 addWall */
 import { snapWallPoint } from '../utils/wall-snap'
 import type { PlanePoint } from '../types'
-import type { PointerInteraction, Viewport2DHost } from './types'
+import type { PointerInteraction, Viewport2DContext } from './types'
 
 /** 连续画墙 */
 export class WallInteraction implements PointerInteraction {
   chainLast: PlanePoint | null = null
   chainCursor: PlanePoint | null = null
 
-  constructor(private host: Viewport2DHost) {}
+  constructor(private host: Viewport2DContext) {}
 
   reset(): void {
     this.chainLast = null

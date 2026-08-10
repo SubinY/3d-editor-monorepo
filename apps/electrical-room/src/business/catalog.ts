@@ -2,7 +2,6 @@ import {
   SCHEMA_VERSION,
   createMemoryCatalog,
   createDefaultEnvironment,
-  catalogKey,
   MemoryCatalog
 } from '@3d-editor/editor'
 import type {
@@ -14,10 +13,6 @@ import type {
   EditorNodeJSON
 } from '@3d-editor/editor'
 import * as api from './api'
-
-// ---------------------------------------------------------------------------
-// 墙构件（fixture 型：2D 放置贴墙吸附）
-// ---------------------------------------------------------------------------
 
 export const FIXTURE_ITEMS: CatalogItem[] = [
   {
@@ -54,10 +49,6 @@ export const FIXTURE_ITEMS: CatalogItem[] = [
     model3d: { type: 'primitive', primitive: 'box', size: [0.4, 3, 0.4], color: '#8d99a6' }
   }
 ]
-
-// ---------------------------------------------------------------------------
-// 元器件（component 型，柜内放置）— 前端 seed，不入库
-// ---------------------------------------------------------------------------
 
 export const COMPONENT_ITEMS: CatalogItem[] = [
   {
@@ -130,7 +121,6 @@ export const COMPONENT_ITEMS: CatalogItem[] = [
 
 export const DEFAULT_CABINET_BOUNDS = { width: 0.8, depth: 0.6, height: 2 }
 export const DEFAULT_SCENE_BOUNDS = { width: 20, depth: 15, height: 3 }
-
 export const INITIAL_CABINET_VERSION = '1.0.0'
 
 export function cabinetCatalogId(documentId: string): string {
@@ -184,10 +174,10 @@ export function cabinetDocument(
   }
 }
 
-/** 把 ContainerDocument 做成 scene 侧可放置的 document 型 Catalog 条目 */
+/** ContainerDocument → scene 可放置的 document 型条目 */
 export function cabinetItemFromDocument(
   json: EditorDocumentJSON,
-  version: string,
+  version: string = INITIAL_CABINET_VERSION,
   options?: { thumb?: string }
 ): CatalogItem {
   return {
@@ -213,6 +203,46 @@ export function cabinetItemFromDocument(
   }
 }
 
+function solidCabinetItem(cabinetId: string, name: string): CatalogItem {
+  const { width, depth, height } = DEFAULT_CABINET_BOUNDS
+  return {
+    id: cabinetCatalogId(cabinetId),
+    version: INITIAL_CABINET_VERSION,
+    name,
+    kind: 'cabinet',
+    category: 'equipment',
+    placeableIn: ['scene'],
+    footprint: { width, depth, height },
+    thumb: '#3f7fbf',
+    model3d: {
+      type: 'primitive',
+      primitive: 'box',
+      size: [width, height, depth],
+      color: '#31424f'
+    },
+    metadata: { id: cabinetId }
+  }
+}
+
+function fallbackDeviceItem(id: string, name?: string): CatalogItem {
+  return {
+    id,
+    version: INITIAL_CABINET_VERSION,
+    name: name || id,
+    kind: 'component',
+    category: 'component',
+    placeableIn: ['container'],
+    footprint: { width: 0.1, depth: 0.1, height: 0.1 },
+    thumb: '#95a5a6',
+    model3d: {
+      type: 'primitive',
+      primitive: 'box',
+      size: [0.1, 0.1, 0.1],
+      color: '#95a5a6'
+    }
+  }
+}
+
 export function builtinCabinetDocuments(): EditorDocumentJSON[] {
   const power = cabinetDocument('builtin-power', '配电柜（内置）', [
     componentNode('brk-1', 'comp-breaker', '主断路器', -0.25, 1.4),
@@ -232,90 +262,97 @@ export function builtinCabinetDocuments(): EditorDocumentJSON[] {
   return [power, control]
 }
 
-/** seed 元器件 + fixture + API 柜资产（latestOnly 控制 list 是否只出最新柜） */
-export class HostCatalog implements CatalogProvider {
-  private seed: MemoryCatalog
-  private remoteCache = new Map<string, CatalogItem>()
-  private latestOnly: boolean
+const layoutCache = new Map<string, EditorDocumentJSON | null>()
+const layoutInflight = new Map<string, Promise<EditorDocumentJSON | null>>()
 
-  constructor(options?: { latestOnly?: boolean }) {
-    this.latestOnly = options?.latestOnly ?? true
-    this.seed = createMemoryCatalog([...COMPONENT_ITEMS, ...FIXTURE_ITEMS])
-  }
-
-  private cacheItem(item: CatalogItem): void {
-    this.remoteCache.set(catalogKey(item.id, item.version), item)
-  }
-
-  async warmup(): Promise<void> {
-    const remote = await api.listCatalog({
-      placeableIn: undefined,
-      latestOnly: false
+async function loadContainerLayout(cabinetId: string): Promise<EditorDocumentJSON | null> {
+  if (layoutCache.has(cabinetId)) return layoutCache.get(cabinetId)!
+  const pending = layoutInflight.get(cabinetId)
+  if (pending) return pending
+  const task = api
+    .getDocument('container', cabinetId)
+    .then(rec => {
+      const doc = rec?.json?.kind === 'container' ? rec.json : null
+      layoutCache.set(cabinetId, doc)
+      layoutInflight.delete(cabinetId)
+      return doc
     })
-    this.remoteCache.clear()
-    for (const item of remote) this.cacheItem(item)
+    .catch(() => {
+      layoutCache.set(cabinetId, null)
+      layoutInflight.delete(cabinetId)
+      return null
+    })
+  layoutInflight.set(cabinetId, task)
+  return task
+}
+
+export function primeLayoutCache(docs: Record<string, EditorDocumentJSON | null | undefined>): void {
+  for (const [id, doc] of Object.entries(docs)) {
+    if (doc?.kind === 'container') layoutCache.set(id, doc)
+  }
+}
+
+/**
+ * Demo Catalog：list = placeable；get = 按需拉柜 layout 并内联 document。
+ */
+export class DemoCatalog implements CatalogProvider {
+  private placeable: MemoryCatalog
+  private kind: DocumentKind
+
+  constructor(options: { kind: DocumentKind; placeables: CatalogItem[] }) {
+    this.kind = options.kind
+    const seed =
+      options.kind === 'scene'
+        ? [...FIXTURE_ITEMS, ...options.placeables]
+        : [...COMPONENT_ITEMS, ...options.placeables]
+    this.placeable = createMemoryCatalog(seed)
   }
 
   async list(query?: CatalogQuery): Promise<CatalogItem[]> {
-    const seedItems = await this.seed.list(query)
-    let remote = Array.from(this.remoteCache.values())
-    if (this.latestOnly) {
-      const latest = new Map<string, CatalogItem>()
-      for (const item of remote) {
-        const prev = latest.get(item.id)
-        if (!prev || compareVer(item.version, prev.version) > 0) latest.set(item.id, item)
-      }
-      remote = Array.from(latest.values())
-    }
-    if (query?.placeableIn) {
-      remote = remote.filter(i => i.placeableIn.includes(query.placeableIn!))
-    }
-    if (query?.kind) remote = remote.filter(i => i.kind === query.kind)
-    if (query?.category) remote = remote.filter(i => i.category === query.category)
-    if (query?.tag) remote = remote.filter(i => i.tags?.includes(query.tag!))
-    if (query?.text) {
-      const text = query.text.toLowerCase()
-      remote = remote.filter(i => i.name.toLowerCase().includes(text))
-    }
-    return [...seedItems, ...remote]
+    return this.placeable.list(query)
   }
 
   async get(id: string, version?: string): Promise<CatalogItem | undefined> {
-    const fromSeed = await this.seed.get(id, version)
-    if (fromSeed) return fromSeed
-
-    if (version) {
-      const cached = this.remoteCache.get(catalogKey(id, version))
-      if (cached) return cached
-      const fetched = await api.getCatalogVersion(id, version)
-      if (fetched) this.cacheItem(fetched)
-      return fetched
+    if (id.startsWith('cabinet-')) {
+      const cabinetId = id.slice('cabinet-'.length)
+      if (!cabinetId) return undefined
+      const doc = await loadContainerLayout(cabinetId)
+      if (doc) return cabinetItemFromDocument(doc, version || INITIAL_CABINET_VERSION)
+      const fromList = await this.placeable.get(id, version)
+      if (fromList) return fromList
+      return solidCabinetItem(cabinetId, cabinetId)
     }
 
-    const latest = await api.getCatalogLatest(id)
-    if (latest) this.cacheItem(latest)
-    return latest
+    const fromList = await this.placeable.get(id, version)
+    if (fromList) return fromList
+
+    if (id.startsWith('device-') || id.startsWith('comp-')) {
+      return fallbackDeviceItem(id)
+    }
+    return undefined
   }
 }
 
-function compareVer(a: string, b: string): number {
-  const pa = a.split('.').map(Number)
-  const pb = b.split('.').map(Number)
-  for (let i = 0; i < 3; i++) {
-    if ((pa[i] ?? 0) > (pb[i] ?? 0)) return 1
-    if ((pa[i] ?? 0) < (pb[i] ?? 0)) return -1
+export function createDemoCatalog(
+  kind: DocumentKind,
+  placeables: CatalogItem[]
+): DemoCatalog {
+  return new DemoCatalog({ kind, placeables })
+}
+
+/** 预览：用 scene 文档引用的柜 layout 做 get 解析 */
+export async function createPreviewCatalog(): Promise<DemoCatalog> {
+  const placeables: CatalogItem[] = []
+  try {
+    const containers = await api.listContainers()
+    for (const rec of containers) {
+      if (rec.json.kind === 'container') {
+        placeables.push(cabinetItemFromDocument(rec.json))
+        layoutCache.set(rec.json.id, rec.json)
+      }
+    }
+  } catch {
+    /* empty */
   }
-  return 0
-}
-
-export async function createEditorCatalog(kind: DocumentKind): Promise<HostCatalog> {
-  const catalog = new HostCatalog({ latestOnly: kind === 'scene' })
-  await catalog.warmup()
-  return catalog
-}
-
-export async function createPreviewCatalog(): Promise<HostCatalog> {
-  const catalog = new HostCatalog({ latestOnly: false })
-  await catalog.warmup()
-  return catalog
+  return createDemoCatalog('scene', placeables)
 }

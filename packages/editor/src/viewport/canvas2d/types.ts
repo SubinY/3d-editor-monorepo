@@ -61,6 +61,11 @@ export interface Viewport2DOptions {
   theme?: Partial<Theme2D>
   /** 会话级节点对齐吸附；画墙端点吸附不受此开关影响 */
   snapEnabled?: boolean
+  /**
+   * 是否在 2D 画布绘制节点 name（放大后）。
+   * 默认 false，避免密集布局时标签重叠占位。
+   */
+  showNodeNames?: boolean
   onDenied?: (reason: string) => void
   onPlaceResult?: (result: PlaceResult) => void
   onWallSelect?: (wall: WallJSON) => void

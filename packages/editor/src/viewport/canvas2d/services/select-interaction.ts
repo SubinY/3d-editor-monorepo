@@ -1,13 +1,19 @@
 /** 选择模式：点选、拖移、旋转手柄、墙身/端点拖拽，写回 doc.commands */
-import type { EditorNodeJSON } from '../../../document/types'
+import type { EditorNodeJSON, TransformJSON } from '../../../document/types'
+import { cloneTransform } from '../../../document/types'
 import type { AlignGuide } from '../utils/align-guides'
 import { snapWithAlignGuides } from '../utils/align-guides'
-import { computeNodeLayout } from '../utils/node-layout'
+import {
+  computeNodeLayout,
+  displayAngleToYaw,
+  planeHandleAngle,
+  yawToDisplayAngle,
+} from '../utils/node-layout'
 import { hitTestNode, hitTestRotateHandle } from '../utils/hit-test'
 import type { WallDragMode, WallDragPatch } from '../utils/wall-snap'
 import { applyWallDrag, hitWallDragTarget } from '../utils/wall-snap'
 import type { PlanePoint } from '../types'
-import type { PointerInteraction, Viewport2DHost } from './types'
+import type { PointerInteraction, Viewport2DContext } from './types'
 
 const SOURCE = 'viewport2d'
 
@@ -22,11 +28,14 @@ export class SelectInteraction implements PointerInteraction {
 
   rotateNodeId: string | null = null
   rotateCenter: PlanePoint | null = null
+  /** 与手柄 φ 同约定：atan2(du, dv)；存的是显示角空间下的起始指针角 */
   rotateStartPointerAngle = 0
   rotateBaseYaw = 0
   rotateGhostYaw = 0
   rotateMoved = false
   rotateColliding = false
+  /** pointerdown 时的完整 transform，供松手写一条撤销 */
+  rotateBeforeTransform: TransformJSON | null = null
 
   dragWallId: string | null = null
   wallDragMode: WallDragMode = 'body'
@@ -34,7 +43,7 @@ export class SelectInteraction implements PointerInteraction {
   wallDragPatches: WallDragPatch[] = []
   wallDragMoved = false
 
-  constructor(private host: Viewport2DHost) {}
+  constructor(private host: Viewport2DContext) { }
 
   reset(): void {
     this.dragNodeId = null
@@ -46,6 +55,7 @@ export class SelectInteraction implements PointerInteraction {
     this.rotateCenter = null
     this.rotateMoved = false
     this.rotateColliding = false
+    this.rotateBeforeTransform = null
     this.dragWallId = null
     this.wallDragMode = 'body'
     this.wallDragOrigin = null
@@ -66,7 +76,11 @@ export class SelectInteraction implements PointerInteraction {
         this.rotateCenter = layout.center
         this.rotateBaseYaw = layout.yaw
         this.rotateGhostYaw = layout.yaw
-        this.rotateStartPointerAngle = Math.atan2(plane.v - layout.center.v, plane.u - layout.center.u)
+        this.rotateStartPointerAngle = planeHandleAngle(
+          plane.u - layout.center.u,
+          plane.v - layout.center.v,
+        )
+        this.rotateBeforeTransform = cloneTransform(selected.transform)
         this.rotateMoved = false
         this.rotateColliding = false
         this.host.requestRender()
@@ -125,9 +139,14 @@ export class SelectInteraction implements PointerInteraction {
 
     if (this.rotateNodeId && this.rotateCenter) {
       this.rotateMoved = true
-      const pointerAngle = Math.atan2(plane.v - this.rotateCenter.v, plane.u - this.rotateCenter.u)
-      const delta = pointerAngle - this.rotateStartPointerAngle
-      this.rotateGhostYaw = this.rotateBaseYaw + delta
+      const du = plane.u - this.rotateCenter.u
+      const dv = plane.v - this.rotateCenter.v
+      /** 与手柄 / 起始角同一约定 atan2(du,dv)；在显示角空间累加后再映回 document yaw */
+      const pointerDisplay = planeHandleAngle(du, dv)
+      const deltaDisplay = pointerDisplay - this.rotateStartPointerAngle
+      const nextDisplay =
+        yawToDisplayAngle(this.rotateBaseYaw, this.host.isElevation) + deltaDisplay
+      this.rotateGhostYaw = displayAngleToYaw(nextDisplay, this.host.isElevation)
       const node = this.host.doc.getNode(this.rotateNodeId)
       if (node) {
         const rotation = this.host.yawToRotation(this.rotateGhostYaw, node.transform.rotation)

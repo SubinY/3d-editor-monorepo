@@ -13,7 +13,7 @@ import * as api from './api'
 import { createConditionEvent, createPointBinding } from './node-bindings'
 
 /**
- * 示例场景：写入 API（文档 + 柜 Catalog），返回 scene JSON。
+ * 示例场景：只写分命名空间 documents（柜 container + 室 scene），不双写 catalog。
  */
 export async function createDemoSceneJSON(): Promise<EditorDocumentJSON> {
   const docs = builtinCabinetDocuments()
@@ -23,13 +23,9 @@ export async function createDemoSceneJSON(): Promise<EditorDocumentJSON> {
   for (let i = 0; i < docs.length; i++) {
     const docJson = docs[i]
     await api.saveDocument(docJson)
-    const item = cabinetItemFromDocument(docJson, INITIAL_CABINET_VERSION, { thumb: thumbs[i] })
-    try {
-      await api.postCatalogItem(item)
-    } catch {
-      await api.putCatalogItem(item)
-    }
-    cabinets.push(item)
+    cabinets.push(
+      cabinetItemFromDocument(docJson, INITIAL_CABINET_VERSION, { thumb: thumbs[i] })
+    )
   }
 
   const editor = await createEditor({

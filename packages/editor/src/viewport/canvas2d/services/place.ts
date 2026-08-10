@@ -4,7 +4,7 @@ import type { PlaceResult } from '../../../document/EditorDocument'
 import { resolveFixturePose } from '../utils/wall-snap'
 import type { PlanePoint } from '../types'
 import { CATALOG_ITEM_MIME } from '../types'
-import type { Viewport2DHost } from './types'
+import type { Viewport2DContext } from './types'
 
 const SOURCE = 'viewport2d'
 
@@ -21,7 +21,7 @@ export class PlaceService {
   dropGhost: DropGhost | null = null
 
   constructor(
-    private host: Viewport2DHost,
+    private host: Viewport2DContext,
     private onPlaceResult?: (result: PlaceResult) => void
   ) {}
 
@@ -41,7 +41,7 @@ export class PlaceService {
   placeItemAt(item: CatalogItem, clientX: number, clientY: number): PlaceResult {
     const plane = this.host.clientToPlane(clientX, clientY)
     const placed = this.resolveDropPose(item, plane.u, plane.v)
-    const position = this.host.positionFromPlane(placed.u, placed.v)
+    const position = this.host.positionFromPlane(placed.u, placed.v, undefined, item)
     const rotation: [number, number, number] = this.host.isElevation
       ? [0, 0, placed.yaw]
       : [0, placed.yaw, 0]
@@ -60,7 +60,12 @@ export class PlaceService {
     if (!this.dropGhost) return
     const plane = clientToPlane(event.clientX, event.clientY)
     const pose = this.resolveDropPose(this.dropGhost.item, plane.u, plane.v)
-    const position = this.host.positionFromPlane(pose.u, pose.v)
+    const position = this.host.positionFromPlane(
+      pose.u,
+      pose.v,
+      undefined,
+      this.dropGhost.item,
+    )
     const rotation: [number, number, number] = this.host.isElevation
       ? [0, 0, pose.yaw]
       : [0, pose.yaw, 0]

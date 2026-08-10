@@ -123,8 +123,8 @@ onMounted(async () => {
   const id = route.params.id as string | undefined
   sourceLabel.value = '已保存草稿 + 活 Catalog'
   const catalog = await createPreviewCatalog()
-  const rec = id ? await api.getDocument(id) : undefined
-  const list = id ? [] : await api.listDocuments('scene')
+  const rec = id ? await api.getDocument('scene', id) : undefined
+  const list = id ? [] : await api.listScenes()
   const json = rec?.json ?? list[0]?.json
   if (!json) {
     router.replace('/manage/rooms')

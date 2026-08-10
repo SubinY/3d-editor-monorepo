@@ -33,6 +33,7 @@ export class EditorSessionImpl implements EditorSession {
   private catalog?: CatalogProvider
   private onDenied?: (reason: string) => void
   private viewport3dOptions?: CreateEditorOptions['viewport3d']
+  private viewport2dOptions?: CreateEditorOptions['viewport2d']
   private proceduralResolve?: ProceduralModelResolver
   private disposed = false
 
@@ -46,6 +47,7 @@ export class EditorSessionImpl implements EditorSession {
     this.catalog = options.catalog
     this.onDenied = options.onDenied
     this.viewport3dOptions = options.viewport3d
+    this.viewport2dOptions = options.viewport2d
     this.proceduralResolve = options.procedural?.resolve
 
     const interaction = options.interaction
@@ -80,7 +82,8 @@ export class EditorSessionImpl implements EditorSession {
       document: this.document,
       catalog: this.catalog,
       onDenied: this.onDenied,
-      snapEnabled: this.snapEnabled
+      snapEnabled: this.snapEnabled,
+      showNodeNames: this.viewport2dOptions?.showNodeNames
     }
     this.viewport2d = new Viewport2D(el, options)
     return this.viewport2d
@@ -99,7 +102,6 @@ export class EditorSessionImpl implements EditorSession {
       catalog: this.catalog,
       readonly: this.viewport3dOptions?.readonly,
       onInteraction: this.viewport3dOptions?.onInteraction,
-      onNodeClick: this.viewport3dOptions?.onNodeClick,
       transformModes: this.transformModes,
       transformMode: this.transformMode,
       snapEnabled: this.snapEnabled,

@@ -6,10 +6,14 @@ import { Camera2D } from './services/camera'
 import { paintScene } from './services/paint'
 import { PlaceService } from './services/place'
 import { SelectInteraction } from './services/select-interaction'
-import type { Viewport2DHost } from './services/types'
+import type { Viewport2DContext } from './services/types'
 import { WallInteraction } from './services/wall-interaction'
 import type { Theme2D, Tool2D, Viewport2DOptions } from './types'
 import { DEFAULT_THEME } from './types'
+import {
+  defaultContainerBackZ,
+  defaultSceneGroundY,
+} from './utils/place-defaults'
 
 /**
  * 2D 编辑视图门面：装配 camera / interactions / place / paint，按 tool 路由指针事件。
@@ -39,6 +43,7 @@ export class Viewport2D {
   private unsubscribers: Array<() => void> = []
   private raf = 0
   private showRulers = false
+  private showNodeNames: boolean
   private rulerCursorSx: number | undefined
   private rulerCursorSy: number | undefined
 
@@ -51,6 +56,7 @@ export class Viewport2D {
     this.onPlaceResult = options.onPlaceResult
     this.onWallSelect = options.onWallSelect
     this.snapEnabled = options.snapEnabled ?? true
+    this.showNodeNames = options.showNodeNames ?? false
 
     this.canvas = window.document.createElement('canvas')
     this.canvas.style.width = '100%'
@@ -63,10 +69,10 @@ export class Viewport2D {
     this.ctx = ctx
 
     this.camera = new Camera2D(() => this.isElevation)
-    const host = this.createHost()
-    this.select = new SelectInteraction(host)
-    this.wall = new WallInteraction(host)
-    this.place = new PlaceService(host, this.onPlaceResult)
+    const deps = this.createContext()
+    this.select = new SelectInteraction(deps)
+    this.wall = new WallInteraction(deps)
+    this.place = new PlaceService(deps, this.onPlaceResult)
 
     this.resize()
     this.fitBounds()
@@ -96,7 +102,7 @@ export class Viewport2D {
     return this.doc.kind === 'container'
   }
 
-  private createHost(): Viewport2DHost {
+  private createContext(): Viewport2DContext {
     const self = this
     return {
       get doc() {
@@ -122,7 +128,7 @@ export class Viewport2D {
       },
       clientToPlane: (x, y) => self.camera.clientToPlane(self.canvas, x, y),
       planeFromPosition: pos => self.planeFromPosition(pos),
-      positionFromPlane: (u, v, base) => self.positionFromPlane(u, v, base),
+      positionFromPlane: (u, v, base, item) => self.positionFromPlane(u, v, base, item),
       footprintSize: item => self.footprintSize(item),
       itemFor: node => self.itemFor(node),
       nodeYaw: node => self.nodeYaw(node),
@@ -138,6 +144,16 @@ export class Viewport2D {
   setRulersVisible(visible: boolean): void {
     this.showRulers = visible
     this.requestRender()
+  }
+
+  /** 开关 2D 节点 name 标签 */
+  setShowNodeNames(visible: boolean): void {
+    this.showNodeNames = visible
+    this.requestRender()
+  }
+
+  getShowNodeNames(): boolean {
+    return this.showNodeNames
   }
 
   setTool(tool: Tool2D): void {
@@ -223,11 +239,21 @@ export class Viewport2D {
     return this.isElevation ? { u: pos[0], v: pos[1] } : { u: pos[0], v: pos[2] }
   }
 
-  private positionFromPlane(u: number, v: number, base?: TransformJSON): [number, number, number] {
+  private positionFromPlane(
+    u: number,
+    v: number,
+    base?: TransformJSON,
+    item?: CatalogItem,
+  ): [number, number, number] {
     if (this.isElevation) {
-      return [u, v, base?.position[2] ?? 0]
+      const z =
+        base?.position[2] ??
+        (item ? defaultContainerBackZ(this.doc.bounds, item) : 0)
+      return [u, v, z]
     }
-    return [u, base?.position[1] ?? 0, v]
+    const y =
+      base?.position[1] ?? (item ? defaultSceneGroundY(item) : 0)
+    return [u, y, v]
   }
 
   private planeExtents(): { spanU: number; spanV: number; centerU: number; centerV: number } {
@@ -415,7 +441,8 @@ export class Viewport2D {
         planeFromPosition: pos => this.planeFromPosition(pos),
         showRulers: this.showRulers,
         rulerCursorSx: this.rulerCursorSx,
-        rulerCursorSy: this.rulerCursorSy
+        rulerCursorSy: this.rulerCursorSy,
+        showNodeNames: this.showNodeNames
       },
       width,
       height

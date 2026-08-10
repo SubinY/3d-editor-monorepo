@@ -11,12 +11,12 @@ export interface FootprintSpec {
  * 3D 表现：
  * - gltf：外链模型（CDN 后期接入时只换 url 来源）
  * - primitive：内置几何（demo / 无资产环境可用）
- * - procedural：Host 注册的工厂（Catalog 只存 id；几何由 resolve 注入）
+ * - procedural：Host 注册工厂（id）和/或打包模块 url（ESM createModel）
  */
 export type Model3DSpec =
   | { type: 'gltf'; url: string }
   | { type: 'primitive'; primitive: 'box'; size: [number, number, number]; color?: string }
-  | { type: 'procedural'; id: string }
+  | { type: 'procedural'; id: string; url?: string }
 
 /** Catalog 中的 procedural 引用（可 JSON 序列化） */
 export interface ProceduralModelRef {

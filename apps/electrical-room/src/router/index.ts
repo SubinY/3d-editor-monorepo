@@ -18,6 +18,11 @@ export const router = createRouter({
           path: 'cabinets',
           name: 'manage-cabinets',
           component: () => import('@/views/manage/CabinetsManage.vue')
+        },
+        {
+          path: 'model-lab',
+          name: 'manage-model-lab',
+          component: () => import('@/views/manage/ModelLab.vue')
         }
       ]
     },

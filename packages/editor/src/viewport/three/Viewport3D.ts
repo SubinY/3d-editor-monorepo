@@ -15,7 +15,6 @@ import { ThreeRuntime } from './runtime/ThreeRuntime'
 import { EnvironmentService } from './services/environment'
 import { SelectionService } from './services/selection'
 import { HoverHighlight } from './services/hover-highlight'
-import { createTransformBridge } from './services/transform-bridge'
 import {
   createFloorMaterial,
   createRoomFloorMesh,
@@ -28,9 +27,10 @@ import {
   type WallMaterialHandle
 } from './helpers/wall-material'
 import { buildEnclosure } from './helpers/enclosure'
+import { instantiateProceduralModule } from './services/procedural-module-loader'
 import { findClosedWallLoops } from '../canvas2d/utils/closed-loops'
 import type { NodeInteractionHandler } from '../interaction-events'
-import { isObjectUnder } from './utils/node-path'
+import { findNodePath, isObjectUnder } from './utils/node-path'
 
 export interface Viewport3DOptions {
   document: EditorDocument
@@ -38,8 +38,6 @@ export interface Viewport3DOptions {
   /** 只读预览：无 gizmo、不写 document；交互经 onInteraction 通知 Host */
   readonly?: boolean
   onInteraction?: NodeInteractionHandler
-  /** @deprecated 请用 onInteraction；仍会作为 click 转发 */
-  onNodeClick?: (nodePath: string, node: EditorNodeJSON | undefined) => void
   transformModes?: TransformMode[]
   transformMode?: TransformMode
   snapEnabled?: boolean
@@ -78,7 +76,6 @@ export class Viewport3D {
   private catalog?: CatalogProvider
   private readonly readonly: boolean
   private onInteraction?: NodeInteractionHandler
-  private onNodeClick?: Viewport3DOptions['onNodeClick']
   private proceduralResolve?: ProceduralModelResolver
 
   private nodeRoots = new Map<string, THREE.Object3D>()
@@ -105,7 +102,6 @@ export class Viewport3D {
     this.catalog = options.catalog ?? options.document.getCatalog()
     this.readonly = options.readonly ?? false
     this.onInteraction = options.onInteraction
-    this.onNodeClick = options.onNodeClick
     this.proceduralResolve = options.proceduralResolve
 
     this.runtime = new ThreeRuntime({
@@ -149,14 +145,7 @@ export class Viewport3D {
       pathObjects: this.pathObjects,
       hoverOutline,
       hoverHighlight: this.hoverHighlight,
-      onInteraction: this.onInteraction,
-      onNodeClick: this.onNodeClick
-    })
-
-    const onTransformEnd = createTransformBridge({
-      doc: this.doc,
-      runtime: this.runtime,
-      applyTransformToObject: (object, transform) => this.applyTransformToObject(object, transform)
+      onInteraction: this.onInteraction
     })
 
     // document → 3D
@@ -184,7 +173,27 @@ export class Viewport3D {
         void this.rebuildWalls()
       }),
       this.doc.on('selection:changed', ({ ids }) => this.selection.syncGizmo(ids)),
-      this.runtime.onTransformEnd(onTransformEnd)
+      this.runtime.onTransformEnd(({ id }) => {
+        const attached = this.runtime.getAttachedObject()
+        if (!attached || attached.uuid !== id) return
+        const path = findNodePath(attached)
+        if (!path) return
+        const nodeId = path.split('/')[0]
+        const node = this.doc.getNode(nodeId)
+        if (!node) return
+        const result = this.doc.commands.transformNode(
+          nodeId,
+          {
+            position: [...attached.position.toArray()] as [number, number, number],
+            rotation: [attached.rotation.x, attached.rotation.y, attached.rotation.z],
+            scale: [...attached.scale.toArray()] as [number, number, number]
+          },
+          { source: 'viewport3d' }
+        )
+        if (!result.ok) {
+          this.applyTransformToObject(attached, node.transform)
+        }
+      })
     )
 
     const dom = this.runtime.domElement
@@ -512,6 +521,17 @@ export class Viewport3D {
       }
     }
     if (spec.type === 'procedural') {
+      if (spec.url) {
+        try {
+          return await instantiateProceduralModule(spec.url, THREE, {
+            footprint: item.footprint,
+            item
+          })
+        } catch (error) {
+          console.warn(`[viewport3d] procedural url load failed for "${spec.url}"`, error)
+          return this.buildFootprintBox(item)
+        }
+      }
       if (!this.proceduralResolve) {
         console.warn(
           `[viewport3d] procedural model "${spec.id}" but no procedural.resolve injected; fallback box`

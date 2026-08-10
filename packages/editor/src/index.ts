@@ -62,6 +62,9 @@ export type {
   Viewport3DOptions,
   FocusCameraOptions
 } from './viewport/three/Viewport3D'
+/** AI / 模型预览：按 url 加载 procedural ESM（日常 Host 走 createEditor.procedural） */
+export type { ProceduralCreateFn } from './viewport/three/services/procedural-module-loader'
+export { instantiateProceduralModule } from './viewport/three/services/procedural-module-loader'
 export type {
   InteractionEventType,
   NodeInteractionEvent,

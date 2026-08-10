@@ -4,6 +4,7 @@ import type { EditorDocument } from '../../../document/EditorDocument'
 import type { EditorNodeJSON, WallJSON } from '../../../document/types'
 import type { PlanePoint, Theme2D, Tool2D } from '../types'
 import { findClosedWallLoops } from '../utils/closed-loops'
+import { yawToDisplayAngle } from '../utils/node-layout'
 import type { Camera2D } from './camera'
 import type { DropGhost } from './place'
 import type { SelectInteraction } from './select-interaction'
@@ -27,6 +28,8 @@ export interface Paint2DContext {
   showRulers?: boolean
   rulerCursorSx?: number
   rulerCursorSy?: number
+  /** 是否绘制节点 name（放大后） */
+  showNodeNames?: boolean
 }
 
 const RULER_SIZE = 18 // 游标尺宽度（px）
@@ -298,7 +301,7 @@ function drawDropGhost(p: Paint2DContext): void {
 
   ctx.save()
   ctx.translate(sx, sy)
-  ctx.rotate(isElevation ? dropGhost.yaw : -dropGhost.yaw)
+  ctx.rotate(yawToDisplayAngle(dropGhost.yaw, isElevation))
   ctx.globalAlpha = 0.45
   ctx.fillStyle = denied ? theme.nodeDenied : color
   ctx.fillRect(-w / 2, -d / 2, w, d)
@@ -328,18 +331,19 @@ function drawNodes(p: Paint2DContext): void {
     const cv = isElevation ? plane.v + wv / 2 : plane.v
     const { sx, sy } = camera.worldToScreen(plane.u, cv)
     const rotating = node.id === select.rotateNodeId && select.rotateMoved
-    const angle = rotating
+    const yaw = rotating
       ? select.rotateGhostYaw
       : isElevation
         ? node.transform.rotation[2]
         : node.transform.rotation[1]
+    const angle = yawToDisplayAngle(yaw, isElevation)
     const selected = selection.includes(node.id)
     const denied =
       (dragging && select.dragColliding) || (rotating && select.rotateColliding)
 
     ctx.save()
     ctx.translate(sx, sy)
-    ctx.rotate(isElevation ? angle : -angle)
+    ctx.rotate(angle)
     const color = typeof item?.thumb === 'string' && item.thumb.startsWith('#') ? item.thumb : theme.node
     ctx.fillStyle = denied ? theme.nodeDenied : color
     ctx.globalAlpha = dragging || rotating ? 0.55 : 0.9
@@ -362,7 +366,7 @@ function drawNodes(p: Paint2DContext): void {
       drawRotateHandle(p, node)
     }
 
-    if (camera.scale > 14 && node.name) {
+    if (p.showNodeNames && camera.scale > 14 && node.name) {
       ctx.fillStyle = theme.label
       ctx.font = '11px sans-serif'
       ctx.textAlign = 'center'
@@ -451,7 +455,7 @@ function drawWallGuides(p: Paint2DContext, width: number, height: number): void 
 // ---------------------------------------------------------------------------
 
 function drawRulers(p: Paint2DContext, width: number, height: number): void {
-  const { ctx, camera, theme, isElevation } = p
+  const { ctx, camera, theme } = p
   const R = RULER_SIZE
 
   // ---- 尺底色 ----

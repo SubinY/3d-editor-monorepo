@@ -3,6 +3,7 @@ import type { CatalogItem } from '../../../catalog/types'
 import type { EditorNodeJSON, WallJSON } from '../../../document/types'
 import type { PlanePoint } from '../types'
 import type { NodeLayout } from './node-layout'
+import { yawToDisplayAngle } from './node-layout'
 import { nearestWall } from './wall-snap'
 
 export function hitTestRotateHandle(
@@ -33,13 +34,17 @@ export function hitTestNode(opts: {
     const plane = planeFromPosition(node.transform.position)
     const cu = plane.u
     const cv = isElevation ? plane.v + wv / 2 : plane.v
-    const angle = isElevation ? node.transform.rotation[2] : node.transform.rotation[1]
+    const angle = yawToDisplayAngle(
+      isElevation ? node.transform.rotation[2] : node.transform.rotation[1],
+      isElevation,
+    )
     const cos = Math.cos(angle)
     const sin = Math.sin(angle)
     const du = u - cu
     const dv = v - cv
-    const lu = cos * du + sin * dv
-    const lv = -sin * du + cos * dv
+    /** 与手柄 (sin φ, cos φ) / ctx.rotate(φ) 同构：local+v 朝手柄 */
+    const lu = cos * du - sin * dv
+    const lv = sin * du + cos * dv
     if (Math.abs(lu) <= wu / 2 && Math.abs(lv) <= wv / 2) return node
   }
   return undefined

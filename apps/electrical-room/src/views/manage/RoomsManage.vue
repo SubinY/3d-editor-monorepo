@@ -34,7 +34,7 @@ const tableRows = computed(() =>
 async function refresh() {
   loading.value = true
   try {
-    rows.value = await api.listDocuments('scene')
+    rows.value = await api.listScenes()
     const settings = await api.getSettings()
     homeSceneId.value = settings.homeSceneId
     const map: Record<string, number> = {}
@@ -101,7 +101,7 @@ async function remove(id: string, name: string) {
   await ElMessageBox.confirm(`删除电柜室「${name}」？相关发布包一并删除。`, '确认', {
     type: 'warning'
   })
-  await api.deleteDocument(id)
+  await api.deleteDocument('scene', id)
   ElMessage.success('已删除')
   await refresh()
 }

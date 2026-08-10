@@ -1,7 +1,6 @@
 /** 3D 拾取写 selection，并同步 gizmo 附着；识别 click / dblclick / longpress / hover */
 import type * as THREE from 'three'
 import type { EditorDocument } from '../../../document/EditorDocument'
-import type { EditorNodeJSON } from '../../../document/types'
 import type { NodeInteractionHandler } from '../../interaction-events'
 import type { ThreeRuntime } from '../runtime/ThreeRuntime'
 import { findNodePath } from '../utils/node-path'
@@ -20,8 +19,6 @@ export interface SelectionServiceOptions {
   hoverOutline: boolean
   hoverHighlight: HoverHighlight
   onInteraction?: NodeInteractionHandler
-  /** @deprecated 请用 onInteraction；仍会作为 click 转发 */
-  onNodeClick?: (nodePath: string, node: EditorNodeJSON | undefined) => void
 }
 
 /** 3D 点击拾取 → Document selection / Host 回调；selection → gizmo */
@@ -210,9 +207,6 @@ export class SelectionService {
       pointer,
       originalEvent
     })
-    if (type === 'click') {
-      this.opts.onNodeClick?.(path, node)
-    }
   }
 
   private clearLongPressTimer(): void {

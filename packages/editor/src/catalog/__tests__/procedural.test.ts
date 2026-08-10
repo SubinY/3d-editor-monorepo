@@ -73,4 +73,20 @@ describe('procedural model3d', () => {
     }
     expect(() => resolve({ id: 'comp-breaker' }, { item: breaker, THREE })).toThrow('boom')
   })
+
+  it('procedural 可带 url 字段且可 JSON 序列化', () => {
+    const item: CatalogItem = {
+      ...breaker,
+      model3d: {
+        type: 'procedural',
+        id: 'comp-breaker',
+        url: '/models/comp-breaker@1.0.0.mjs'
+      }
+    }
+    expect(JSON.parse(JSON.stringify(item.model3d))).toEqual({
+      type: 'procedural',
+      id: 'comp-breaker',
+      url: '/models/comp-breaker@1.0.0.mjs'
+    })
+  })
 })

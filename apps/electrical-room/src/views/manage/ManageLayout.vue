@@ -1,13 +1,14 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Monitor, OfficeBuilding, Box, HomeFilled, Brush } from '@element-plus/icons-vue'
+import { Monitor, OfficeBuilding, Box, HomeFilled, Brush, Cpu } from '@element-plus/icons-vue'
 
 const route = useRoute()
 const router = useRouter()
 
 const active = computed(() => {
   if (route.path.startsWith('/manage/cabinets')) return 'cabinets'
+  if (route.path.startsWith('/manage/model-lab')) return 'model-lab'
   if (route.path.startsWith('/home')) return 'home'
   return 'rooms'
 })
@@ -15,6 +16,7 @@ const active = computed(() => {
 function go(name: string) {
   if (name === 'home') router.push('/home')
   else if (name === 'cabinets') router.push('/manage/cabinets')
+  else if (name === 'model-lab') router.push('/manage/model-lab')
   else if (name === 'ux-demo') router.push('/ux-demo')
   else router.push('/manage/rooms')
 }
@@ -38,6 +40,10 @@ function go(name: string) {
         <button :class="{ active: active === 'cabinets' }" type="button" @click="go('cabinets')">
           <el-icon><Box /></el-icon>
           电柜管理
+        </button>
+        <button :class="{ active: active === 'model-lab' }" type="button" @click="go('model-lab')">
+          <el-icon><Cpu /></el-icon>
+          模型工厂
         </button>
         <button :class="{ active: active === 'home' }" type="button" @click="go('home')">
           <el-icon><HomeFilled /></el-icon>
