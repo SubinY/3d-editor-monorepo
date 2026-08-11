@@ -127,7 +127,28 @@ export class Viewport3D {
 
     this.environment = new EnvironmentService({
       runtime: this.runtime,
-      envGroup: this.envGroup
+      envGroup: this.envGroup,
+      resolveEnclosure: this.proceduralResolve
+        ? async (kind, size) => {
+            if (kind !== 'outdoorCabinet' || !this.proceduralResolve) return null
+            const item: CatalogItem = {
+              id: '__enclosure-outdoorCabinet__',
+              version: '0',
+              name: 'outdoorCabinet',
+              placeableIn: ['container'],
+              footprint: {
+                width: size.width,
+                depth: size.depth,
+                height: size.height,
+              },
+            }
+            const built = await this.proceduralResolve(
+              { id: 'outdoor-cabinet' },
+              { item, THREE }
+            )
+            return built ?? null
+          }
+        : undefined
     })
     this.applyCameraFromEnvironment()
     void this.environment.apply(this.doc.environment, this.doc.bounds)
@@ -460,8 +481,8 @@ export class Viewport3D {
   }
 
   /**
-   * 嵌套柜外壳优先级：gltf shell3d > 内层 document.enclosure > 其它 shell3d。
-   * enclosure 与资产编辑态 helpers 对齐，保证场景摆放 WYSIWYG。
+   * 嵌套柜外壳优先级：gltf shell3d > procedural shell3d > 内层 document.enclosure > 其它 shell3d。
+   * enclosure 与资产编辑态 helpers 对齐；outdoorCabinet 可走 Host procedural。
    */
   private async buildDocumentShell(
     item: CatalogItem,
@@ -471,12 +492,30 @@ export class Viewport3D {
     if (shell3d?.type === 'gltf') {
       return this.styleAsShell(await this.buildModel(shell3d, item))
     }
+    if (shell3d?.type === 'procedural') {
+      return this.styleAsShell(await this.buildModel(shell3d, item))
+    }
 
     const enclosure = json?.environment?.helpers?.enclosure
     if (enclosure && enclosure !== 'none') {
       const width = json?.bounds.width ?? item.footprint.width
       const depth = json?.bounds.depth ?? item.footprint.depth
       const height = json?.bounds.height ?? item.footprint.height ?? 2
+      if (enclosure === 'outdoorCabinet' && this.proceduralResolve) {
+        const enclosureItem: CatalogItem = {
+          ...item,
+          footprint: { width, depth, height },
+        }
+        try {
+          const built = await this.proceduralResolve(
+            { id: 'outdoor-cabinet' },
+            { item: enclosureItem, THREE }
+          )
+          if (built) return this.styleAsShell(built)
+        } catch (error) {
+          console.warn('[viewport3d] outdoorCabinet host resolve failed', error)
+        }
+      }
       const built = buildEnclosure(enclosure, width, height, depth)
       if (built) return this.styleAsShell(built)
     }
@@ -496,9 +535,9 @@ export class Viewport3D {
       if (!mesh.isMesh) return
       const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material]
       materials.forEach(mat => {
-        mat.transparent = true
-        mat.opacity = 0.68
-        mat.depthWrite = false
+        // mat.transparent = true
+        mat.opacity = 0.88
+        // mat.depthWrite = false
       })
     })
     return shell

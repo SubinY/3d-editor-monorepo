@@ -2,27 +2,27 @@
 // 推荐入口：createEditor；EditorDocumentJSON 由 Host 落库。
 
 export { createEditor } from './core/create-editor'
-export { createMemoryCatalog, MemoryCatalog } from './catalog/MemoryCatalog'
-export {
-  buildAssetPack,
-  buildPublishBundle,
-  createPackCatalog,
-  PackCatalog
-} from './catalog/publish'
+export { createMemoryCatalog } from './catalog/MemoryCatalog'
+export { buildPublishBundle, createPackCatalog } from './catalog/publish'
 export { CATALOG_ITEM_MIME } from './viewport/canvas2d/types'
+export { SCHEMA_VERSION } from './document/types'
 export {
-  SCHEMA_VERSION,
-  createDefaultTransform,
-  cloneTransform,
   createDefaultEnvironment,
-  createDefaultFloor,
   createDefaultWall,
   cloneEnvironment
-} from './document/types'
+} from './document/defaults'
 export { createEmptyDocumentJSON } from './document/serialize'
-export { isDocumentItem, catalogKey } from './catalog/types'
+export { isDocumentItem } from './catalog/types'
+/** AI / 管理页裸预览：按 url 加载 procedural ESM（日常 Host 走 createEditor.procedural） */
+export { instantiateProceduralModule } from './viewport/three/services/procedural-module-loader'
 
-export type { CreateEditorOptions, EditorSession, EditorInteractionOptions, EditorInteractionState, TransformMode } from './core/types'
+export type {
+  CreateEditorOptions,
+  EditorSession,
+  EditorInteractionOptions,
+  EditorInteractionState,
+  TransformMode
+} from './core/types'
 export type {
   DocumentKind,
   BoundsJSON,
@@ -42,7 +42,7 @@ export type {
   CameraViewType,
   VisualState
 } from './document/types'
-export type { CreateDocumentOptions, EditorDocument, PlaceResult, PlaceOptions } from './document/EditorDocument'
+export type { EditorDocument, PlaceResult, PlaceOptions } from './document/EditorDocument'
 export type {
   CatalogItem,
   CatalogCategory,
@@ -62,9 +62,7 @@ export type {
   Viewport3DOptions,
   FocusCameraOptions
 } from './viewport/three/Viewport3D'
-/** AI / 模型预览：按 url 加载 procedural ESM（日常 Host 走 createEditor.procedural） */
 export type { ProceduralCreateFn } from './viewport/three/services/procedural-module-loader'
-export { instantiateProceduralModule } from './viewport/three/services/procedural-module-loader'
 export type {
   InteractionEventType,
   NodeInteractionEvent,

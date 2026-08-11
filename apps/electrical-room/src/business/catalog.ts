@@ -1,8 +1,7 @@
 import {
   SCHEMA_VERSION,
   createMemoryCatalog,
-  createDefaultEnvironment,
-  MemoryCatalog
+  createDefaultEnvironment
 } from '@3d-editor/editor'
 import type {
   CatalogItem,
@@ -296,7 +295,7 @@ export function primeLayoutCache(docs: Record<string, EditorDocumentJSON | null 
  * Demo Catalog：list = placeable；get = 按需拉柜 layout 并内联 document。
  */
 export class DemoCatalog implements CatalogProvider {
-  private placeable: MemoryCatalog
+  private placeable: CatalogProvider
   private kind: DocumentKind
 
   constructor(options: { kind: DocumentKind; placeables: CatalogItem[] }) {

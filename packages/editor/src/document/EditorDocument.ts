@@ -10,12 +10,14 @@ import {
 import { DocumentHistory } from './history'
 import { DocumentSelection } from './selection'
 import {
-  SCHEMA_VERSION,
   cloneEnvironment,
   cloneTransform,
   createDefaultEnvironment,
   createDefaultTransform,
-  createDefaultWall,
+  createDefaultWall
+} from './defaults'
+import {
+  SCHEMA_VERSION,
   type BoundsJSON,
   type DocumentKind,
   type EditorDocumentJSON,
@@ -409,7 +411,7 @@ export class EditorDocument {
         id: createId('wall'),
         a: [...a],
         b: [...b],
-        height: options?.height ?? 3,
+        height: options?.height ?? 2,
         thickness: options?.thickness ?? 0.2
       }
       const doAdd = () => {

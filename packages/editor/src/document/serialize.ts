@@ -1,12 +1,8 @@
 import type { CatalogProvider } from '../catalog/types'
 import { createId } from '../utils/id'
 import { EditorDocument, type CreateDocumentOptions, type ValidationWarning } from './EditorDocument'
-import {
-  SCHEMA_VERSION,
-  cloneEnvironment,
-  createDefaultEnvironment,
-  type EditorDocumentJSON
-} from './types'
+import { cloneEnvironment, createDefaultEnvironment } from './defaults'
+import { SCHEMA_VERSION, type EditorDocumentJSON } from './types'
 
 export interface LoadDocumentOptions {
   catalog?: CatalogProvider

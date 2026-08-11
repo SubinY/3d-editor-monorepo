@@ -162,11 +162,11 @@ editor.document.commands.setEnvironment({
 
 ## 6. 公共导出 vs 不导出
 
-**导出（值）：** `createEditor`、`createMemoryCatalog`、`createEmptyDocumentJSON`、`SCHEMA_VERSION`、`CATALOG_ITEM_MIME`、`createDefaultEnvironment`、`cloneEnvironment`
+**导出（值）：** `createEditor`、`createMemoryCatalog`、`createEmptyDocumentJSON`、`SCHEMA_VERSION`、`CATALOG_ITEM_MIME`、`buildPublishBundle`、`createPackCatalog`、`createDefaultEnvironment` / `createDefaultWall` / `cloneEnvironment`、`isDocumentItem`、`instantiateProceduralModule`（管理页裸预览；日常走 `createEditor.procedural`）
 
-**导出（类型）：** `CreateEditorOptions`、`EditorSession`、`EditorInteractionOptions`、`EditorInteractionState`、`TransformMode`、合同类型（含 `EnvironmentJSON` / `BackgroundJSON` / `LightJSON`）、`CatalogItem`…、`ProceduralModelRef` / `ProceduralResolveContext` / `ProceduralModelResolver`、`InteractionEventType` / `NodeInteractionEvent` / `NodeInteractionHandler`、以及 `EditorDocument` / `Viewport2D` / `Viewport3D` **仅作类型标注**
+**导出（类型）：** `CreateEditorOptions`、`EditorSession`、`EditorInteractionOptions`、`EditorInteractionState`、`TransformMode`、合同类型（含 `EnvironmentJSON` / `BackgroundJSON` / `LightJSON`）、`CatalogItem`…、`ProceduralModelRef` / `ProceduralResolveContext` / `ProceduralModelResolver`、`PublishBundle`、`InteractionEventType` / `NodeInteractionEvent` / `NodeInteractionHandler`、以及 `EditorDocument` / `Viewport2D` / `Viewport3D` **仅作类型标注**
 
-**不导出：** `createDocument`、`loadDocument`、`create2DViewport`、`create3DViewport`、`ThreeRuntime`、commands/collision 实现、约束注册 API 等。积木仅供 `createEditor` 内部使用。
+**不导出：** `createDocument`、`loadDocument`、`create2DViewport`、`create3DViewport`、`ThreeRuntime`、`MemoryCatalog` / `PackCatalog` 类、`buildAssetPack`、`catalogKey`、`createDefaultTransform` / `cloneTransform` / `createDefaultFloor`、commands/collision 实现、约束注册 API 等。积木仅供 `createEditor` 内部使用；Catalog 类型标注用 `CatalogProvider`。
 
 ---
 

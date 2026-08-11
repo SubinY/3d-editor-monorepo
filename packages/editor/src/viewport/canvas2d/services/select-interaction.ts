@@ -1,6 +1,6 @@
 /** 选择模式：点选、拖移、旋转手柄、墙身/端点拖拽，写回 doc.commands */
+import { cloneTransform } from '../../../document/defaults'
 import type { EditorNodeJSON, TransformJSON } from '../../../document/types'
-import { cloneTransform } from '../../../document/types'
 import type { AlignGuide } from '../utils/align-guides'
 import { snapWithAlignGuides } from '../utils/align-guides'
 import {

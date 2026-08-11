@@ -1,12 +1,13 @@
 import { describe, expect, it } from 'vitest'
-import { createDefaultEnvironment, SCHEMA_VERSION } from '../types'
+import { createDefaultEnvironment } from '../defaults'
+import { SCHEMA_VERSION } from '../types'
 import { createEmptyDocumentJSON } from '../serialize'
 
 describe('createDefaultEnvironment', () => {
-  it('scene：网格开、无 enclosure、地面默认 bounds', () => {
+  it('scene：无网格、无 enclosure、地面默认 bounds', () => {
     const env = createDefaultEnvironment('scene', { width: 20, depth: 15, height: 3 })
     expect(env.background).toEqual({ type: 'color', value: '#0c1420' })
-    expect(env.helpers.grid).toBe(true)
+    expect(env.helpers.grid).toBe(false)
     expect(env.helpers.enclosure).toBe('none')
     expect(env.shadows.enabled).toBe(true)
     expect(env.lights.some(l => l.type === 'ambient')).toBe(true)
@@ -36,7 +37,7 @@ describe('createEmptyDocumentJSON', () => {
       bounds: { width: 10, depth: 8, height: 3 }
     })
     expect(json.schemaVersion).toBe(SCHEMA_VERSION)
-    expect(json.environment.helpers.grid).toBe(true)
+    expect(json.environment.helpers.grid).toBe(false)
     expect(json.environment.floor.coverage).toBe('bounds')
     expect(json.environment.wall.color).toBe('#233242')
     expect(json.nodes).toEqual([])

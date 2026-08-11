@@ -2,8 +2,8 @@ import { describe, expect, it } from 'vitest'
 import { createMemoryCatalog } from '../MemoryCatalog'
 import { buildAssetPack, createPackCatalog, buildPublishBundle } from '../publish'
 import type { CatalogItem } from '../types'
-import type { EditorDocumentJSON } from '../../document/types'
-import { SCHEMA_VERSION, createDefaultEnvironment } from '../../document/types'
+import { createDefaultEnvironment } from '../../document/defaults'
+import { SCHEMA_VERSION, type EditorDocumentJSON } from '../../document/types'
 
 const relay: CatalogItem = {
   id: 'comp-relay',

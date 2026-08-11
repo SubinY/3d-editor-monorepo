@@ -3,8 +3,8 @@ import * as THREE from 'three'
 import { createMemoryCatalog } from '../MemoryCatalog'
 import { buildAssetPack } from '../publish'
 import type { CatalogItem, ProceduralModelResolver } from '../types'
-import type { EditorDocumentJSON } from '../../document/types'
-import { SCHEMA_VERSION, createDefaultEnvironment } from '../../document/types'
+import { createDefaultEnvironment } from '../../document/defaults'
+import { SCHEMA_VERSION, type EditorDocumentJSON } from '../../document/types'
 
 const breaker: CatalogItem = {
   id: 'comp-breaker',

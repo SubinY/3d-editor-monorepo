@@ -3,11 +3,11 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef } from 
 import {
   CATALOG_ITEM_MIME,
   createEditor,
-  createMemoryCatalog,
-  MemoryCatalog
+  createMemoryCatalog
 } from '@3d-editor/editor'
 import type {
   CatalogItem,
+  CatalogProvider,
   EditorDocument,
   EditorNodeJSON,
   EditorSession,
@@ -35,7 +35,7 @@ const loading = ref(true)
 const toast = ref('')
 
 const catalogItems = ref<CatalogItem[]>([...UX_DEMO_CATALOG])
-const catalog: MemoryCatalog = createMemoryCatalog(UX_DEMO_CATALOG)
+const catalog: CatalogProvider = createMemoryCatalog(UX_DEMO_CATALOG)
 
 let session: EditorSession | undefined
 const doc = shallowRef<EditorDocument>()

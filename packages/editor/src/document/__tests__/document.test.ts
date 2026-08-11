@@ -196,7 +196,7 @@ describe('setEnvironment', () => {
   it('toJSON 带上 environment；缺省 fromJSON 补默认', () => {
     const doc = createDocument({ kind: 'scene', bounds: { width: 20, depth: 15, height: 3 } })
     const json = doc.toJSON()
-    expect(json.environment.helpers.grid).toBe(true)
+    expect(json.environment.helpers.grid).toBe(false)
     const bare = { ...json, environment: undefined as unknown as typeof json.environment }
     const loaded = EditorDocument.fromJSON(bare as typeof json)
     expect(loaded.environment.helpers.enclosure).toBe('none')
@@ -255,7 +255,7 @@ describe('序列化与加载', () => {
     const json = doc.toJSON()
     expect(json.schemaVersion).toBe('1.0.0')
     expect(json.unit).toBe('m')
-    expect(json.environment.helpers.grid).toBe(true)
+    expect(json.environment.helpers.grid).toBe(false)
     expect(json.environment.helpers.enclosure).toBe('none')
     expect(json.structure?.walls).toHaveLength(4)
     expect(json.nodes).toHaveLength(1)

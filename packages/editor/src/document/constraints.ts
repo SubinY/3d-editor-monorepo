@@ -1,6 +1,6 @@
 import type { CatalogItem } from '../catalog/types'
+import { cloneTransform } from './defaults'
 import type { EditorNodeJSON, TransformJSON } from './types'
-import { cloneTransform } from './types'
 import type { EditorDocument } from './EditorDocument'
 
 export type ConstraintOperation = 'place' | 'transform'

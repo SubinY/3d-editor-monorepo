@@ -9,6 +9,11 @@ const FALLBACK_BG = '#0c1420'
 export interface EnvironmentServiceOptions {
   runtime: ThreeRuntime
   envGroup: THREE.Group
+  /** Host：覆盖 enclosure 几何（如 outdoorCabinet） */
+  resolveEnclosure?: (
+    kind: NonNullable<EnvironmentJSON['helpers']['enclosure']>,
+    size: { width: number; height: number; depth: number }
+  ) => Promise<THREE.Object3D | null | undefined> | THREE.Object3D | null | undefined
 }
 
 /**
@@ -17,12 +22,14 @@ export interface EnvironmentServiceOptions {
 export class EnvironmentService {
   private runtime: ThreeRuntime
   private envGroup: THREE.Group
+  private resolveEnclosure?: EnvironmentServiceOptions['resolveEnclosure']
   private applyToken = 0
   private bgTexture: THREE.Texture | null = null
 
   constructor(options: EnvironmentServiceOptions) {
     this.runtime = options.runtime
     this.envGroup = options.envGroup
+    this.resolveEnclosure = options.resolveEnclosure
   }
 
   async apply(env: EnvironmentJSON, bounds: BoundsJSON): Promise<void> {
@@ -56,7 +63,17 @@ export class EnvironmentService {
       this.envGroup.add(grid)
     }
 
-    const enclosure = buildEnclosure(env.helpers.enclosure, width, h, depth)
+    const enclosureKind = env.helpers.enclosure
+    let enclosure: THREE.Object3D | null = null
+    if (enclosureKind && enclosureKind !== 'none') {
+      const custom = this.resolveEnclosure
+        ? await this.resolveEnclosure(enclosureKind, { width, height: h, depth })
+        : null
+      if (token !== this.applyToken) return
+      enclosure =
+        (custom as THREE.Object3D | null | undefined) ??
+        buildEnclosure(enclosureKind, width, h, depth)
+    }
     if (enclosure) this.envGroup.add(enclosure)
 
     this.markNonSelectable(this.envGroup)
