@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, shallowRef } from 'vue'
 import { ElMessage } from 'element-plus'
-import { CATALOG_ITEM_MIME, cloneEnvironment, createEditor } from '@3d-editor/editor'
+import { CATALOG_ITEM_MIME, cloneEnvironment, createEditor } from '@mh/3d-editor'
 import type {
   CatalogItem,
   CatalogProvider,
@@ -13,7 +13,7 @@ import type {
   EnvironmentJSON,
   TransformMode,
   WallJSON
-} from '@3d-editor/editor'
+} from '@mh/3d-editor'
 import WorkbenchToolbar from './workbench/WorkbenchToolbar.vue'
 import LeftPanel from './workbench/LeftPanel.vue'
 import ViewportArea from './workbench/ViewportArea.vue'

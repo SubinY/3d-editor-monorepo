@@ -2,8 +2,8 @@ import {
   createEditor,
   createEmptyDocumentJSON,
   createMemoryCatalog
-} from '@3d-editor/editor'
-import type { EditorDocumentJSON } from '@3d-editor/editor'
+} from '@mh/3d-editor'
+import type { EditorDocumentJSON } from '@mh/3d-editor'
 import {
   builtinCabinetDocuments,
   cabinetItemFromDocument,

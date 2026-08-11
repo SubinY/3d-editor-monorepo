@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { EnvironmentJSON } from '@3d-editor/editor'
+import type { EnvironmentJSON } from '@mh/3d-editor'
 
 const props = defineProps<{
   form: EnvironmentJSON

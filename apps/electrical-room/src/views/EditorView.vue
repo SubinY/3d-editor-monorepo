@@ -2,8 +2,8 @@
 import { onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { buildPublishBundle, createEmptyDocumentJSON } from '@3d-editor/editor'
-import type { CatalogProvider, DocumentKind, EditorDocumentJSON } from '@3d-editor/editor'
+import { buildPublishBundle, createEmptyDocumentJSON } from '@mh/3d-editor'
+import type { CatalogProvider, DocumentKind, EditorDocumentJSON } from '@mh/3d-editor'
 import Workbench from '@/components/Workbench.vue'
 import {
   cabinetItemFromDocument,

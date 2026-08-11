@@ -5,7 +5,7 @@ import type {
   EnvironmentJSON,
   EnvironmentWallJSON,
   FloorCoverage
-} from '@3d-editor/editor'
+} from '@mh/3d-editor'
 import { FLOOR_PRESETS, resolveFloorPreset } from '@/business/floor-presets'
 import { WALL_PRESETS, resolveWallPreset } from '@/business/wall-presets'
 

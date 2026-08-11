@@ -1,4 +1,4 @@
-import type { EditorDocument, EditorNodeJSON } from '@3d-editor/editor'
+import type { EditorDocument, EditorNodeJSON } from '@mh/3d-editor'
 import {
   DEVICE_STATUS_OPTIONS,
   isDeviceStatus,

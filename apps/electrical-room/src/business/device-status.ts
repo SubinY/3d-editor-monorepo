@@ -1,4 +1,4 @@
-import type { VisualState } from '@3d-editor/editor'
+import type { VisualState } from '@mh/3d-editor'
 
 /** Host 设备运行态（不进内核 schema） */
 export type DeviceStatus = 'normal' | 'warning' | 'fault' | 'offline'

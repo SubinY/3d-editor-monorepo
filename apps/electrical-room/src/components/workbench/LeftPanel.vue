@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { Box, Share } from '@element-plus/icons-vue'
-import type { CatalogItem } from '@3d-editor/editor'
+import type { CatalogItem } from '@mh/3d-editor'
 import type { AssetGroup, LayerTreeItem } from './types'
 import ResourcePanel from './ResourcePanel.vue'
 import LayerTreePanel from './LayerTreePanel.vue'

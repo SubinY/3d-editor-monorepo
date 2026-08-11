@@ -1,7 +1,7 @@
 import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js'
-import { instantiateProceduralModule } from '@3d-editor/editor'
+import { instantiateProceduralModule } from '@mh/3d-editor'
 
 /** 独立小预览：加载 /models/...mjs 并挂到 canvas */
 export class ModelPreviewViewport {

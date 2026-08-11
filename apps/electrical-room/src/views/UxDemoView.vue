@@ -4,7 +4,7 @@ import {
   CATALOG_ITEM_MIME,
   createEditor,
   createMemoryCatalog
-} from '@3d-editor/editor'
+} from '@mh/3d-editor'
 import type {
   CatalogItem,
   CatalogProvider,
@@ -12,7 +12,7 @@ import type {
   EditorNodeJSON,
   EditorSession,
   TransformMode
-} from '@3d-editor/editor'
+} from '@mh/3d-editor'
 import { UX_DEMO_CATALOG } from '@/ux-demo/catalog'
 import { buildUxDemoSceneJSON } from '@/ux-demo/seed-scene'
 import { createUxDemoProceduralResolver } from '@/ux-demo/models/registry'

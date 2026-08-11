@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import type { DefaultViewJSON, EnvironmentJSON } from '@3d-editor/editor'
+import type { DefaultViewJSON, EnvironmentJSON } from '@mh/3d-editor'
 import type { LiveCameraPose } from './types'
 
 const props = defineProps<{

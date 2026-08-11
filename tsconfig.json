@@ -28,8 +28,8 @@
     "forceConsistentCasingInFileNames": true,
     "types": ["vitest/globals"],
     "paths": {
-      "@3d-editor/editor": ["packages/editor/src/index.ts"],
-      "@3d-editor/editor/*": ["packages/editor/src/*"]
+      "@mh/3d-editor": ["packages/editor/src/index.ts"],
+      "@mh/3d-editor/*": ["packages/editor/src/*"]
     }
   },
   "exclude": ["node_modules", "dist"]

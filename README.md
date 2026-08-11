@@ -1,12 +1,12 @@
 # 3D Editor Monorepo
 
-`@3d-editor/editor` 内核 SDK 的 monorepo：本地联调 Host，可发布 npm。
+`@mh/3d-editor` 内核 SDK 的 monorepo：本地联调 Host，可发布到内网 Nexus。
 
 ## 结构
 
 | 路径 | 说明 |
 |------|------|
-| `packages/editor` | npm 包 `@3d-editor/editor` |
+| `packages/editor` | npm 包 `@mh/3d-editor` |
 | `apps/electrical-room` | 本地调试 Host（Vue） |
 | `apps/electrical-room-api` | Host 落盘 API |
 
@@ -18,23 +18,23 @@
 # Node ≥18，pnpm ≥8
 pnpm install
 pnpm dev          # editor watch + Host + API
-pnpm build        # 构建 @3d-editor/editor
+pnpm build        # 构建 @mh/3d-editor
 pnpm test
 ```
 
-- Host：http://localhost:5175  
+- Host：http://localhost:5175
 - peer：Host 需安装 `three >= 0.158`
 
 ```
-apps/*  →  @3d-editor/editor  →  peer three
+apps/*  →  @mh/3d-editor  →  peer three
 ```
 
-## 发布 npm
+## 发布 npm（内网 Nexus）
 
-先登录：`npm login`（发布的是 `@3d-editor/editor`）。
+确保已登录内网源（`.npmrc` 指向 Nexus），然后：
 
 ```bash
-pnpm version:patch   # 或 version:minor / version:major（改 version + git tag）
-pnpm run publish     # build 后 publish（须用 run，避免和 pnpm 内置 publish 混淆）
+pnpm version:patch   # 或 version:minor / version:major
+pnpm run publish     # build 后 publish（须用 run）
 git push && git push --tags
 ```

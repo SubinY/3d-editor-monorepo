@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { cloneEnvironment } from '@3d-editor/editor'
-import type { EnvironmentJSON, EnvironmentHelpersJSON, WallJSON } from '@3d-editor/editor'
+import { cloneEnvironment } from '@mh/3d-editor'
+import type { EnvironmentJSON, EnvironmentHelpersJSON, WallJSON } from '@mh/3d-editor'
 
 export interface SelectedNodeForm {
   id: string

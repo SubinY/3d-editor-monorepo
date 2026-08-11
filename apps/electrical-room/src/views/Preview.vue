@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref } from 'vue'
-import { createEditor, isDocumentItem } from '@3d-editor/editor'
-import type { EditorDocument, EditorSession, NodeInteractionEvent } from '@3d-editor/editor'
+import { createEditor, isDocumentItem } from '@mh/3d-editor'
+import type { EditorDocument, EditorSession, NodeInteractionEvent } from '@mh/3d-editor'
 import { useRoute, useRouter } from 'vue-router'
 import { createPreviewCatalog } from '@/business/catalog'
 import * as api from '@/business/api'

@@ -1,4 +1,4 @@
-import type { CatalogItem } from '@3d-editor/editor'
+import type { CatalogItem } from '@mh/3d-editor'
 
 /** ux-demo 专用 Catalog（不依赖 API） */
 export const UX_DEMO_CATALOG: CatalogItem[] = [

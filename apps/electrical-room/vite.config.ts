@@ -8,7 +8,7 @@ export default defineConfig({
     alias: {
       '@': resolve(__dirname, 'src'),
       // 开发期直连源码，改包代码即时热更
-      '@3d-editor/editor': resolve(__dirname, '../../packages/editor/src')
+      '@mh/3d-editor': resolve(__dirname, '../../packages/editor/src')
     }
   },
   server: {

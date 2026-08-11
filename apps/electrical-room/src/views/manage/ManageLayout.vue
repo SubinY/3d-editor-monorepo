@@ -56,7 +56,7 @@ function go(name: string) {
       </nav>
       <div class="rail-foot">
         <el-icon><Monitor /></el-icon>
-        <span>@3d-editor/editor</span>
+        <span>@mh/3d-editor</span>
       </div>
     </aside>
     <main class="main">

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
-import type { CatalogItem } from '@3d-editor/editor'
+import type { CatalogItem } from '@mh/3d-editor'
 import type { AssetGroup } from './types'
 
 const props = defineProps<{

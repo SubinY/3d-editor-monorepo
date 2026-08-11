@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
 import { Setting, Monitor, DataLine } from '@element-plus/icons-vue'
-import type { EnvironmentJSON, WallJSON } from '@3d-editor/editor'
+import type { EnvironmentJSON, WallJSON } from '@mh/3d-editor'
 import type { ViewMode } from './types'
 import PropertyPanel from './PropertyPanel.vue'
 import DataPanel from './DataPanel.vue'

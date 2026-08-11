@@ -1,4 +1,4 @@
-// @3d-editor/editor —— 对外唯一必选包
+// @mh/3d-editor —— 对外唯一必选包
 // 推荐入口：createEditor；EditorDocumentJSON 由 Host 落库。
 
 export { createEditor } from './core/create-editor'

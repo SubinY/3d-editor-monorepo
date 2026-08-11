@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { nextTick, reactive, ref, watch } from 'vue'
 import { Box, Camera, PictureFilled, Sunny } from '@element-plus/icons-vue'
-import { cloneEnvironment, createDefaultWall } from '@3d-editor/editor'
-import type { EnvironmentJSON } from '@3d-editor/editor'
+import { cloneEnvironment, createDefaultWall } from '@mh/3d-editor'
+import type { EnvironmentJSON } from '@mh/3d-editor'
 import BackgroundSection from './BackgroundSection.vue'
 import CameraSection from './CameraSection.vue'
 import HelpersSection from './HelpersSection.vue'

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import type { EditorNodeJSON } from '@3d-editor/editor'
+import type { EditorNodeJSON } from '@mh/3d-editor'
 import type { RightTab } from '../mock-data'
 import { POINT_LIBRARY } from '../mock-data'
 

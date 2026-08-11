@@ -9,7 +9,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@3d-editor/editor": "workspace:*",
+    "@mh/3d-editor": "workspace:*",
     "@element-plus/icons-vue": "^2.3.1",
     "element-plus": "^2.9.0",
     "three": "^0.160.0",

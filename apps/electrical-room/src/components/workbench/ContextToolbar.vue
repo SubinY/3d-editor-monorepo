@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { TransformMode } from '@3d-editor/editor'
+import type { TransformMode } from '@mh/3d-editor'
 
 defineProps<{
   visible: boolean

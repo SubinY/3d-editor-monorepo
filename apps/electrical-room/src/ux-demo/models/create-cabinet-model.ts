@@ -1,4 +1,4 @@
-import type { FootprintSpec } from '@3d-editor/editor'
+import type { FootprintSpec } from '@mh/3d-editor'
 
 export interface CabinetModelOptions {
   footprint: FootprintSpec

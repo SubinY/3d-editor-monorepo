@@ -1,6 +1,6 @@
 # Repository Guidelines
 
-对外 npm 包：`@3d-editor/editor`。`apps/electrical-room*` 仅作本地联调。
+对外 npm 包：`@mh/3d-editor`（内网 `@mh` scope）。`apps/electrical-room*` 仅作本地联调。
 
 ## Structure
 
@@ -8,18 +8,18 @@
 - `apps/electrical-room` — Host UI
 - `apps/electrical-room-api` — JSON 落盘
 
-依赖：`apps → @3d-editor/editor`（peer `three`）；禁止反向。行业语义只出现在 apps。
+依赖：`apps → @mh/3d-editor`（peer `three`）；禁止反向。行业语义只出现在 apps。
 
 ## Commands
 
 ```bash
 pnpm install
 pnpm dev      # editor + host + api
-pnpm build    # @3d-editor/editor
+pnpm build    # @mh/3d-editor
 pnpm test
 pnpm lint
 pnpm version:patch   # 或 minor / major
-pnpm run publish     # build + npm publish @3d-editor/editor
+pnpm run publish     # build + npm publish @mh/3d-editor
 ```
 
 ## Style

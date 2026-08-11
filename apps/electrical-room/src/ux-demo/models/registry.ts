@@ -1,4 +1,4 @@
-import type { ProceduralModelResolver } from '@3d-editor/editor'
+import type { ProceduralModelResolver } from '@mh/3d-editor'
 import { createCabinetModel } from './create-cabinet-model'
 import { createDoorModel } from './create-door-model'
 

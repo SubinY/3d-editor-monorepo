@@ -2,7 +2,7 @@ import {
   SCHEMA_VERSION,
   createMemoryCatalog,
   createDefaultEnvironment
-} from '@3d-editor/editor'
+} from '@mh/3d-editor'
 import type {
   CatalogItem,
   CatalogProvider,
@@ -10,7 +10,7 @@ import type {
   DocumentKind,
   EditorDocumentJSON,
   EditorNodeJSON
-} from '@3d-editor/editor'
+} from '@mh/3d-editor'
 import * as api from './api'
 
 export const FIXTURE_ITEMS: CatalogItem[] = [

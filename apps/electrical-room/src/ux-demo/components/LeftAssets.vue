@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { Search, Upload, MagicStick } from '@element-plus/icons-vue'
-import type { CatalogItem } from '@3d-editor/editor'
+import type { CatalogItem } from '@mh/3d-editor'
 import { UX_CATEGORY_META } from '../catalog'
 
 const props = defineProps<{

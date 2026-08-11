@@ -12,7 +12,7 @@ export interface LayerTreeItem {
   children?: LayerTreeItem[]
 }
 
-import type { CatalogItem } from '@3d-editor/editor'
+import type { CatalogItem } from '@mh/3d-editor'
 
 export interface AssetGroup {
   key: string

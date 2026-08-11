@@ -2,8 +2,8 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { createEmptyDocumentJSON } from '@3d-editor/editor'
-import type { EditorDocumentJSON } from '@3d-editor/editor'
+import { createEmptyDocumentJSON } from '@mh/3d-editor'
+import type { EditorDocumentJSON } from '@mh/3d-editor'
 import {
   DEFAULT_CABINET_BOUNDS,
   INITIAL_CABINET_VERSION,

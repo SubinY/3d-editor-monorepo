@@ -1,4 +1,4 @@
-# `@3d-editor/editor`
+# `@mh/3d-editor`
 
 与 UI 框架无关的 **2D / 3D 编辑器内核 SDK**。
 
@@ -15,9 +15,11 @@
 ## 安装
 
 ```bash
-pnpm add @3d-editor/editor
+pnpm add @mh/3d-editor
 pnpm add three@>=0.158   # peer
 ```
+
+内网需配置 `@mh` 指向 Nexus（见仓库根 `.npmrc`）。
 
 ```ts
 import {
@@ -25,8 +27,8 @@ import {
   createMemoryCatalog,
   createEmptyDocumentJSON,
   CATALOG_ITEM_MIME
-} from '@3d-editor/editor'
-import type { CatalogItem, EditorDocumentJSON, EditorSession } from '@3d-editor/editor'
+} from '@mh/3d-editor'
+import type { CatalogItem, EditorDocumentJSON, EditorSession } from '@mh/3d-editor'
 ```
 
 类型与值分条导入。
@@ -52,7 +54,6 @@ const draft = createEmptyDocumentJSON({
   name: '车间',
   bounds: { width: 20, depth: 15, height: 3 }
 })
-// Host 自行 api.save(draft)
 
 const editor: EditorSession = await createEditor({
   catalog: createMemoryCatalog(items),
@@ -79,8 +80,6 @@ editor.dispose()
 
 ## 公共导出面
 
-按 Host 实际需要收窄；包内实现类与内部工具不再从根入口导出。
-
 ### 值（必用）
 
 | 导出 | 说明 |
@@ -95,143 +94,29 @@ editor.dispose()
 | 导出 | 场景 |
 |------|------|
 | `buildPublishBundle` / `createPackCatalog` | 发布静态包 / 只读加载 |
-| `SCHEMA_VERSION` | 手写或迁移 JSON（`createEmptyDocumentJSON` 已写入） |
+| `SCHEMA_VERSION` | 手写或迁移 JSON |
 | `createDefaultEnvironment` / `createDefaultWall` / `cloneEnvironment` | 环境面板 |
 | `isDocumentItem` | 嵌套柜 document 型素材 |
-| `instantiateProceduralModule` | 管理页裸预览（日常用 `createEditor({ procedural })`） |
+| `instantiateProceduralModule` | 管理页裸预览 |
 
-### 类型（合同与会话）
+### 类型
 
-会话：`CreateEditorOptions` · `EditorSession` · `EditorInteractionOptions` · `EditorInteractionState` · `TransformMode`
-
-Document：`EditorDocumentJSON` · `EditorDocument` · `EditorNodeJSON` · `DocumentKind` · `EnvironmentJSON` 及子字段 · `VisualState` · `PlaceOptions` / `PlaceResult` 等
-
-Catalog：`CatalogItem` · `CatalogProvider` · `CatalogQuery` · `FootprintSpec` · `Model3DSpec` · procedural 相关 · `PublishBundle`
-
-视口 / 交互：`Viewport2D` · `Viewport3D` · `Tool2D` · `NodeInteractionEvent` 等（仅类型标注）
+会话、Document 合同、Catalog、视口与交互相关类型均从包根导出（见源码 `index.ts`）。
 
 ### 明确不导出
 
-`createDocument` / Viewport 工厂 / `ThreeRuntime`、**`MemoryCatalog` / `PackCatalog` 类**、`buildAssetPack`、`catalogKey`、`createDefaultTransform` / `cloneTransform` / `createDefaultFloor`、碰撞与约束注册实现等。
+`createDocument` / Viewport 工厂 / `ThreeRuntime`、实现类、内部 defaults 等。
 
 ---
 
-## 会话进阶
-
-延迟挂载与交互调参仍走 `createEditor`：
-
-```ts
-const editor = await createEditor({
-  catalog,
-  document: draft,
-  interaction: {
-    snapEnabled: true,
-    collisionEnabled: false,
-    transformModes: ['translate', 'rotate'] // 含 scale 会强制关碰撞
-  },
-  viewport3d: {
-    readonly: false,
-    onInteraction: e => console.log(e.type, e.nodePath)
-  }
-})
-
-editor.mountCanvas2d(el2d)
-editor.mountCanvas3d(el3d)
-editor.setTransformMode('rotate')
-editor.getInteraction()
-```
-
-发布：
-
-```ts
-const bundle = await buildPublishBundle(editor.document.toJSON(), catalog)
-// 落库后只读：createPackCatalog(bundle.assetPack)
-```
-
-环境（进历史）：
-
-```ts
-const env = cloneEnvironment(editor.document.environment)
-env.helpers = { grid: true, enclosure: 'openBox' }
-editor.document.commands.setEnvironment(env)
-```
-
-**Scale ↔ 碰撞**：AABB 按 catalog `footprint`，不读 `node.scale`；白名单含 `scale` 时强制关碰撞。布局编辑默认不要开 scale。
-
----
-
-## Document / Catalog / Viewport（摘要）
-
-**Document**
-
-```ts
-doc.commands.placeItem / transformNode / removeNode / updateNode
-doc.commands.addWall / removeWall / setBounds / setEnvironment
-doc.history.undo() / redo()
-doc.selection.set(id) / clear()
-doc.createRectRoom(...)  // scene 四段墙快捷
-doc.toJSON()
-```
-
-**Catalog**：Host 注入 `CatalogProvider`；`model3d` 为 `gltf` | `primitive` | `procedural`。procedural 日常经 `createEditor({ procedural: { resolve } })`；`document` 型须在 `get()` 时内联 `document`。
-
-**2D**：`setTool('select' | 'wall')`、外部拖放、`fitBounds`、贴边吸附（会话 `snapEnabled`）；画墙端点磁吸始终可用。
-
-**3D**：`setNodeVisualState` / `clearVisualStates`、`focusSelection`、`onCameraPoseChange`、性能 Info / 悬停描边。嵌套路径：`cabinetId/childId`。
-
-三分法：指针手势（`onInteraction`）≠ 高亮（`VisualState`）≠ 业务绑定（`node.props`）。
-
----
-
-## Document JSON（存盘）
-
-```ts
-interface EditorDocumentJSON {
-  schemaVersion: string
-  kind: 'scene' | 'container'
-  id: string
-  name: string
-  unit: 'm'
-  bounds: { width: number; depth: number; height?: number }
-  structure?: { walls?: WallJSON[] }
-  nodes: EditorNodeJSON[]
-  environment: EnvironmentJSON
-  metadata?: Record<string, unknown>
-}
-```
-
-Schema 变更走 semver；breaking 升本包 major。
-
----
-
-## 包结构
-
-```
-packages/editor/src/
-  core/        createEditor · EditorSession
-  document/    Schema · 命令 · 历史 · 选中 · 碰撞
-  catalog/     CatalogProvider · 内存 / 发布包
-  viewport/    canvas2d · three · interaction-events
-  index.ts     窄面公共导出
-```
-
----
-
-## 测试（维护指引）
-
-| 层级 | 文件 | 建议 |
-|------|------|------|
-| 合同 / 命令 | `document/__tests__/document.test.ts` · `environment.test.ts` | **必留** — 命令、历史、碰撞、环境默认 |
-| 会话 | `core/__tests__/interaction.test.ts` | **必留** — snap / collision / scale 互斥 |
-| 发布 | `catalog/__tests__/publish.test.ts` · `procedural.test.ts` | **必留** — assetPack 与 procedural 钉版本 |
-| 2D 纯函数 | `viewport/canvas2d/utils/__tests__/*` | **建议留** — 吸附、闭环、墙拖、落点默认；改几何时防回归 |
-| 3D 辅助 | `viewport/three/helpers/__tests__/world-view-gizmo.test.ts` | **可留** — 体量小；改角标再动 |
-
-不在公共面上的 `buildAssetPack` 等仍可在测试内直接相对路径引用。新功能 / 修 bug 优先补上述「必留」层。
+## 发布与测试
 
 ```bash
-pnpm --filter @3d-editor/editor test
+pnpm --filter @mh/3d-editor test
+pnpm --filter @mh/3d-editor build
 ```
+
+内网发布见仓库根 `README.md`（`pnpm run publish`）。
 
 ---
 

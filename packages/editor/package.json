@@ -1,5 +1,5 @@
 {
-  "name": "@3d-editor/editor",
+  "name": "@mh/3d-editor",
   "version": "0.1.0",
   "description": "Unified 2D/3D editor SDK: document core, catalog interface, dual viewports (single required install)",
   "main": "./dist/index.cjs",
@@ -17,7 +17,7 @@
     "README.md"
   ],
   "publishConfig": {
-    "access": "public"
+    "registry": "http://192.168.100.213:8081/repository/npm-private/"
   },
   "scripts": {
     "dev": "vite build --watch",

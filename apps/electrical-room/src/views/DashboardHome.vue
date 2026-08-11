@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { createEditor, createPackCatalog, isDocumentItem } from '@3d-editor/editor'
-import type { EditorDocument, EditorSession, NodeInteractionEvent } from '@3d-editor/editor'
+import { createEditor, createPackCatalog, isDocumentItem } from '@mh/3d-editor'
+import type { EditorDocument, EditorSession, NodeInteractionEvent } from '@mh/3d-editor'
 import { getHomePublish } from '@/business/api'
 import { readNodeBindings, type NodeBindingsProps } from '@/business/node-bindings'
 import { fetchMockPointValues } from '@/business/mock-point-api'

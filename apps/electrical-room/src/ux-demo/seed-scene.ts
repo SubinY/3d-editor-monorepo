@@ -3,8 +3,8 @@ import {
   createEditor,
   createMemoryCatalog,
   cloneEnvironment
-} from '@3d-editor/editor'
-import type { EditorDocumentJSON } from '@3d-editor/editor'
+} from '@mh/3d-editor'
+import type { EditorDocumentJSON } from '@mh/3d-editor'
 import { UX_DEMO_CATALOG } from './catalog'
 import { createUxDemoProceduralResolver } from './models/registry'
 

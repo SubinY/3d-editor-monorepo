@@ -1,4 +1,4 @@
-import type { CatalogItem, EditorDocumentJSON, PublishBundle } from '@3d-editor/editor'
+import type { CatalogItem, EditorDocumentJSON, PublishBundle } from '@mh/3d-editor'
 
 const BASE = '/api'
 const API_CODE_OK = 0
