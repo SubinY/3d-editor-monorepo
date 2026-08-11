@@ -1,7 +1,3 @@
 packages:
-  - "packages/engine"
-  - "packages/editor"
-  - "packages/extensions"
-  - "packages/presets"
-  - "apps/*"
-  - "docs"
+  - 'packages/*'
+  - 'apps/*'

@@ -1,38 +1,40 @@
-# 3D 编辑器 Monorepo
+# 3D Editor Monorepo
 
-基于 Three.js 的多模块 3D 编辑器底座（TypeScript + pnpm + Turborepo）。
+`@3d-editor/editor` 内核 SDK 的 monorepo：本地联调 Host，可发布 npm。
 
-## 文档（唯一入口）
+## 结构
 
-- [架构设计](./docs/architecture.md) — 分层、包职责、定稿决策、Schema
-- [SDK 架构与使用](./docs/sdk-guide.md) — **内核 npm 用法 + electrical-room 接入对照（评审用）**
-- [项目阅读指南](./docs/reading-guide.md) — 阅读顺序、入口、约定
+| 路径 | 说明 |
+|------|------|
+| `packages/editor` | npm 包 `@3d-editor/editor` |
+| `apps/electrical-room` | 本地调试 Host（Vue） |
+| `apps/electrical-room-api` | Host 落盘 API |
 
-Agent 约定见根目录 `AGENTS.md`。
+用法见 [`packages/editor/README.md`](./packages/editor/README.md)。
 
 ## 快速开始
 
 ```bash
-pnpm install   # Node ≥18，pnpm ≥8
-pnpm dev       # turbo 开发
-pnpm build
+# Node ≥18，pnpm ≥8
+pnpm install
+pnpm dev          # editor watch + Host + API
+pnpm build        # 构建 @3d-editor/editor
 pnpm test
-pnpm lint
 ```
 
-## 包一览
+- Host：http://localhost:5175  
+- peer：Host 需安装 `three >= 0.158`
 
-| 路径 | 包名 | 作用 |
-|------|------|------|
-| `packages/editor` | `@3d-editor/editor` | **对外必选包**：Document 内核 + Catalog + 2D/3D Viewport |
-| `packages/engine` | `@3d-editor/engine` | 3D 运行时（内部实现包，被 editor 内置） |
-| `packages/extensions` | `@3d-editor/extensions` | 可选插件与 kit（peer → editor） |
-| `packages/presets` | `@3d-editor/presets` | 可选场景 Preset / Runtime（peer → editor） |
-| `apps/electrical-room` | — | 电柜 Host：列表/创建表单 + 连续画墙 + 拖放碰撞 + 2D/3D |
-| `apps/demo-vue3` | — | 旧主演示 |
-| `apps/demo-view` | — | 视图演示 |
+```
+apps/*  →  @3d-editor/editor  →  peer three
+```
+
+## 发布 npm
+
+先登录：`npm login`（发布的是 `@3d-editor/editor`）。
 
 ```bash
-# 电柜示例（场景编辑 / 电柜编辑 / 监控预览）
-pnpm --filter electrical-room dev   # http://localhost:5175
+pnpm version:patch   # 或 version:minor / version:major（改 version + git tag）
+pnpm run publish     # build 后 publish（须用 run，避免和 pnpm 内置 publish 混淆）
+git push && git push --tags
 ```

@@ -8,7 +8,7 @@
 | Catalog 接口 + 内存 / 发布包实现 | 行业语义（电柜、机床等） |
 | 2D Canvas + 3D（包内 ThreeRuntime）投影 | MQTT / 条件引擎 / 业务 action |
 
-架构定稿：[docs/architecture.md](../../docs/architecture.md)。评审向用法：[docs/sdk-guide.md](../../docs/sdk-guide.md)。
+仓库联调宿主：`apps/electrical-room`。
 
 ---
 
@@ -235,9 +235,7 @@ pnpm --filter @3d-editor/editor test
 
 ---
 
-## 相关文档
+## 相关
 
-- [docs/architecture.md](../../docs/architecture.md) — 架构定稿  
-- [docs/sdk-guide.md](../../docs/sdk-guide.md) — 用法与交互细则  
-- [docs/reading-guide.md](../../docs/reading-guide.md) — 源码阅读顺序  
-- 宿主范例：`apps/electrical-room`
+- 仓库说明：根目录 `README.md` / `AGENTS.md`
+- 联调宿主：`apps/electrical-room`

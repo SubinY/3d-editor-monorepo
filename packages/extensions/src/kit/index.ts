@@ -1,7 +1,0 @@
-export * from './physics'
-export * from './map'
-export * from './drawing'
-export * from './text'
-export * from './particle'
-export * from './vfx'
-export * from './material'

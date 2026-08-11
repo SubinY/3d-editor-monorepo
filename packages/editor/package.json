@@ -13,8 +13,12 @@
     }
   },
   "files": [
-    "dist"
+    "dist",
+    "README.md"
   ],
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "dev": "vite build --watch",
     "build": "vite build && tsc -b --force",

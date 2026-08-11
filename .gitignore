@@ -3,5 +3,6 @@ dist
 .turbo
 .DS_Store
 *.log
-pnpm-lock.yaml
+*.tsbuildinfo
 .env*
+*.local
