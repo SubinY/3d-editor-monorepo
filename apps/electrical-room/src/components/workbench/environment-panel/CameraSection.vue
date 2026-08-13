@@ -10,6 +10,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   commit: []
+  'enter-indoor': []
 }>()
 
 function absorbLivePose() {
@@ -234,6 +235,14 @@ function setRadius(value: number | undefined) {
         "
       />
     </el-form-item>
+    <el-form-item label="室内视角">
+      <el-button type="primary" plain size="small" @click="emit('enter-indoor')">
+        进入室内视角
+      </el-button>
+    </el-form-item>
+    <p class="hint">
+      透视/正交是投影模式；「进入室内视角」会把相机放到房间内（orbit），与投影切换独立。
+    </p>
     <p class="hint">
       目标=注视点；半径=眼睛到目标的距离（滚轮改的就是它）。视场角=镜头广角，与半径独立：广角变大画面更“撑开”，滚轮拉近又会把物体放大——两者可互相补偿，所以改完
       FOV 再滚轮，场景可能看起来又差不多。

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { nextTick, reactive, ref, watch } from 'vue'
 import { Box, Camera, PictureFilled, Sunny } from '@element-plus/icons-vue'
-import { cloneEnvironment, createDefaultWall } from '@mh/3d-editor'
+import { cloneEnvironment, createDefaultCeiling, createDefaultWall } from '@mh/3d-editor'
 import type { EnvironmentJSON } from '@mh/3d-editor'
 import BackgroundSection from './BackgroundSection.vue'
 import CameraSection from './CameraSection.vue'
@@ -22,12 +22,14 @@ const props = defineProps<{
 const emit = defineEmits<{
   apply: [env: EnvironmentJSON]
   'update:perfStatsVisible': [value: boolean]
+  'enter-indoor': []
 }>()
 
 const section = ref<EnvSectionId>('camera')
 const applying = ref(false)
 const form = reactive(cloneEnvironment(props.environment))
 if (!form.wall) form.wall = createDefaultWall()
+if (!form.ceiling) form.ceiling = createDefaultCeiling()
 
 watch(
   () => props.environment,
@@ -45,6 +47,7 @@ function syncForm(env: EnvironmentJSON) {
   form.shadows = next.shadows
   form.helpers = next.helpers
   form.floor = next.floor
+  form.ceiling = next.ceiling ?? createDefaultCeiling()
   form.wall = next.wall ?? createDefaultWall()
   form.defaultView = next.defaultView
 }
@@ -89,6 +92,7 @@ const navItems: Array<{ id: EnvSectionId; icon: typeof Camera; title: string }> 
         :form="form"
         :live-camera-pose="liveCameraPose"
         @commit="commit"
+        @enter-indoor="emit('enter-indoor')"
       />
       <LightSection v-show="section === 'light'" :form="form" @commit="commit" />
       <HelpersSection

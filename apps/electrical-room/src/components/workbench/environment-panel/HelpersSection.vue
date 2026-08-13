@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import type {
+  EnvironmentCeilingJSON,
   EnvironmentFloorJSON,
   EnvironmentJSON,
   EnvironmentWallJSON,
@@ -29,12 +30,29 @@ function floor(): EnvironmentFloorJSON {
   return props.form.floor
 }
 
+function ceiling(): EnvironmentCeilingJSON {
+  if (!props.form.ceiling) {
+    props.form.ceiling = {
+      visible: false,
+      coverage: 'bounds',
+      color: '#2a3544',
+      opacity: 1,
+      presetId: 'none'
+    }
+  }
+  return props.form.ceiling
+}
+
 function wall(): EnvironmentWallJSON {
   return props.form.wall
 }
 
 const isSolidFloor = computed(
   () => !floor().mapUrl && (floor().presetId ?? 'none') === 'none'
+)
+
+const isSolidCeiling = computed(
+  () => !ceiling().mapUrl && (ceiling().presetId ?? 'none') === 'none'
 )
 
 const isSolidWall = computed(
@@ -56,6 +74,24 @@ function setFloorPreset(id: string) {
 
 function setFloorCoverage(coverage: FloorCoverage) {
   floor().coverage = coverage
+  commit()
+}
+
+function setCeilingPreset(id: string) {
+  const preset = resolveFloorPreset(id)
+  const c = ceiling()
+  c.presetId = preset.id
+  c.mapUrl = preset.mapUrl
+  if (preset.mapUrl) {
+    c.color = '#ffffff'
+  } else if (c.color === '#ffffff') {
+    c.color = '#2a3544'
+  }
+  commit()
+}
+
+function setCeilingCoverage(coverage: FloorCoverage) {
+  ceiling().coverage = coverage
   commit()
 }
 
@@ -176,6 +212,85 @@ function setWallPreset(id: string) {
       </el-form-item>
       <p class="hint">
         「仅封闭区域」跟随闭合墙环；纹理来自应用内置静态资源，可局域网加载。
+      </p>
+
+      <div class="section-head">天花</div>
+      <el-form-item label="显示">
+        <el-switch v-model="ceiling().visible" @change="commit" />
+      </el-form-item>
+      <el-form-item label="铺设范围">
+        <el-select
+          :model-value="ceiling().coverage"
+          :disabled="!ceiling().visible"
+          @change="v => setCeilingCoverage(v as FloorCoverage)"
+        >
+          <el-option label="工作区" value="bounds" />
+          <el-option label="仅封闭区域" value="closedRooms" />
+        </el-select>
+      </el-form-item>
+      <el-form-item label="纹理">
+        <el-select
+          :model-value="ceiling().presetId ?? 'none'"
+          :disabled="!ceiling().visible"
+          @change="v => setCeilingPreset(String(v))"
+        >
+          <el-option
+            v-for="preset in FLOOR_PRESETS"
+            :key="preset.id"
+            :label="preset.label"
+            :value="preset.id"
+          />
+        </el-select>
+      </el-form-item>
+      <el-form-item v-if="isSolidCeiling" label="颜色">
+        <el-color-picker
+          :model-value="ceiling().color"
+          :disabled="!ceiling().visible"
+          @change="
+            v => {
+              ceiling().color = v || '#2a3544'
+              commit()
+            }
+          "
+        />
+      </el-form-item>
+      <el-form-item label="透明度">
+        <div class="fov-row">
+          <el-slider
+            :model-value="ceiling().opacity ?? 1"
+            :min="0"
+            :max="1"
+            :step="0.05"
+            :disabled="!ceiling().visible"
+            @update:model-value="v => { ceiling().opacity = Number(v) }"
+            @change="
+              v => {
+                ceiling().opacity = Number(v)
+                commit()
+              }
+            "
+          />
+          <el-input-number
+            class="fov-input"
+            :model-value="ceiling().opacity ?? 1"
+            :min="0"
+            :max="1"
+            :step="0.05"
+            :precision="2"
+            :disabled="!ceiling().visible"
+            controls-position="right"
+            :controls="false"
+            @change="
+              v => {
+                ceiling().opacity = Number(v)
+                commit()
+              }
+            "
+          />
+        </div>
+      </el-form-item>
+      <p class="hint">
+        天花高度取工作区净高（bounds.height）；改净高会同步墙高。与 enclosure 互不合并，建筑室内建议 enclosure=无。
       </p>
 
       <div class="section-head">墙体</div>

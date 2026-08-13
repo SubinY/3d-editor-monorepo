@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@mh/3d-editor": "workspace:*",
+    "@mh/3d-editor-assets": "workspace:*",
     "@element-plus/icons-vue": "^2.3.1",
     "element-plus": "^2.9.0",
     "three": "^0.160.0",

@@ -11,6 +11,7 @@ import type {
   EditorDocumentJSON,
   EditorNodeJSON
 } from '@mh/3d-editor'
+import { panel, glowRing, alertBox } from '@mh/3d-editor-assets/common'
 import * as api from './api'
 
 export const FIXTURE_ITEMS: CatalogItem[] = [
@@ -46,7 +47,10 @@ export const FIXTURE_ITEMS: CatalogItem[] = [
     footprint: { width: 0.4, depth: 0.4, height: 3 },
     thumb: '#8d99a6',
     model3d: { type: 'primitive', primitive: 'box', size: [0.4, 3, 0.4], color: '#8d99a6' }
-  }
+  },
+  panel.catalogItem(),
+  glowRing.catalogItem(),
+  alertBox.catalogItem()
 ]
 
 export const COMPONENT_ITEMS: CatalogItem[] = [

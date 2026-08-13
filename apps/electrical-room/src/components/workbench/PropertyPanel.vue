@@ -34,6 +34,7 @@ const props = defineProps<{
   selectedNode: SelectedNodeForm
   selectedWall: WallJSON | null
   environment: EnvironmentJSON | null
+  isPanel?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -41,6 +42,7 @@ const emit = defineEmits<{
   'update:name': []
   'update:transform': []
   'update:enclosure': [env: EnvironmentJSON]
+  'edit-panel': []
   remove: []
 }>()
 
@@ -61,7 +63,7 @@ function setEnclosure(kind: EnclosureKind) {
     <section class="section">
       <div class="section-title">{{ isScene ? '工作区尺寸' : '柜体尺寸' }}</div>
       <el-form label-position="top" size="small" class="bounds-form">
-        <div :class="isScene ? 'row2' : 'row3'">
+        <div class="row3">
           <el-form-item label="长 (X)">
             <el-input-number
               v-model="boundsForm.width"
@@ -80,10 +82,10 @@ function setEnclosure(kind: EnclosureKind) {
               @change="emit('update:bounds')"
             />
           </el-form-item>
-          <el-form-item v-if="!isScene" label="高 (Y)">
+          <el-form-item :label="isScene ? '高 (墙/天花)' : '高 (Y)'">
             <el-input-number
               v-model="boundsForm.height"
-              :min="0.5"
+              :min="isScene ? 1 : 0.5"
               :step="0.1"
               controls-position="right"
               @change="emit('update:bounds')"
@@ -91,7 +93,9 @@ function setEnclosure(kind: EnclosureKind) {
           </el-form-item>
         </div>
       </el-form>
-      <p v-if="isScene" class="hint">影响 3D 底图与网格范围；房间轮廓仍由画墙决定。</p>
+      <p v-if="isScene" class="hint">
+        长宽影响底图与网格；净高同步墙高与天花高度。房间轮廓仍由画墙决定。
+      </p>
     </section>
 
     <section v-if="!isScene" class="section">
@@ -159,7 +163,19 @@ function setEnclosure(kind: EnclosureKind) {
           </div>
         </el-form>
         <div class="kv">资产：{{ selectedNode.catalog }}</div>
+        <el-button
+          v-if="isPanel"
+          type="primary"
+          plain
+          class="full"
+          @click="emit('edit-panel')"
+        >
+          编辑面板内容
+        </el-button>
         <el-button type="danger" plain class="full" @click="emit('remove')">删除节点</el-button>
+        <p v-if="isPanel" class="hint" style="margin-top: 8px">
+          文字 / 图片烘焙为贴图；场景内为 Sprite，始终朝向相机。
+        </p>
       </template>
 
       <template v-else-if="selectedWall">

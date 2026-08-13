@@ -21,6 +21,7 @@ import RightPanel from './workbench/RightPanel.vue'
 import ContextToolbar from './workbench/ContextToolbar.vue'
 import ViewModeBar from './workbench/ViewModeBar.vue'
 import BottomBar from './workbench/BottomBar.vue'
+import PanelEditorModal from './workbench/PanelEditorModal.vue'
 import type { LiveCameraPose } from './workbench/environment-panel/types'
 import type { AssetGroup, EditorTool, LayerTreeItem, ViewMode } from './workbench/types'
 import {
@@ -30,6 +31,7 @@ import {
   type NodeBindingsProps
 } from '@/business/node-bindings'
 import { createProceduralResolver } from '@/models/registry'
+import { panel } from '@mh/3d-editor-assets/common'
 
 const props = defineProps<{
   kind: DocumentKind
@@ -81,8 +83,11 @@ const environment = shallowRef<EnvironmentJSON | null>(null)
 const liveCameraPose = shallowRef<LiveCameraPose | null>(null)
 let unsubCameraPose: (() => void) | undefined
 let cameraPosePersistTimer: number | undefined
+const panelEditorOpen = ref(false)
+const panelDraft = ref<panel.PanelContentJSON | null>(null)
 
 const isScene = computed(() => props.kind === 'scene')
+const isPanelSelected = computed(() => selectedNode.catalog.startsWith('ui-info-panel@'))
 const objectCount = computed(() => doc.value?.getNodes().length ?? 0)
 const showRulers = computed(() => viewMode.value !== '3d')
 
@@ -287,7 +292,17 @@ onMounted(async () => {
       {
         key: 'fixture',
         label: '墙体构件',
-        items: items.filter(item => item.category === 'fixture')
+        items: items.filter(item => item.category === 'fixture' && item.kind !== 'panel')
+      },
+      {
+        key: 'panel',
+        label: '信息面板',
+        items: items.filter(item => item.kind === 'panel')
+      },
+      {
+        key: 'effect',
+        label: '场景特效',
+        items: items.filter(item => item.category === 'effect')
       },
       {
         key: 'equipment',
@@ -560,6 +575,37 @@ function applyEnvironment(env: EnvironmentJSON) {
   liveCameraPose.value = null
   doc.value?.commands.setEnvironment(env)
 }
+
+function enterIndoorView() {
+  const view = session?.viewport3d?.enterIndoorView({ persist: true })
+  if (view && doc.value) {
+    liveCameraPose.value = null
+    environment.value = cloneEnvironment(doc.value.environment)
+  }
+}
+
+function openPanelEditor() {
+  if (!selectedNode.id || !doc.value) return
+  const node = doc.value.getNode(selectedNode.id)
+  const raw = node?.props?.panel
+  panelDraft.value = panel.isContent(raw) ? raw : panel.createDefaultContent()
+  panelEditorOpen.value = true
+}
+
+async function confirmPanelEdit(content: panel.PanelContentJSON) {
+  if (!selectedNode.id || !doc.value) return
+  const node = doc.value.getNode(selectedNode.id)
+  if (!node) return
+  doc.value.commands.updateNode(selectedNode.id, {
+    props: {
+      ...(node.props ?? {}),
+      panel: content
+    }
+  })
+  const obj = session?.viewport3d?.getNodeObject(selectedNode.id)
+  await panel.applyToObject(obj, content)
+  ElMessage.success('面板已更新')
+}
 </script>
 
 <template>
@@ -621,14 +667,17 @@ function applyEnvironment(env: EnvironmentJSON) {
         :view-mode="viewMode"
         :live-camera-pose="liveCameraPose"
         :perf-stats-visible="perfStatsVisible"
+        :is-panel="isPanelSelected"
         @update:bounds="applyBounds"
         @update:name="applyNodeName"
         @update:transform="applyNodeTransform"
         @update:bindings="applyNodeBindings"
         @update:enclosure="applyEnvironment"
+        @edit-panel="openPanelEditor"
         @remove="removeSelected"
         @apply-environment="applyEnvironment"
         @update:perf-stats-visible="setPerfStatsVisible"
+        @enter-indoor="enterIndoorView"
       />
     </div>
 
@@ -643,6 +692,12 @@ function applyEnvironment(env: EnvironmentJSON) {
       @update:collision-enabled="setCollisionEnabled"
       @update:rulers-enabled="setRulersEnabled"
       @update:perf-visible="setPerfStatsVisible"
+    />
+
+    <PanelEditorModal
+      v-model:show="panelEditorOpen"
+      :model-value="panelDraft"
+      @confirm="confirmPanelEdit"
     />
   </div>
 </template>

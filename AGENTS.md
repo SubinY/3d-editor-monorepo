@@ -4,7 +4,7 @@
 
 ## Structure
 
-- `packages/editor` — `createEditor`、Document、Catalog、2D/3D Viewport
+- `packages/3d-editor` — `createEditor`、Document、Catalog、2D/3D Viewport
 - `apps/electrical-room` — Host UI
 - `apps/electrical-room-api` — JSON 落盘
 
@@ -31,4 +31,4 @@ pnpm run publish     # build + npm publish @mh/3d-editor
 
 ## Testing
 
-Vitest（`packages/editor` 内 `*.test.ts`）。改公共面时同步 `packages/editor/README.md`。
+Vitest（`packages/3d-editor` 内 `*.test.ts`）。改公共面时同步 `packages/3d-editor/README.md`。

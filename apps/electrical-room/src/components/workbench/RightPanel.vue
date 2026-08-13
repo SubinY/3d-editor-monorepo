@@ -20,6 +20,7 @@ const props = defineProps<{
   viewMode: ViewMode
   liveCameraPose?: LiveCameraPose | null
   perfStatsVisible?: boolean
+  isPanel?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -28,9 +29,11 @@ const emit = defineEmits<{
   'update:transform': []
   'update:bindings': [value: NodeBindingsProps]
   'update:enclosure': [env: EnvironmentJSON]
+  'edit-panel': []
   remove: []
   'apply-environment': [env: EnvironmentJSON]
   'update:perfStatsVisible': [value: boolean]
+  'enter-indoor': []
 }>()
 
 const activeTab = ref('props')
@@ -61,10 +64,12 @@ watch(
           :selected-node="selectedNode"
           :selected-wall="selectedWall"
           :environment="environment"
+          :is-panel="isPanel"
           @update:bounds="emit('update:bounds')"
           @update:name="emit('update:name')"
           @update:transform="emit('update:transform')"
           @update:enclosure="emit('update:enclosure', $event)"
+          @edit-panel="emit('edit-panel')"
           @remove="emit('remove')"
         />
       </el-tab-pane>
@@ -85,6 +90,7 @@ watch(
           :perf-stats-visible="perfStatsVisible"
           @apply="emit('apply-environment', $event)"
           @update:perf-stats-visible="emit('update:perfStatsVisible', $event)"
+          @enter-indoor="emit('enter-indoor')"
         />
         <el-empty v-else description="编辑器未就绪" :image-size="48" />
       </el-tab-pane>

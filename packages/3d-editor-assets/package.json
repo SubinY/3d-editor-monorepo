@@ -1,0 +1,37 @@
+{
+  "name": "@mh/3d-editor-assets",
+  "version": "0.1.0",
+  "description": "3D 编辑器资产：common 通用 + 按行业目录扩展；子路径按需引用",
+  "type": "module",
+  "sideEffects": false,
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./src/index.ts"
+    },
+    "./common": {
+      "import": "./dist/common/index.js",
+      "types": "./src/common/index.ts"
+    }
+  },
+  "files": ["dist", "src", "README.md"],
+  "scripts": {
+    "build": "vite build",
+    "dev": "vite build --watch",
+    "clean": "rm -rf dist"
+  },
+  "peerDependencies": {
+    "@mh/3d-editor": ">=0.1.0",
+    "three": ">=0.158.0"
+  },
+  "devDependencies": {
+    "@mh/3d-editor": "workspace:*",
+    "@types/three": "^0.160.0",
+    "three": "^0.160.0",
+    "typescript": "^5.3.3",
+    "vite": "^5.0.12"
+  }
+}

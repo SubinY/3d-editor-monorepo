@@ -1,0 +1,88 @@
+:root {
+  --bg-app: #0b1220;
+  --bg-panel: #111827;
+  --bg-elevated: #1a2332;
+  --bg-hover: #243044;
+  --bg-active: #2a3a52;
+  --border-subtle: #1f2a3c;
+  --border-strong: #334155;
+  --text-primary: #e8eef7;
+  --text-secondary: #94a3b8;
+  --text-muted: #64748b;
+  --accent: #3b82f6;
+  --accent-soft: #1d4ed8;
+  --accent-dim: rgba(59, 130, 246, 0.15);
+  --success: #22c55e;
+  --warning: #f59e0b;
+  --danger: #ef4444;
+  --info: #38bdf8;
+  --gizmo-x: #ef4444;
+  --gizmo-y: #22c55e;
+  --gizmo-z: #3b82f6;
+  --selection: #60a5fa;
+  --scene-bg: #0c1420;
+
+  --header-h: 52px;
+  --statusbar-h: 32px;
+  --left-w: 280px;
+  --left-collapsed-w: 48px;
+  --right-w: 320px;
+  --control-h: 32px;
+  --radius-card: 8px;
+  --radius-btn: 6px;
+  --icon-size: 18px;
+
+  --n-color: var(--bg-panel);
+  --n-color-modal: var(--bg-elevated);
+  --n-color-popover: var(--bg-elevated);
+  --n-text-color: var(--text-primary);
+  --n-text-color-2: var(--text-secondary);
+  --n-text-color-3: var(--text-muted);
+  --n-border-color: var(--border-subtle);
+  --n-primary-color: var(--accent);
+  --n-primary-color-hover: #60a5fa;
+  --n-primary-color-pressed: var(--accent-soft);
+}
+
+html,
+body,
+#app {
+  margin: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: var(--bg-app);
+  color: var(--text-primary);
+  font-family: 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+}
+
+/* Naive 包装层必须贯通高度，否则布局只占内容高、下方留白 */
+#app > *,
+.n-config-provider,
+.n-message-provider,
+.n-dialog-provider {
+  height: 100%;
+  min-height: 0;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+button {
+  font-family: inherit;
+}

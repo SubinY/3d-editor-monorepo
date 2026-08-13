@@ -6,11 +6,11 @@
 
 | 路径 | 说明 |
 |------|------|
-| `packages/editor` | npm 包 `@mh/3d-editor` |
+| `packages/3d-editor` | npm 包 `@mh/3d-editor` |
 | `apps/electrical-room` | 本地调试 Host（Vue） |
 | `apps/electrical-room-api` | Host 落盘 API |
 
-用法见 [`packages/editor/README.md`](./packages/editor/README.md)。
+用法见 [`packages/3d-editor/README.md`](./packages/3d-editor/README.md)。
 
 ## 快速开始
 
