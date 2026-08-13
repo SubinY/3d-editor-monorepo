@@ -58,8 +58,14 @@ export class EnvironmentService {
     if (env.helpers.grid) {
       const size = Math.max(width, depth, 1)
       const grid = new THREE.GridHelper(size, Math.max(Math.round(size), 1), 0x2b3b4d, 0x1c2836)
-      ;(grid.material as THREE.Material).transparent = true
-      ;(grid.material as THREE.Material).opacity = 0.5
+      const mats = Array.isArray(grid.material) ? grid.material : [grid.material]
+      mats.forEach(m => {
+        m.transparent = true
+        m.opacity = 0.5
+        m.depthWrite = false
+      })
+      // 略高于 y=0 地板，减轻与地面共面闪烁
+      grid.position.y = 0.02
       this.envGroup.add(grid)
     }
 

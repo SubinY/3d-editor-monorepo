@@ -125,6 +125,11 @@ export interface EnvironmentWallJSON {
   mapUrl?: string
   /** 贴图世界重复尺度（米/格），默认 2 */
   mapRepeat?: number
+  /**
+   * true：墙段按全长建盒，拐角体积相交；
+   * false / 缺省：两端各收半个厚度对接（减轻 z-fight）
+   */
+  cornerOverlap?: boolean
 }
 
 /** 3D 相机交互模式（对齐常见组态：旋转相机 / 正交平面图） */

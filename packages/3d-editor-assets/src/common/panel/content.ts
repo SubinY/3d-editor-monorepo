@@ -12,6 +12,7 @@ export function createDefaultContent(overrides?: Partial<PanelContentJSON>): Pan
     height: 512,
     background: 'transparent',
     worldWidth: 1.6,
+    billboard: 'yaw',
     elements: [
       {
         id: 'value',

@@ -23,6 +23,7 @@ describe('createDefaultEnvironment', () => {
     expect(env.ceiling.coverage).toBe('bounds')
     expect(env.wall.color).toBe('#233242')
     expect(env.wall.presetId).toBe('none')
+    expect(env.wall.cornerOverlap).toBe(false)
   })
 
   it('container：无网格、openBoxDoor、地面与天花默认隐藏', () => {

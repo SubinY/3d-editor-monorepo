@@ -8,6 +8,7 @@ import type {
   DefaultViewJSON,
   EditorDocumentJSON,
   EditorNodeJSON,
+  EnvironmentJSON,
   TransformJSON,
   VisualState,
   WallJSON
@@ -113,6 +114,8 @@ export class Viewport3D {
   private ceilingApplyToken = 0
   private wallMaterialHandle: WallMaterialHandle | null = null
   private wallApplyToken = 0
+  /** 墙/地/天花相关 env 快照；仅变化时才 rebuild，避免开关网格整屏闪 */
+  private lastShellEnvKey: string | null = null
 
   constructor(container: HTMLElement, options: Viewport3DOptions) {
     this.doc = options.document
@@ -172,6 +175,7 @@ export class Viewport3D {
     })
     this.applyCameraFromEnvironment()
     void this.environment.apply(this.doc.environment, this.doc.bounds)
+    this.lastShellEnvKey = shellEnvKey(this.doc.environment)
 
     void this.rebuildWalls()
     void this.buildAllNodes()
@@ -205,13 +209,17 @@ export class Viewport3D {
       this.doc.on('wall:updated', () => void this.rebuildWalls()),
       this.doc.on('bounds:updated', () => {
         void this.environment.apply(this.doc.environment, this.doc.bounds)
+        this.lastShellEnvKey = shellEnvKey(this.doc.environment)
         void this.rebuildWalls()
       }),
       this.doc.on('environment:updated', ({ environment }) => {
         void this.environment.apply(environment, this.doc.bounds)
         this.applyCameraFromEnvironment()
-        // rebuildWalls 内会串联重建地板/天花，避免重复 apply
-        void this.rebuildWalls()
+        const shellKey = shellEnvKey(environment)
+        if (shellKey !== this.lastShellEnvKey) {
+          this.lastShellEnvKey = shellKey
+          void this.rebuildWalls()
+        }
       }),
       this.doc.on('selection:changed', ({ ids }) => this.selection.syncGizmo(ids)),
       this.runtime.onTransformEnd(({ id }) => {
@@ -351,14 +359,15 @@ export class Viewport3D {
     const { material } = handle
     const loops = findClosedWallLoops(this.doc.getWalls())
 
+    // bounds / closedRooms 互斥：旧逻辑在 bounds 时仍叠房间地板 → 双地 z-fight
     if (floor.coverage === 'bounds') {
       this.floorGroup.add(createSiteFloorMesh(this.doc.bounds, material))
+    } else {
+      loops.forEach(loop => {
+        const mesh = createRoomFloorMesh(loop.points, material, this.doc.bounds)
+        if (mesh) this.floorGroup.add(mesh)
+      })
     }
-
-    loops.forEach(loop => {
-      const mesh = createRoomFloorMesh(loop.points, material, this.doc.bounds)
-      if (mesh) this.floorGroup.add(mesh)
-    })
 
     this.markNonSelectable(this.floorGroup)
     this.floorGroup.traverse(child => {
@@ -388,12 +397,12 @@ export class Viewport3D {
 
     if (ceiling.coverage === 'bounds') {
       this.ceilingGroup.add(createSiteCeilingMesh(this.doc.bounds, material, height))
+    } else {
+      loops.forEach(loop => {
+        const mesh = createRoomCeilingMesh(loop.points, material, this.doc.bounds, height)
+        if (mesh) this.ceilingGroup.add(mesh)
+      })
     }
-
-    loops.forEach(loop => {
-      const mesh = createRoomCeilingMesh(loop.points, material, this.doc.bounds, height)
-      if (mesh) this.ceilingGroup.add(mesh)
-    })
 
     this.markNonSelectable(this.ceilingGroup)
     this.ceilingGroup.traverse(child => {
@@ -405,16 +414,27 @@ export class Viewport3D {
     wall: WallJSON,
     material: THREE.MeshStandardMaterial
   ): THREE.Mesh {
-    const length = Math.hypot(wall.b[0] - wall.a[0], wall.b[1] - wall.a[1])
+    const span = Math.hypot(wall.b[0] - wall.a[0], wall.b[1] - wall.a[1])
     const height = wall.height ?? this.doc.bounds.height ?? 3
     const thickness = wall.thickness ?? 0.2
-    const geometry = new THREE.BoxGeometry(Math.max(length, 0.01), height, thickness)
     const wallEnv = this.doc.environment.wall
+    // cornerOverlap：全长相交；否则两端各收半个厚度对接
+    const length = wallEnv.cornerOverlap
+      ? Math.max(span, 0.01)
+      : Math.max(span - thickness, 0.01)
+    const embed = 0.01
+    const geoHeight = height + embed
+    const geometry = new THREE.BoxGeometry(length, geoHeight, thickness)
     if (wallEnv.mapUrl) {
-      scaleWallBoxUVs(geometry, Math.max(length, 0.01), height, wallEnv.mapRepeat ?? 2)
+      scaleWallBoxUVs(geometry, length, geoHeight, wallEnv.mapRepeat ?? 2)
     }
     const mesh = new THREE.Mesh(geometry, material)
-    mesh.position.set((wall.a[0] + wall.b[0]) / 2, height / 2, (wall.a[1] + wall.b[1]) / 2)
+    // 底埋入地面；顶仍到净高
+    mesh.position.set(
+      (wall.a[0] + wall.b[0]) / 2,
+      geoHeight / 2 - embed,
+      (wall.a[1] + wall.b[1]) / 2
+    )
     mesh.rotation.y = -Math.atan2(wall.b[1] - wall.a[1], wall.b[0] - wall.a[0])
     mesh.castShadow = true
     mesh.receiveShadow = true
@@ -913,6 +933,15 @@ export class Viewport3D {
     const height = this.runtime.domElement.clientHeight
     this.hoverHighlight.setSize(width, height)
   }
+}
+
+/** 仅墙/地/天花外观；网格/灯/相机变化不触发 rebuildWalls */
+function shellEnvKey(env: EnvironmentJSON): string {
+  return JSON.stringify({
+    floor: env.floor,
+    ceiling: env.ceiling,
+    wall: env.wall
+  })
 }
 
 export function create3DViewport(container: HTMLElement, options: Viewport3DOptions): Viewport3D {

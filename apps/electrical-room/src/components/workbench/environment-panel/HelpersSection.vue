@@ -321,7 +321,7 @@ function setWallPreset(id: string) {
       <el-form-item label="透明度">
         <div class="fov-row">
           <el-slider
-            :model-value="wall().opacity ?? 0.92"
+            :model-value="wall().opacity ?? 1"
             :min="0"
             :max="1"
             :step="0.05"
@@ -335,7 +335,7 @@ function setWallPreset(id: string) {
           />
           <el-input-number
             class="fov-input"
-            :model-value="wall().opacity ?? 0.92"
+            :model-value="wall().opacity ?? 1"
             :min="0"
             :max="1"
             :step="0.05"
@@ -351,7 +351,20 @@ function setWallPreset(id: string) {
           />
         </div>
       </el-form-item>
-      <p class="hint">所有墙共用一套材质；纹理来自应用内置静态资源，可局域网加载。</p>
+      <el-form-item label="墙角相交">
+        <el-switch
+          :model-value="wall().cornerOverlap ?? false"
+          @change="
+            v => {
+              wall().cornerOverlap = Boolean(v)
+              commit()
+            }
+          "
+        />
+      </el-form-item>
+      <p class="hint">
+        所有墙共用一套材质；纹理来自应用内置静态资源，可局域网加载。开启「墙角相交」后拐角更密实，半透明时可能闪烁。
+      </p>
     </template>
   </el-form>
 </template>

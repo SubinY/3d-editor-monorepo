@@ -11,12 +11,18 @@ export async function createWallMaterial(
   wall: EnvironmentWallJSON
 ): Promise<WallMaterialHandle> {
   const opacity = wall.opacity ?? 0.92
+  const transparent = opacity < 1
   const material = new THREE.MeshStandardMaterial({
     color: wall.color || '#233242',
     roughness: 0.85,
     metalness: 0.05,
-    transparent: opacity < 1,
-    opacity
+    transparent,
+    opacity,
+    // 半透明墙在拐角/贴地时易与邻墙、地板抢深度；略推远并保持写深度
+    depthWrite: true,
+    polygonOffset: transparent,
+    polygonOffsetFactor: transparent ? 1 : 0,
+    polygonOffsetUnits: transparent ? 1 : 0
   })
 
   let texture: THREE.Texture | null = null

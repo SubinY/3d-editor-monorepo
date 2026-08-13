@@ -172,6 +172,7 @@ function setEnclosure(kind: EnclosureKind) {
         >
           编辑面板内容
         </el-button>
+        <span></span>
         <el-button type="danger" plain class="full" @click="emit('remove')">删除节点</el-button>
         <p v-if="isPanel" class="hint" style="margin-top: 8px">
           文字 / 图片烘焙为贴图；场景内为 Sprite，始终朝向相机。

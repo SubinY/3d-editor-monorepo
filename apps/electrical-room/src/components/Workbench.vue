@@ -21,7 +21,7 @@ import RightPanel from './workbench/RightPanel.vue'
 import ContextToolbar from './workbench/ContextToolbar.vue'
 import ViewModeBar from './workbench/ViewModeBar.vue'
 import BottomBar from './workbench/BottomBar.vue'
-import PanelEditorModal from './workbench/PanelEditorModal.vue'
+import PanelEditorModal from './workbench/panel-editor/PanelEditorModal.vue'
 import type { LiveCameraPose } from './workbench/environment-panel/types'
 import type { AssetGroup, EditorTool, LayerTreeItem, ViewMode } from './workbench/types'
 import {

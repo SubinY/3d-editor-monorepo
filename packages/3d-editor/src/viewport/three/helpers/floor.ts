@@ -16,9 +16,13 @@ export async function createFloorMaterial(
     color: floor.color || '#1a3048',
     roughness: 0.95,
     metalness: 0.05,
-    side: THREE.DoubleSide,
+    side: THREE.FrontSide,
     transparent: opacity < 1,
-    opacity
+    opacity,
+    // 大平面贴地/贴网格拉近看时更稳
+    polygonOffset: true,
+    polygonOffsetFactor: 1,
+    polygonOffsetUnits: 1
   })
 
   let texture: THREE.Texture | null = null
@@ -94,16 +98,23 @@ export function createRoomFloorMesh(
   uv.needsUpdate = true
   const mesh = new THREE.Mesh(geometry, material)
   mesh.rotation.x = -Math.PI / 2
-  mesh.position.y = 0.01
+  mesh.position.y = 0
   mesh.receiveShadow = true
   mesh.userData.nonSelectable = true
   return mesh
 }
 
-/** 天花材质与地面同合同字段，复用加载逻辑 */
-export const createCeilingMaterial = createFloorMaterial
+/** 天花复用地面加载；仰视需看见底面，用 DoubleSide */
+export async function createCeilingMaterial(
+  ceiling: EnvironmentFloorJSON,
+  bounds: BoundsJSON
+): Promise<FloorMaterialHandle> {
+  const handle = await createFloorMaterial(ceiling, bounds)
+  handle.material.side = THREE.DoubleSide
+  return handle
+}
 
-/** bounds 矩形天花；Y = height，法线朝下（旋转 +X） */
+/** bounds 矩形天花；与场地地板同一旋转，抬到净高（材质 DoubleSide，仰视可见） */
 export function createSiteCeilingMesh(
   bounds: BoundsJSON,
   material: THREE.MeshStandardMaterial,
@@ -113,42 +124,26 @@ export function createSiteCeilingMesh(
     new THREE.PlaneGeometry(bounds.width, bounds.depth),
     material
   )
-  mesh.rotation.x = Math.PI / 2
+  // 与 createSiteFloorMesh 同为 -X，避免 +X 与 shape 约定不一致
+  mesh.rotation.x = -Math.PI / 2
   mesh.position.y = height
   mesh.receiveShadow = true
   mesh.userData.nonSelectable = true
   return mesh
 }
 
-/** 闭合墙环天花；与 createRoomFloorMesh 同 UV，抬到 height */
+/**
+ * 闭合墙环天花：与 createRoomFloorMesh 同一套 shape→世界坐标（-X 旋转），
+ * 仅 Y 抬到 height。旧实现用 +X 旋转会导致 V 轴镜像，封闭区域看起来「铺反/偏到墙外」。
+ */
 export function createRoomCeilingMesh(
   points: Array<{ u: number; v: number }>,
   material: THREE.MeshStandardMaterial,
   bounds: BoundsJSON,
   height: number
 ): THREE.Mesh | null {
-  if (points.length < 3) return null
-  const shape = new THREE.Shape()
-  shape.moveTo(points[0].u, -points[0].v)
-  for (let i = 1; i < points.length; i++) {
-    shape.lineTo(points[i].u, -points[i].v)
-  }
-  shape.closePath()
-  const geometry = new THREE.ShapeGeometry(shape)
-  const pos = geometry.getAttribute('position')
-  const uv = geometry.getAttribute('uv')
-  const hw = bounds.width / 2
-  const hd = bounds.depth / 2
-  for (let i = 0; i < pos.count; i++) {
-    const x = pos.getX(i)
-    const y = pos.getY(i)
-    uv.setXY(i, (x + hw) / bounds.width, (y + hd) / bounds.depth)
-  }
-  uv.needsUpdate = true
-  const mesh = new THREE.Mesh(geometry, material)
-  mesh.rotation.x = Math.PI / 2
+  const mesh = createRoomFloorMesh(points, material, bounds)
+  if (!mesh) return null
   mesh.position.y = height
-  mesh.receiveShadow = true
-  mesh.userData.nonSelectable = true
   return mesh
 }

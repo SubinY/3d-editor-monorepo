@@ -129,12 +129,13 @@ export function createDefaultCeiling(_kind: DocumentKind = 'scene'): Environment
   }
 }
 
-/** 缺省墙体外观 */
+/** 缺省墙体外观（不透明，避免半透明墙角 z-fight） */
 export function createDefaultWall(): EnvironmentWallJSON {
   return {
     color: '#233242',
-    opacity: 0.92,
-    presetId: 'none'
+    opacity: 1,
+    presetId: 'none',
+    cornerOverlap: false
   }
 }
 

@@ -17,6 +17,8 @@ export type {
   PanelElementType,
   PanelTextElement,
   PanelImageElement,
+  PanelBackgroundImageFit,
+  PanelBillboardMode,
   PanelHandle
 } from './types'
 export { PROCEDURAL_ID } from './types'
