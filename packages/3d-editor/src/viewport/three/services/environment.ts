@@ -86,6 +86,7 @@ export class EnvironmentService {
     this.envGroup.traverse(child => {
       child.raycast = () => {}
     })
+    this.runtime.markShadowNeedsUpdate()
   }
 
   dispose(): void {

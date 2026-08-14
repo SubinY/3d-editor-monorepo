@@ -36,6 +36,8 @@ import { instantiateProceduralModule } from './services/procedural-module-loader
 import { findClosedWallLoops } from '../canvas2d/utils/closed-loops'
 import type { NodeInteractionHandler } from '../interaction-events'
 import { findNodePath, isObjectUnder } from './utils/node-path'
+import { disposeObject3D } from './utils/dispose'
+import { bumpBuildToken, isBuildStale } from './utils/build-token'
 import {
   createIndoorDefaultView,
   type CreateIndoorDefaultViewOptions
@@ -95,6 +97,8 @@ export class Viewport3D {
 
   private nodeRoots = new Map<string, THREE.Object3D>()
   private pathObjects = new Map<string, THREE.Object3D>()
+  /** 可拾取根对象增量列表；与 nodeRoots 同步，供 SelectionService 复用 */
+  private pickables: THREE.Object3D[] = []
   private wallGroup = new THREE.Group()
   private floorGroup = new THREE.Group()
   private ceilingGroup = new THREE.Group()
@@ -116,6 +120,9 @@ export class Viewport3D {
   private wallApplyToken = 0
   /** 墙/地/天花相关 env 快照；仅变化时才 rebuild，避免开关网格整屏闪 */
   private lastShellEnvKey: string | null = null
+  /** buildNode 竞态 token：同 id 递增使在途 await 失效 */
+  private buildTokens = new Map<string, number>()
+  private wallRebuildScheduled = false
 
   constructor(container: HTMLElement, options: Viewport3DOptions) {
     this.doc = options.document
@@ -177,7 +184,7 @@ export class Viewport3D {
     void this.environment.apply(this.doc.environment, this.doc.bounds)
     this.lastShellEnvKey = shellEnvKey(this.doc.environment)
 
-    void this.rebuildWalls()
+    this.scheduleWallRebuild()
     void this.buildAllNodes()
 
     this.hoverHighlight = new HoverHighlight(this.runtime.renderer)
@@ -187,6 +194,7 @@ export class Viewport3D {
       runtime: this.runtime,
       readonly: this.readonly,
       nodeRoots: this.nodeRoots,
+      pickables: this.pickables,
       pathObjects: this.pathObjects,
       hoverOutline,
       hoverHighlight: this.hoverHighlight,
@@ -204,13 +212,13 @@ export class Viewport3D {
       this.doc.on('node:updated', ({ node }) => {
         this.syncNodeObject(node)
       }),
-      this.doc.on('wall:added', () => void this.rebuildWalls()),
-      this.doc.on('wall:removed', () => void this.rebuildWalls()),
-      this.doc.on('wall:updated', () => void this.rebuildWalls()),
+      this.doc.on('wall:added', () => this.scheduleWallRebuild()),
+      this.doc.on('wall:removed', () => this.scheduleWallRebuild()),
+      this.doc.on('wall:updated', () => this.scheduleWallRebuild()),
       this.doc.on('bounds:updated', () => {
         void this.environment.apply(this.doc.environment, this.doc.bounds)
         this.lastShellEnvKey = shellEnvKey(this.doc.environment)
-        void this.rebuildWalls()
+        this.scheduleWallRebuild()
       }),
       this.doc.on('environment:updated', ({ environment }) => {
         void this.environment.apply(environment, this.doc.bounds)
@@ -218,7 +226,7 @@ export class Viewport3D {
         const shellKey = shellEnvKey(environment)
         if (shellKey !== this.lastShellEnvKey) {
           this.lastShellEnvKey = shellKey
-          void this.rebuildWalls()
+          this.scheduleWallRebuild()
         }
       }),
       this.doc.on('selection:changed', ({ ids }) => this.selection.syncGizmo(ids)),
@@ -297,10 +305,39 @@ export class Viewport3D {
     }
   }
 
+  /** 合并同 tick 内多次 wall:* 事件，避免拖墙时 N 次完整重建 */
+  private scheduleWallRebuild(): void {
+    if (this.wallRebuildScheduled) return
+    this.wallRebuildScheduled = true
+    queueMicrotask(() => {
+      this.wallRebuildScheduled = false
+      if (this.disposed) return
+      void this.rebuildWalls()
+    })
+  }
+
+  /** 先建后换：避免 await 材质期间墙体消失导致闪烁 */
   private async rebuildWalls(): Promise<void> {
     const token = ++this.wallApplyToken
+    const handle = await createWallMaterial(this.doc.environment.wall)
+    if (token !== this.wallApplyToken || this.disposed) {
+      handle.dispose()
+      return
+    }
+
+    const next = new THREE.Group()
+    next.name = '__editorWalls__'
+    this.doc.getWalls().forEach(wall => {
+      next.add(this.buildWallMesh(wall, handle.material))
+    })
+    this.markNonSelectable(next)
+    next.traverse(child => {
+      child.raycast = () => {}
+    })
+
+    this.runtime.scene.remove(this.wallGroup)
     this.wallGroup.children.forEach(child => {
-      ; (child as THREE.Mesh).geometry?.dispose()
+      ;(child as THREE.Mesh).geometry?.dispose()
     })
     this.wallGroup.clear()
     if (this.wallMaterialHandle) {
@@ -308,23 +345,12 @@ export class Viewport3D {
       this.wallMaterialHandle = null
     }
 
-    const handle = await createWallMaterial(this.doc.environment.wall)
-    if (token !== this.wallApplyToken || this.disposed) {
-      handle.dispose()
-      return
-    }
     this.wallMaterialHandle = handle
-
-    this.doc.getWalls().forEach(wall => {
-      const mesh = this.buildWallMesh(wall, handle.material)
-      this.wallGroup.add(mesh)
-    })
+    this.wallGroup = next
+    this.runtime.scene.add(this.wallGroup)
     void this.rebuildFloors()
     void this.rebuildCeilings()
-    this.markNonSelectable(this.wallGroup)
-    this.wallGroup.traverse(child => {
-      child.raycast = () => { }
-    })
+    this.runtime.markShadowNeedsUpdate()
   }
 
   private clearMeshGroup(
@@ -348,7 +374,10 @@ export class Viewport3D {
     })
 
     const floor = this.doc.environment.floor
-    if (!floor.visible) return
+    if (!floor.visible) {
+      this.runtime.markShadowNeedsUpdate()
+      return
+    }
 
     const handle = await createFloorMaterial(floor, this.doc.bounds)
     if (token !== this.floorApplyToken || this.disposed) {
@@ -373,6 +402,7 @@ export class Viewport3D {
     this.floorGroup.traverse(child => {
       child.raycast = () => { }
     })
+    this.runtime.markShadowNeedsUpdate()
   }
 
   private async rebuildCeilings(): Promise<void> {
@@ -383,7 +413,10 @@ export class Viewport3D {
     })
 
     const ceiling = this.doc.environment.ceiling
-    if (!ceiling?.visible) return
+    if (!ceiling?.visible) {
+      this.runtime.markShadowNeedsUpdate()
+      return
+    }
 
     const height = this.doc.bounds.height ?? 3
     const handle = await createCeilingMaterial(ceiling, this.doc.bounds)
@@ -408,6 +441,7 @@ export class Viewport3D {
     this.ceilingGroup.traverse(child => {
       child.raycast = () => { }
     })
+    this.runtime.markShadowNeedsUpdate()
   }
 
   private buildWallMesh(
@@ -473,22 +507,33 @@ export class Viewport3D {
 
   private async buildNode(node: EditorNodeJSON): Promise<void> {
     if (this.disposed) return
-    this.removeNodeObject(node.id)
+    const token = bumpBuildToken(this.buildTokens, node.id)
+    this.removeNodeObject(node.id, { skipTokenBump: true })
 
     const root = new THREE.Group()
     root.name = node.name ?? node.id
     root.userData.nodePath = node.id
 
     const content = await this.buildNodeContent(node, node.id, 0)
+    if (
+      isBuildStale(this.buildTokens, node.id, token, {
+        disposed: this.disposed,
+        nodeExists: Boolean(this.doc.getNode(node.id))
+      })
+    ) {
+      if (content) disposeObject3D(content)
+      return
+    }
     if (content) root.add(content)
 
     this.applyTransformToObject(root, node.transform)
     root.visible = node.visible !== false
 
-    if (this.disposed) return
     this.nodeRoots.set(node.id, root)
     this.pathObjects.set(node.id, root)
+    this.pickables.push(root)
     this.runtime.scene.add(root)
+    this.runtime.markShadowNeedsUpdate()
 
     // 恢复可能已设置的可视状态
     this.visualStates.forEach((state, path) => {
@@ -608,13 +653,19 @@ export class Viewport3D {
   /** 外壳半透明，保证柜内元件可见、可高亮 */
   private styleAsShell(shell: THREE.Object3D): THREE.Object3D {
     shell.userData.isShell = true
+    shell.renderOrder = 1
     shell.traverse(child => {
       child.userData.isShell = true
       const mesh = child as THREE.Mesh
       if (!mesh.isMesh) return
       const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material]
       materials.forEach(mat => {
+        if (!mat) return
+        mat.transparent = true
         mat.opacity = 0.88
+        mat.depthWrite = false
+        mat.side = THREE.DoubleSide
+        mat.needsUpdate = true
       })
     })
     return shell
@@ -693,7 +744,13 @@ export class Viewport3D {
     return mesh
   }
 
-  private removeNodeObject(id: string): void {
+  /**
+   * @param skipTokenBump buildNode 内部重建时已自增 token，避免二次 bump 把自己作废
+   */
+  private removeNodeObject(id: string, options?: { skipTokenBump?: boolean }): void {
+    if (!options?.skipTokenBump) {
+      bumpBuildToken(this.buildTokens, id)
+    }
     const root = this.nodeRoots.get(id)
     if (!root) return
     if (this.runtime.getAttachedObject() === root) {
@@ -701,17 +758,13 @@ export class Viewport3D {
     }
     this.runtime.scene.remove(root)
     this.nodeRoots.delete(id)
+    const pickIdx = this.pickables.indexOf(root)
+    if (pickIdx >= 0) this.pickables.splice(pickIdx, 1)
     Array.from(this.pathObjects.keys())
       .filter(path => path === id || path.startsWith(`${id}/`))
       .forEach(path => this.pathObjects.delete(path))
-    root.traverse(child => {
-      const mesh = child as THREE.Mesh
-      if (mesh.isMesh) {
-        mesh.geometry?.dispose()
-        const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material]
-        materials.forEach(mat => mat?.dispose())
-      }
-    })
+    disposeObject3D(root)
+    this.runtime.markShadowNeedsUpdate()
   }
 
   private syncNodeObject(node: EditorNodeJSON): void {
@@ -920,6 +973,8 @@ export class Viewport3D {
     this.selection.dispose()
     this.hoverHighlight.dispose()
     Array.from(this.nodeRoots.keys()).forEach(id => this.removeNodeObject(id))
+    this.pickables.length = 0
+    this.buildTokens.clear()
     if (this.wallMaterialHandle) {
       this.wallMaterialHandle.dispose()
       this.wallMaterialHandle = null

@@ -8,13 +8,13 @@ const EMA_ALPHA = 0.12
 /**
  * 3D 视口左下角性能 Info（对齐 Three.js 编辑器风格）。
  * 「渲染时间」= 本帧 render 前后耗时；显示为 EMA + 低频刷新，避免数字狂跳。
+ * 计数直接读 renderer.info（drawcall / 三角形 / 几何 / 贴图），零成本。
  */
 export class PerfStatsOverlay {
   private el: HTMLDivElement
   private visible = false
   private smoothedMs = 0
   private lastUiAt = 0
-  private cachedCounts = { objects: 0, vertices: 0, triangles: 0 }
 
   constructor(container: HTMLElement) {
     this.el = document.createElement('div')
@@ -52,9 +52,10 @@ export class PerfStatsOverlay {
   }
 
   /**
+   * @param renderer 提供 info.render / info.memory
    * @param renderMs 本帧 render 前后耗时（ms）
    */
-  update(scene: THREE.Scene, renderMs: number): void {
+  update(renderer: THREE.WebGLRenderer, renderMs: number): void {
     if (!this.visible) return
 
     this.smoothedMs =
@@ -66,28 +67,13 @@ export class PerfStatsOverlay {
     if (now - this.lastUiAt < UI_INTERVAL_MS && this.lastUiAt !== 0) return
     this.lastUiAt = now
 
-    let objects = 0
-    let vertices = 0
-    let triangles = 0
-    scene.traverse(obj => {
-      const mesh = obj as THREE.Mesh
-      if (!mesh.isMesh || !mesh.geometry) return
-      objects += 1
-      const geo = mesh.geometry
-      const pos = geo.attributes.position
-      if (pos) vertices += pos.count
-      if (geo.index) {
-        triangles += geo.index.count / 3
-      } else if (pos) {
-        triangles += pos.count / 3
-      }
-    })
-    this.cachedCounts = { objects, vertices, triangles }
+    const { calls, triangles } = renderer.info.render
+    const { geometries, textures } = renderer.info.memory
 
     this.el.textContent =
-      `${this.cachedCounts.objects} 物体\n` +
-      `${this.cachedCounts.vertices.toLocaleString('en-US')} 顶点\n` +
-      `${Math.floor(this.cachedCounts.triangles).toLocaleString('en-US')} 三角形\n` +
+      `${calls} drawcall\n` +
+      `${Math.floor(triangles).toLocaleString('en-US')} 三角形\n` +
+      `${geometries} 几何 / ${textures} 贴图\n` +
       `${this.smoothedMs.toFixed(2)} 渲染时间`
   }
 

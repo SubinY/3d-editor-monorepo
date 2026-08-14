@@ -15,6 +15,8 @@ export interface SelectionServiceOptions {
   runtime: ThreeRuntime
   readonly: boolean
   nodeRoots: Map<string, THREE.Object3D>
+  /** 增量维护的可拾取根对象；避免 pointermove 每次 Array.from */
+  pickables: THREE.Object3D[]
   pathObjects: Map<string, THREE.Object3D>
   hoverOutline: boolean
   hoverHighlight: HoverHighlight
@@ -28,11 +30,14 @@ export class SelectionService {
   private longPressFired = false
   private lastClick: { path: string; at: number } | null = null
   private hoverPath: string | null = null
+  private pendingHover: PointerEvent | null = null
+  private hoverRafId = 0
 
   constructor(private opts: SelectionServiceOptions) {}
 
   dispose(): void {
     this.clearLongPressTimer()
+    this.clearHoverRaf()
     this.clearHover()
   }
 
@@ -88,7 +93,7 @@ export class SelectionService {
       return
     }
 
-    // 未按下：悬停描边
+    // 未按下：悬停描边（rAF 合并，只处理一帧内最后位置）
     if (this.pointerDownAt) return
     if (!this.opts.hoverOutline) return
     if (this.opts.runtime.isCapturingPointer()) {
@@ -96,19 +101,19 @@ export class SelectionService {
       return
     }
 
-    const pick = this.pickAt(event.clientX, event.clientY)
-    const nextPath = pick?.path ?? null
-    if (nextPath === this.hoverPath) return
-    this.hoverPath = nextPath
-    if (!nextPath) {
-      this.opts.hoverHighlight.clear()
-      return
-    }
-    this.applyHover(nextPath)
-    this.emit('hover', nextPath, event, { x: event.clientX, y: event.clientY, button: event.button })
+    this.pendingHover = event
+    if (this.hoverRafId) return
+    this.hoverRafId = requestAnimationFrame(() => {
+      this.hoverRafId = 0
+      const pending = this.pendingHover
+      this.pendingHover = null
+      if (!pending) return
+      this.applyHoverFromEvent(pending)
+    })
   }
 
   handlePointerLeave = (): void => {
+    this.clearHoverRaf()
     this.clearHover()
   }
 
@@ -156,6 +161,24 @@ export class SelectionService {
     this.emit('click', pick.path, event, { x: event.clientX, y: event.clientY, button: event.button })
   }
 
+  private applyHoverFromEvent(event: PointerEvent): void {
+    if (!this.opts.hoverOutline) return
+    if (this.opts.runtime.isCapturingPointer()) {
+      this.clearHover()
+      return
+    }
+    const pick = this.pickAt(event.clientX, event.clientY)
+    const nextPath = pick?.path ?? null
+    if (nextPath === this.hoverPath) return
+    this.hoverPath = nextPath
+    if (!nextPath) {
+      this.opts.hoverHighlight.clear()
+      return
+    }
+    this.applyHover(nextPath)
+    this.emit('hover', nextPath, event, { x: event.clientX, y: event.clientY, button: event.button })
+  }
+
   private applyHover(path: string): void {
     const root = this.opts.pathObjects.get(path)
     if (!root) {
@@ -176,9 +199,16 @@ export class SelectionService {
     this.opts.hoverHighlight.clear()
   }
 
+  private clearHoverRaf(): void {
+    if (this.hoverRafId) {
+      cancelAnimationFrame(this.hoverRafId)
+      this.hoverRafId = 0
+    }
+    this.pendingHover = null
+  }
+
   private pickAt(clientX: number, clientY: number): { path: string } | null {
-    const pickables = Array.from(this.opts.nodeRoots.values())
-    const result = this.opts.runtime.pick(clientX, clientY, pickables)
+    const result = this.opts.runtime.pick(clientX, clientY, this.opts.pickables)
     if (!result.object) return null
     const path = findNodePath(result.object)
     if (!path) return null

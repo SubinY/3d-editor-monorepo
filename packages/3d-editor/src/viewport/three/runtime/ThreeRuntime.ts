@@ -101,10 +101,13 @@ export class ThreeRuntime {
       alpha: true,
       logarithmicDepthBuffer: false
     })
-    this.renderer.setPixelRatio(window.devicePixelRatio)
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
     this.renderer.setSize(options.container.clientWidth, options.container.clientHeight)
     this.renderer.shadowMap.enabled = true
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap
+    // 静态场景不每帧重渲阴影；结构变化时由 Viewport3D 置 needsUpdate
+    this.renderer.shadowMap.autoUpdate = false
+    this.renderer.shadowMap.needsUpdate = true
     options.container.appendChild(this.renderer.domElement)
 
     this.orbit = new OrbitControls(this._camera, this.renderer.domElement)
@@ -229,6 +232,11 @@ export class ThreeRuntime {
     this.renderer.shadowMap.enabled = options.enabled
     this.renderer.shadowMap.type =
       options.type === 'basic' ? THREE.BasicShadowMap : THREE.PCFSoftShadowMap
+    this.renderer.shadowMap.needsUpdate = true
+  }
+
+  /** 场景结构变化后请求下一帧重渲阴影贴图（配合 autoUpdate=false） */
+  markShadowNeedsUpdate(): void {
     this.renderer.shadowMap.needsUpdate = true
   }
 
@@ -426,7 +434,7 @@ export class ThreeRuntime {
       this.renderer.render(this.scene, this._camera)
       this.viewGizmo.render(this.renderer)
       const renderMs = performance.now() - t0
-      this.perfStats.update(this.scene, renderMs)
+      this.perfStats.update(this.renderer, renderMs)
       this.loopId = requestAnimationFrame(step)
     }
     this.loopId = requestAnimationFrame(step)
