@@ -242,7 +242,7 @@ describe('setBounds', () => {
 describe('setEnvironment', () => {
   it('写入完整 environment 并可撤销', () => {
     const doc = createDocument({ kind: 'container', bounds: { width: 0.8, depth: 0.6, height: 2 } })
-    expect(doc.environment.helpers.enclosure).toBe('openBoxDoor')
+    expect(doc.environment.helpers.enclosure).toBe('openBox')
     const next = {
       ...doc.environment,
       helpers: { grid: false, enclosure: 'none' as const },
@@ -252,7 +252,7 @@ describe('setEnvironment', () => {
     expect(doc.environment.helpers.enclosure).toBe('none')
     expect(doc.environment.background).toEqual({ type: 'color', value: '#112233' })
     doc.history.undo()
-    expect(doc.environment.helpers.enclosure).toBe('openBoxDoor')
+    expect(doc.environment.helpers.enclosure).toBe('openBox')
     doc.history.redo()
     expect(doc.environment.helpers.enclosure).toBe('none')
   })
@@ -319,7 +319,7 @@ describe('序列化与加载', () => {
     doc.createRectRoom()
     doc.commands.placeItem(cabinetItem, { position: [2, 0, 3], props: { circuit: 'A-01' } })
     const json = doc.toJSON()
-    expect(json.schemaVersion).toBe('1.0.0')
+    expect(json.schemaVersion).toBe('2.0.0')
     expect(json.unit).toBe('m')
     expect(json.environment.helpers.grid).toBe(false)
     expect(json.environment.helpers.enclosure).toBe('none')

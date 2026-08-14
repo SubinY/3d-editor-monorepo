@@ -73,7 +73,7 @@ export type EnterIndoorViewOptions = CreateIndoorDefaultViewOptions & {
   persist?: boolean
 }
 
-/** 嵌套解析深度上限（D2：场景→柜→元件） */
+/** 嵌套解析深度上限（D2：scene → container → 元件） */
 const MAX_RESOLVE_DEPTH = 2
 
 interface MaterialBackup {
@@ -163,26 +163,7 @@ export class Viewport3D {
       runtime: this.runtime,
       envGroup: this.envGroup,
       resolveEnclosure: this.proceduralResolvers.length
-        ? async (kind, size) => {
-            if (kind !== 'outdoorCabinet') return null
-            const item: CatalogItem = {
-              id: '__enclosure-outdoorCabinet__',
-              version: '0',
-              name: 'outdoorCabinet',
-              placeableIn: ['container'],
-              footprint: {
-                width: size.width,
-                depth: size.depth,
-                height: size.height
-              }
-            }
-            const built = await runProceduralResolvers(
-              this.proceduralResolvers,
-              { id: 'outdoor-cabinet' },
-              { item, THREE }
-            )
-            return built ?? null
-          }
+        ? async (kind, size) => this.resolveEnclosureProcedural(kind, size)
         : undefined
     })
     this.applyCameraFromEnvironment()
@@ -611,8 +592,8 @@ export class Viewport3D {
   }
 
   /**
-   * 嵌套柜外壳优先级：gltf shell3d > procedural shell3d > 内层 document.enclosure > 其它 shell3d。
-   * enclosure 与资产编辑态 helpers 对齐；outdoorCabinet 可走 Host procedural。
+   * 嵌套 document 外壳：gltf/procedural shell3d 优先；否则内层 enclosure
+   *（openBox 内建，其它 id 走 Host/assets procedural）。
    */
   private async buildDocumentShell(
     item: CatalogItem,
@@ -631,23 +612,7 @@ export class Viewport3D {
       const width = json?.bounds.width ?? item.footprint.width
       const depth = json?.bounds.depth ?? item.footprint.depth
       const height = json?.bounds.height ?? item.footprint.height ?? 2
-      if (enclosure === 'outdoorCabinet' && this.proceduralResolvers.length) {
-        const enclosureItem: CatalogItem = {
-          ...item,
-          footprint: { width, depth, height }
-        }
-        try {
-          const built = await runProceduralResolvers(
-            this.proceduralResolvers,
-            { id: 'outdoor-cabinet' },
-            { item: enclosureItem, THREE }
-          )
-          if (built) return this.styleAsShell(built)
-        } catch (error) {
-          console.warn('[viewport3d] outdoorCabinet host resolve failed', error)
-        }
-      }
-      const built = buildEnclosure(enclosure, width, height, depth)
+      const built = await this.resolveEnclosureKind(enclosure, { width, height, depth })
       if (built) return this.styleAsShell(built)
     }
 
@@ -657,7 +622,45 @@ export class Viewport3D {
     return undefined
   }
 
-  /** 外壳半透明，保证柜内元件可见、可高亮 */
+  /** openBox 内建；其它 enclosure id 走 procedural resolvers */
+  private async resolveEnclosureKind(
+    kind: string,
+    size: { width: number; height: number; depth: number }
+  ): Promise<THREE.Object3D | null> {
+    if (kind === 'openBox') {
+      return buildEnclosure(kind, size.width, size.height, size.depth)
+    }
+    const procedural = await this.resolveEnclosureProcedural(kind, size)
+    return procedural ?? null
+  }
+
+  private async resolveEnclosureProcedural(
+    kind: string,
+    size: { width: number; height: number; depth: number }
+  ): Promise<THREE.Object3D | null> {
+    if (!this.proceduralResolvers.length || kind === 'none' || kind === 'openBox') {
+      return null
+    }
+    const item: CatalogItem = {
+      id: `__enclosure-${kind}__`,
+      version: '0',
+      name: kind,
+      placeableIn: ['container'],
+      footprint: {
+        width: size.width,
+        depth: size.depth,
+        height: size.height
+      }
+    }
+    const built = await runProceduralResolvers(
+      this.proceduralResolvers,
+      { id: kind },
+      { item, THREE }
+    )
+    return built ?? null
+  }
+
+  /** 外壳半透明，保证内部元件可见、可高亮 */
   private styleAsShell(shell: THREE.Object3D): THREE.Object3D {
     shell.userData.isShell = true
     shell.renderOrder = 1
@@ -852,7 +855,7 @@ export class Viewport3D {
     this.focusNode(id, options)
   }
 
-  /** 路径寻址聚焦：顶层 nodeId 或 柜/元件 */
+  /** 路径寻址聚焦：顶层 nodeId 或 `父/子` */
   focusNode(nodePath: string, options?: FocusCameraOptions): void {
     const object = this.pathObjects.get(nodePath) ?? this.nodeRoots.get(nodePath)
     if (!object) return
@@ -904,7 +907,7 @@ export class Viewport3D {
   // -- 运行时可视状态（监控预览） --------------------------------------------------
 
   /**
-   * 路径寻址：顶层节点为 nodeId；柜内元件为 `${sceneNodeId}/${childNodeId}`。
+   * 路径寻址：顶层节点为 nodeId；嵌套元件为 `${sceneNodeId}/${childNodeId}`。
    */
   setNodeVisualState(nodePath: string, state: VisualState): void {
     this.visualStates.set(nodePath, state)
@@ -924,7 +927,7 @@ export class Viewport3D {
     const intensity = state.intensity ?? 1
     const highlightColor = state.color ?? null
 
-    // 嵌套 path（如 柜id/元件id）的根物体：柜级高亮不得进入其子树
+    // 嵌套 path（如 父id/子id）的根物体：父级高亮不得进入其子树
     const nestedRoots: THREE.Object3D[] = []
     const prefix = `${nodePath}/`
     this.pathObjects.forEach((obj, path) => {

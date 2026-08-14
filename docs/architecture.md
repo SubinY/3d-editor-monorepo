@@ -19,16 +19,28 @@
 
 ---
 
-## D2. 复合资产用嵌套解析
+## D2. 房间俯视 + 设备内立面 + 嵌套 document
 
-Catalog 分两型：`model`（GLB / procedural）与 `document`（整份 container JSON，如柜内布局）。
+内核能力收成三件事（与行业名词无关）：
 
-- 场景放置「柜」类 document 资产时，3D 加载其 container document，再递归实例化柜内元件
-- 寻址：`setNodeVisualState('柜节点/元件id', …)` 支持元件级高亮
-- 深度上限 2：场景 → 柜 → 元件
+1. **`kind: 'scene'`**：XZ 俯视编辑（墙、地面、设备落位）
+2. **`kind: 'container'`**：XY 立面编辑（宽×高平面摆件、贴背面）
+3. **嵌套 document + 路径寻址 + 半透明壳**：scene 放置 document 型资产时，3D 展开内层 container，再实例化内部节点
+
+细节：
+
+- Catalog 分两型：`model`（GLB / procedural）与 `document`（整份 container JSON）
+- 寻址：`setNodeVisualState('父节点/子节点', …)` 支持元件级高亮
+- 深度上限 2：scene → container → 内部节点
 - 发布把资产钉成 `(id, version)` 快照（`buildPublishBundle` / PackCatalog），监控端不回活库
 
-**这是「能看到柜子里面」的产品根基。**
+**空间壳 `environment.helpers.enclosure`（开放字符串）**：
+
+- 内核内建：`none` | `openBox`（五面开口剖视盒）
+- 其它 id（如 `openBoxDoor` / `outdoorCabinet`）由 `@mh/3d-editor-assets` procedural resolver 解释
+- container 新建默认 `openBox`；门/户外柜等行业壳不进内核契约
+
+**这是「能看到设备内部」的产品根基。**
 
 ---
 
@@ -42,9 +54,11 @@ Host 只依赖 `@mh/3d-editor` + peer `three`（资产另装 `@mh/3d-editor-asse
 
 ---
 
-## D4. 墙体 = 线段墙
+## D4. 墙体 = 线段墙（XZ scene 编辑语义）
 
-schema 只有 `structure.walls`（`a` / `b` / `height` / `thickness`），没有多边形房间类型。矩形房间是便捷 API（多段墙），不是另一种数据模型。
+schema 只有 `structure.walls`（`a` / `b` / `height` / `thickness`），没有多边形房间类型。矩形房间是便捷 API（多段墙），不是另一种数据模型。container（XY）不支持画墙。
+
+这是「建筑内部」半段的编辑语义，不是电柜专用类型。
 
 ---
 
@@ -58,7 +72,7 @@ schema 只有 `structure.walls`（`a` / `b` / `height` / `thickness`），没有
 
 ## D6. MVP 2D 交互约定
 
-2D 是布局工具，不是俯视预览：连续画墙、拖放落点、fixture 贴墙、封闭环填地板、拖墙联动端点等由内核 2D viewport 承担。
+2D 是布局工具，不是俯视预览：连续画墙、拖放落点、fixture 贴墙、封闭环填地板、拖墙联动端点等由内核 2D viewport 承担（主要服务 XZ scene）。
 
 ---
 
@@ -82,4 +96,4 @@ schema 只有 `structure.walls`（`a` / `b` / `height` / `thickness`），没有
 
 ---
 
-**一句话：** D1–D3 是引擎骨架（谁说了算、资产怎么嵌、怎么发包）；D4–D7 是电柜室类 MVP 的编辑语义（墙、碰撞、2D、会话开关）。
+**一句话：** D1–D3 是引擎骨架（谁说了算、资产怎么嵌、怎么发包）；D4–D7 是 XZ 场景编辑语义（墙、碰撞、2D、会话开关）。行业壳与目录在 assets / Host。

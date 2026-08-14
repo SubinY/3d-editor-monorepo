@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { cloneEnvironment } from '@mh/3d-editor'
-import type { EnvironmentJSON, EnvironmentHelpersJSON, WallJSON } from '@mh/3d-editor'
+import type { EnvironmentJSON, WallJSON } from '@mh/3d-editor'
 
 export interface SelectedNodeForm {
   id: string
@@ -18,7 +18,7 @@ export interface BoundsForm {
   height: number
 }
 
-type EnclosureKind = EnvironmentHelpersJSON['enclosure']
+type EnclosureKind = string
 
 const ENCLOSURE_OPTIONS: Array<{ value: EnclosureKind; label: string }> = [
   { value: 'none', label: '无' },
@@ -103,9 +103,9 @@ function setEnclosure(kind: EnclosureKind) {
       <el-form label-position="top" size="small">
         <el-form-item label="空间壳">
           <el-select
-            :model-value="environment?.helpers.enclosure ?? 'openBoxDoor'"
+            :model-value="environment?.helpers.enclosure ?? 'openBox'"
             :disabled="!environment"
-            @change="v => setEnclosure(v as EnclosureKind)"
+            @change="v => setEnclosure(String(v))"
           >
             <el-option
               v-for="opt in ENCLOSURE_OPTIONS"

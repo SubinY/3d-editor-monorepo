@@ -3,7 +3,7 @@ import type { CatalogItem } from '../../../catalog/types'
 import type { BoundsJSON } from '../../../document/types'
 
 /**
- * 与 `viewport/three/helpers/enclosure.ts` 壳体壁厚公式保持一致。
+ * 与 openBox 内建壳体壁厚公式保持一致（2D 立面贴背面用）。
  */
 export function enclosureShellThickness(
   width: number,
@@ -14,7 +14,7 @@ export function enclosureShellThickness(
 }
 
 /**
- * container：节点原点在 footprint 中心；贴柜内背面。
+ * container（XY 立面）：节点原点在 footprint 中心；贴容器背面内壁。
  * 背面内壁 ≈ -depth/2 + t，故 Z = -depth/2 + t + footprint.depth/2
  */
 export function defaultContainerBackZ(

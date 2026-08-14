@@ -18,7 +18,7 @@ import {
 /**
  * 2D 编辑视图门面：装配 camera / interactions / place / paint，按 tool 路由指针事件。
  * - scene：俯视 XZ（宽×深）
- * - container：立面 XY（宽×高，y 向上，底边为柜底）
+ * - container：立面 XY（宽×高，y 向上，底边为容器底）
  */
 export class Viewport2D {
   public readonly canvas: HTMLCanvasElement

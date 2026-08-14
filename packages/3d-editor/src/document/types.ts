@@ -3,14 +3,14 @@
  * 与行业无关：只描述「边界 + 线段墙 + 节点引用与变换 + 3D 呈现环境」。
  */
 
-export const SCHEMA_VERSION = '1.0.0'
+export const SCHEMA_VERSION = '2.0.0'
 
 export type DocumentKind = 'scene' | 'container'
 
 export interface BoundsJSON {
   width: number
   depth: number
-  /** container 常用（箱体净高）；scene 可选净高 */
+  /** container（XY 立面容器）常用净高；scene 可选净高 */
   height?: number
 }
 
@@ -71,19 +71,12 @@ export interface LightJSON {
 export interface EnvironmentHelpersJSON {
   grid: boolean
   /**
-   * 编辑态空间壳（不可选中）：
+   * 编辑态空间壳（不可选中）。开放字符串：
    * - none：无壳
-   * - openBox：五面开口盒（缺 +Z）
-   * - openBoxDoor：五面开口盒 + 单扇外开前柜门
-   * - openBoxDoubleDoor：五面开口盒 + 双扇对开前柜门
-   * - outdoorCabinet：户外双门柜（坡顶 + 底通气 + 铆钉锁扣，双门外开）
+   * - openBox：内核内建五面开口盒（缺 +Z 前脸）
+   * - 其它任意 id：由 Host / assets procedural resolver 解释（如 openBoxDoor）
    */
-  enclosure:
-  | 'none'
-  | 'openBox'
-  | 'openBoxDoor'
-  | 'openBoxDoubleDoor'
-  | 'outdoorCabinet'
+  enclosure: string
 }
 
 /** 地面铺设范围 */
@@ -160,11 +153,11 @@ export interface EnvironmentJSON {
   lights: LightJSON[]
   shadows: { enabled: boolean; type?: 'basic' | 'pcfsoft' }
   helpers: EnvironmentHelpersJSON
-  /** 场景地面；container 默认 visible=false */
+  /** 场景地面；XY 容器默认 visible=false */
   floor: EnvironmentFloorJSON
   /** 场景天花；默认 visible=false（Host 开关打开） */
   ceiling: EnvironmentCeilingJSON
-  /** 场景墙体外观；所有墙共用 */
+  /** 场景墙体外观；所有墙共用（仅 XZ scene 有墙） */
   wall: EnvironmentWallJSON
   /** 默认视角：类型 / 目标 / 位姿 / 视场 / 距离限制；编辑态 Orbit 可静默回写目标与半径 */
   defaultView?: DefaultViewJSON

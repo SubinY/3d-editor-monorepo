@@ -48,24 +48,21 @@ export type ProceduralModelResolver = (
   | Promise<import('three').Object3D | null | undefined>
 
 /**
- * 左侧素材面板分组 / 交互语义约定：
- * - wall：墙工具（非放置节点，Host 用于切画墙工具）
- * - fixture：墙构件（门/窗/柱等），2D 放置时贴墙吸附
- * - equipment：大型设备（电柜、机床等），scene 放置
- * - component：元器件，container 放置
+ * 素材面板分组 / 交互语义（开放字符串）。
+ * 内核约定：`fixture` 在 scene 2D 放置时触发贴墙吸附；其余由 Host 分组展示。
  */
-export type CatalogCategory = 'wall' | 'fixture' | 'equipment' | 'component'
+export type CatalogCategory = string
 
 /**
  * CatalogItem 两型（定稿 D2）：
  * - model 型：model3d 指向可直接渲染的模型
- * - document 型：document / documentUrl 指向一份 ContainerDocument JSON，3D 视图嵌套解析
+ * - document 型：document / documentUrl 指向一份 container JSON，3D 视图嵌套解析
  */
 export interface CatalogItem {
   id: string
   version: string
   name: string
-  /** 开放字符串，业务自定义分类（equipment/component/...） */
+  /** 开放字符串，业务自定义分类（equipment/component/effect/...） */
   kind?: string
   /** 素材面板分组与交互语义（fixture 触发贴墙吸附） */
   category?: CatalogCategory
@@ -80,7 +77,7 @@ export interface CatalogItem {
   document?: EditorDocumentJSON
   /** document 型（外链，实现按需 fetch） */
   documentUrl?: string
-  /** document 型可选柜体外壳 */
+  /** document 型可选外壳（嵌套解析时半透明显示内部） */
   shell3d?: Model3DSpec
   /** 业务扩展，编辑器不解释 */
   metadata?: Record<string, unknown>

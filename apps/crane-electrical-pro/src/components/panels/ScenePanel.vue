@@ -108,7 +108,7 @@ function patchHelpers(key: 'grid' | 'enclosure', value: boolean) {
   const env = ensureEnv()
   if (!env) return
   if (key === 'grid') env.helpers.grid = value
-  if (key === 'enclosure') env.helpers.enclosure = value ? 'openBoxDoor' : 'none'
+  if (key === 'enclosure') env.helpers.enclosure = value ? 'openBox' : 'none'
   emit('update:environment', env)
 }
 

@@ -4,7 +4,7 @@ import type { DocumentKind, EditorNodeJSON, TransformJSON } from './types'
 /**
  * MVP 碰撞：
  * - scene：俯视 XZ（footprint width×depth）
- * - container：立面 XY（footprint width×height，柜内「长×高」平面）
+ * - container：立面 XY（footprint width×height，容器「长×高」平面）
  * 同层级节点间检测；墙体不参与。
  */
 

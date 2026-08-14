@@ -50,7 +50,7 @@ export function snapWithAlignGuides(opts: {
     vRefs.push({ value, spanFrom, spanTo })
   }
 
-  // 其它物件：只提供四边（贴边），不提供中心——中心互吸会整柜重叠触发碰撞
+  // 其它物件：只提供四边（贴边），不提供中心——中心互吸会整块重叠触发碰撞
   opts.targets.forEach(t => {
     const left = t.u - t.wu / 2
     const right = t.u + t.wu / 2

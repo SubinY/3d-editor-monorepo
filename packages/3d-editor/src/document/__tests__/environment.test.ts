@@ -26,10 +26,10 @@ describe('createDefaultEnvironment', () => {
     expect(env.wall.cornerOverlap).toBe(false)
   })
 
-  it('container：无网格、openBoxDoor、地面与天花默认隐藏', () => {
+  it('container：无网格、openBox、地面与天花默认隐藏', () => {
     const env = createDefaultEnvironment('container', { width: 0.8, depth: 0.6, height: 2 })
     expect(env.helpers.grid).toBe(false)
-    expect(env.helpers.enclosure).toBe('openBoxDoor')
+    expect(env.helpers.enclosure).toBe('openBox')
     expect(env.defaultView?.type).toBe('orbit')
     expect(env.floor.visible).toBe(false)
     expect(env.ceiling.visible).toBe(false)

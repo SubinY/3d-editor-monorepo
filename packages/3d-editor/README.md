@@ -40,9 +40,13 @@ import type { CatalogItem, EditorDocumentJSON, EditorSession } from '@mh/3d-edit
 | 场景 | `kind` | 要点 |
 |------|--------|------|
 | 房间 / 车间俯视 | `scene` | 画墙、放设备、门窗贴墙 |
-| 柜 / 设备内立面 | `container` | 元器件在宽×高平面摆放 |
+| 设备内立面 | `container` | 元器件在宽×高平面摆放 |
 | 只读 3D 监控 | 任意 | `viewport3d.readonly` + `setNodeVisualState` |
-| 复合资产 | scene 嵌 document 柜 | 3D 展开深度上限 2 |
+| 复合资产 | scene 嵌 document | 3D 展开深度上限 2 |
+
+### 空间壳 `helpers.enclosure`
+
+开放字符串。内核只内建 `none` / `openBox`；`openBoxDoor`、`openBoxDoubleDoor`、`outdoorCabinet` 等由 `@mh/3d-editor-assets` 的 `commonProceduralResolvers` 按同名 id 解析。container 新建默认 `openBox`。
 
 ---
 
@@ -97,7 +101,7 @@ editor.dispose()
 | `buildPublishBundle` / `createPackCatalog` | 发布静态包 / 只读加载 |
 | `SCHEMA_VERSION` | 手写或迁移 JSON |
 | `createDefaultEnvironment` / `createDefaultWall` / `cloneEnvironment` | 环境面板 |
-| `isDocumentItem` | 嵌套柜 document 型素材 |
+| `isDocumentItem` | 嵌套 document 型素材 |
 | `instantiateProceduralModule` | 管理页裸预览 |
 | `runProceduralResolvers` | 按序跑 `procedural.resolvers`（一般由 createEditor 内部调用） |
 

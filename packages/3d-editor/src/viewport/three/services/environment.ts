@@ -10,9 +10,9 @@ const FALLBACK_BG = '#0c1420'
 export interface EnvironmentServiceOptions {
   runtime: ThreeRuntime
   envGroup: THREE.Group
-  /** Host：覆盖 enclosure 几何（如 outdoorCabinet） */
+  /** Host/assets：解析非内建 enclosure id（如 openBoxDoor） */
   resolveEnclosure?: (
-    kind: NonNullable<EnvironmentJSON['helpers']['enclosure']>,
+    kind: string,
     size: { width: number; height: number; depth: number }
   ) => Promise<THREE.Object3D | null | undefined> | THREE.Object3D | null | undefined
 }
