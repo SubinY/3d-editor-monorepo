@@ -3,6 +3,7 @@ import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js'
 import type { BoundsJSON, EnvironmentJSON } from '../../../document/types'
 import type { ThreeRuntime } from '../runtime/ThreeRuntime'
 import { buildEnclosure } from '../helpers/enclosure'
+import { disposeObject3D } from '../utils/dispose'
 
 const FALLBACK_BG = '#0c1420'
 
@@ -178,14 +179,7 @@ export class EnvironmentService {
     while (this.envGroup.children.length) {
       const child = this.envGroup.children[0]
       this.envGroup.remove(child)
-      child.traverse(obj => {
-        const mesh = obj as THREE.Mesh
-        if (mesh.isMesh) {
-          mesh.geometry?.dispose()
-          const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material]
-          mats.forEach(m => m?.dispose?.())
-        }
-      })
+      disposeObject3D(child)
     }
   }
 

@@ -27,6 +27,30 @@ describe('disposeMaterial', () => {
 })
 
 describe('disposeObject3D', () => {
+  it('释放灯光 shadow.map（网格开关会整份重建灯光，不释放就会贴图计数单调涨）', () => {
+    const light = new THREE.DirectionalLight()
+    const map = { dispose: vi.fn() } as unknown as THREE.WebGLRenderTarget
+    light.shadow.map = map
+
+    disposeObject3D(light)
+
+    expect(map.dispose).toHaveBeenCalledOnce()
+    expect(light.shadow.map).toBeNull()
+  })
+
+  it('释放 Line/GridHelper 的 geometry 与材质', () => {
+    const grid = new THREE.GridHelper(10, 10)
+    const geo = grid.geometry
+    const geoDispose = vi.spyOn(geo, 'dispose')
+    const mat = grid.material as THREE.Material
+    const matDispose = vi.spyOn(mat, 'dispose')
+
+    disposeObject3D(grid)
+
+    expect(geoDispose).toHaveBeenCalledOnce()
+    expect(matDispose).toHaveBeenCalledOnce()
+  })
+
   it('遍历子树释放 geometry 与材质贴图', () => {
     const root = new THREE.Group()
     const map = new THREE.Texture()
