@@ -75,8 +75,6 @@ export class PerfStatsOverlay {
       `${Math.floor(triangles).toLocaleString('en-US')} 三角形\n` +
       `${geometries} 几何 / ${textures} 贴图\n` +
       `${this.smoothedMs.toFixed(2)} 渲染时间`
-
-    console.log(geometries, textures, 'textures')
   }
 
   dispose(): void {
