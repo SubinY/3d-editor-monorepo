@@ -6,7 +6,7 @@ import {
 } from '@mh/3d-editor'
 import type { EditorDocumentJSON } from '@mh/3d-editor'
 import { UX_DEMO_CATALOG } from './catalog'
-import { createUxDemoProceduralResolver } from './models/registry'
+import { createUxDemoProceduralResolvers } from './models/registry'
 
 /** 构建接近设计稿的示意电柜室 Document（内存，不落库） */
 export async function buildUxDemoSceneJSON(): Promise<EditorDocumentJSON> {
@@ -63,7 +63,7 @@ export async function buildUxDemoSceneJSON(): Promise<EditorDocumentJSON> {
   const editor = await createEditor({
     catalog,
     document: draft,
-    procedural: { resolve: createUxDemoProceduralResolver() },
+    procedural: { resolvers: createUxDemoProceduralResolvers() },
     interaction: {
       snapEnabled: true,
       collisionEnabled: false,

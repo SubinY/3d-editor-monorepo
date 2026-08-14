@@ -99,6 +99,7 @@ editor.dispose()
 | `createDefaultEnvironment` / `createDefaultWall` / `cloneEnvironment` | 环境面板 |
 | `isDocumentItem` | 嵌套柜 document 型素材 |
 | `instantiateProceduralModule` | 管理页裸预览 |
+| `runProceduralResolvers` | 按序跑 `procedural.resolvers`（一般由 createEditor 内部调用） |
 
 ### 类型
 

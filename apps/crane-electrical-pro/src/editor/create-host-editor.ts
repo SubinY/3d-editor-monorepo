@@ -10,7 +10,7 @@ import type {
   EditorSession,
   ProceduralModelResolver
 } from '@mh/3d-editor'
-import { panel, glowRing, alertBox } from '@mh/3d-editor-assets/common'
+import { panel, commonProceduralResolvers } from '@mh/3d-editor-assets/common'
 import { CATALOG_ITEMS, createHostCatalog } from '@/catalog'
 import { findCatalogItem } from '@/catalog/items'
 
@@ -25,10 +25,7 @@ export function createBlankSceneJSON(name = '起重机电气室'): EditorDocumen
   })
 }
 
-const resolveProcedural: ProceduralModelResolver = async (ref, ctx) =>
-  (await panel.resolve(ref, ctx)) ??
-  (await glowRing.resolve(ref, ctx)) ??
-  (await alertBox.resolve(ref, ctx))
+const proceduralResolvers: ProceduralModelResolver[] = [...commonProceduralResolvers]
 
 /**
  * 默认 10×5×2 场景：矩形房间、一排约 5 柜、门、LED、信息面板。
@@ -39,7 +36,7 @@ export async function createDefaultSceneJSON(): Promise<EditorDocumentJSON> {
     catalog: createMemoryCatalog(CATALOG_ITEMS),
     document: createBlankSceneJSON(),
     procedural: {
-      resolve: resolveProcedural
+      resolvers: proceduralResolvers
     }
   })
 
@@ -156,7 +153,7 @@ export async function createHostEditor(options: HostEditorOptions): Promise<Edit
       hoverOutline: !options.readonly
     },
     procedural: {
-      resolve: resolveProcedural
+      resolvers: proceduralResolvers
     },
     interaction: options.readonly
       ? undefined

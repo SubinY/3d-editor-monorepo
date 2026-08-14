@@ -50,10 +50,10 @@ export interface CreateEditorOptions {
   }
   /**
    * Host 程序化模型：Catalog `model3d.type === 'procedural'` 时按 id 解析。
-   * 几何资产留在 Host；内核只认可序列化 id。
+   * 按数组顺序调用，第一个返回非空 Object3D 的胜出；不匹配应返回 null/undefined。
    */
   procedural?: {
-    resolve: ProceduralModelResolver
+    resolvers: ProceduralModelResolver[]
   }
   /** 会话级交互：吸附 / 碰撞 / 3D gizmo mode */
   interaction?: EditorInteractionOptions

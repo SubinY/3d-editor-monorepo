@@ -13,10 +13,13 @@ const factories = new Map<string, Factory>([
   ['ux-door', createDoorModel]
 ])
 
-export function createUxDemoProceduralResolver(): ProceduralModelResolver {
-  return (ref, ctx) => {
-    const factory = factories.get(ref.id)
-    if (!factory) return undefined
-    return factory(ctx.THREE, { footprint: ctx.item.footprint })
-  }
+const hostFactoryResolver: ProceduralModelResolver = (ref, ctx) => {
+  const factory = factories.get(ref.id)
+  if (!factory) return undefined
+  return factory(ctx.THREE, { footprint: ctx.item.footprint })
+}
+
+/** UX demo：注入 createEditor({ procedural: { resolvers } }) */
+export function createUxDemoProceduralResolvers(): ProceduralModelResolver[] {
+  return [hostFactoryResolver]
 }

@@ -15,7 +15,7 @@ import type {
 } from '@mh/3d-editor'
 import { UX_DEMO_CATALOG } from '@/ux-demo/catalog'
 import { buildUxDemoSceneJSON } from '@/ux-demo/seed-scene'
-import { createUxDemoProceduralResolver } from '@/ux-demo/models/registry'
+import { createUxDemoProceduralResolvers } from '@/ux-demo/models/registry'
 import type { EditorTool, RightTab, ViewMode } from '@/ux-demo/mock-data'
 import type { MockAsset } from '@/ux-demo/mock-data'
 import TopBar from '@/ux-demo/components/TopBar.vue'
@@ -248,7 +248,7 @@ onMounted(async () => {
         hoverOutline: true,
         perfStats: false
       },
-      procedural: { resolve: createUxDemoProceduralResolver() },
+      procedural: { resolvers: createUxDemoProceduralResolvers() },
       interaction: {
         snapEnabled: true,
         collisionEnabled: true,

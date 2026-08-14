@@ -74,19 +74,33 @@ describe('procedural model3d', () => {
     expect(() => resolve({ id: 'comp-breaker' }, { item: breaker, THREE })).toThrow('boom')
   })
 
-  it('procedural 可带 url 字段且可 JSON 序列化', () => {
-    const item: CatalogItem = {
-      ...breaker,
-      model3d: {
-        type: 'procedural',
-        id: 'comp-breaker',
-        url: '/models/comp-breaker@1.0.0.mjs'
-      }
+  it('resolvers 数组：按序命中第一个非空结果', async () => {
+    const miss: ProceduralModelResolver = () => undefined
+    const hit: ProceduralModelResolver = (ref, ctx) => {
+      if (ref.id !== 'comp-breaker') return undefined
+      const g = new ctx.THREE.Group()
+      g.name = 'comp-breaker'
+      return g
     }
-    expect(JSON.parse(JSON.stringify(item.model3d))).toEqual({
-      type: 'procedural',
-      id: 'comp-breaker',
-      url: '/models/comp-breaker@1.0.0.mjs'
+    const { runProceduralResolvers } = await import('../run-procedural-resolvers')
+    const built = await runProceduralResolvers([miss, hit], { id: 'comp-breaker' }, {
+      item: breaker,
+      THREE
     })
+    expect(built).toBeInstanceOf(THREE.Group)
+    expect(built?.name).toBe('comp-breaker')
+  })
+
+  it('resolvers 数组：单个抛错不阻断后续', async () => {
+    const boom: ProceduralModelResolver = () => {
+      throw new Error('boom')
+    }
+    const hit: ProceduralModelResolver = (_ref, ctx) => new ctx.THREE.Group()
+    const { runProceduralResolvers } = await import('../run-procedural-resolvers')
+    const built = await runProceduralResolvers([boom, hit], { id: 'comp-breaker' }, {
+      item: breaker,
+      THREE
+    })
+    expect(built).toBeInstanceOf(THREE.Group)
   })
 })

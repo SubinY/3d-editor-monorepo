@@ -24,7 +24,7 @@ export function catalogItem(): CatalogItem {
   }
 }
 
-/** 注入 createEditor({ procedural: { resolve } })；不匹配时返回 null */
+/** 注入 createEditor({ procedural: { resolvers } })；不匹配时返回 null */
 export const resolve: ProceduralModelResolver = async (ref, ctx) => {
   if (ref.id !== PROCEDURAL_ID) return null
   const fallback = isContent(ctx.item.metadata?.alertBox)

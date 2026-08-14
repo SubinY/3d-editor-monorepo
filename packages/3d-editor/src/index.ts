@@ -16,6 +16,7 @@ export {
 export { createEmptyDocumentJSON } from './document/serialize'
 export { isDocumentItem } from './catalog/types'
 export { MH_ASSET_HANDLE_KEY, getAssetHandle } from './catalog/asset-handle'
+export { runProceduralResolvers } from './catalog/run-procedural-resolvers'
 /** AI / 远程 procedural ESM；Host 也可走 createEditor.procedural */
 export { instantiateProceduralModule } from './viewport/three/services/procedural-module-loader'
 export { createIndoorDefaultView } from './viewport/three/utils/indoor-view'

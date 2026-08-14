@@ -34,7 +34,7 @@ export class EditorSessionImpl implements EditorSession {
   private onDenied?: (reason: string) => void
   private viewport3dOptions?: CreateEditorOptions['viewport3d']
   private viewport2dOptions?: CreateEditorOptions['viewport2d']
-  private proceduralResolve?: ProceduralModelResolver
+  private proceduralResolvers?: ProceduralModelResolver[]
   private disposed = false
 
   private snapEnabled: boolean
@@ -48,7 +48,7 @@ export class EditorSessionImpl implements EditorSession {
     this.onDenied = options.onDenied
     this.viewport3dOptions = options.viewport3d
     this.viewport2dOptions = options.viewport2d
-    this.proceduralResolve = options.procedural?.resolve
+    this.proceduralResolvers = options.procedural?.resolvers
 
     const interaction = options.interaction
     this.snapEnabled = interaction?.snapEnabled ?? true
@@ -107,7 +107,7 @@ export class EditorSessionImpl implements EditorSession {
       snapEnabled: this.snapEnabled,
       perfStats: this.viewport3dOptions?.perfStats,
       hoverOutline: this.viewport3dOptions?.hoverOutline,
-      proceduralResolve: this.proceduralResolve
+      proceduralResolvers: this.proceduralResolvers
     }
     this.viewport3d = new Viewport3D(el, options)
     return this.viewport3d

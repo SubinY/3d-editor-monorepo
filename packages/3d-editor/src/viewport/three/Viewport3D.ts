@@ -39,6 +39,7 @@ import { findNodePath, isObjectUnder } from './utils/node-path'
 import { disposeObject3D } from './utils/dispose'
 import { bumpBuildToken, isBuildStale } from './utils/build-token'
 import { getAssetHandle } from '../../catalog/asset-handle'
+import { runProceduralResolvers } from '../../catalog/run-procedural-resolvers'
 import {
   createIndoorDefaultView,
   type CreateIndoorDefaultViewOptions
@@ -58,8 +59,8 @@ export interface Viewport3DOptions {
   perfStats?: boolean
   /** 悬停描边；默认 true */
   hoverOutline?: boolean
-  /** Host 程序化模型解析（model3d.type === 'procedural'） */
-  proceduralResolve?: ProceduralModelResolver
+  /** Host 程序化模型解析链（model3d.type === 'procedural'） */
+  proceduralResolvers?: ProceduralModelResolver[]
 }
 
 export interface FocusCameraOptions {
@@ -94,7 +95,7 @@ export class Viewport3D {
   private catalog?: CatalogProvider
   private readonly readonly: boolean
   private onInteraction?: NodeInteractionHandler
-  private proceduralResolve?: ProceduralModelResolver
+  private proceduralResolvers: ProceduralModelResolver[]
 
   private nodeRoots = new Map<string, THREE.Object3D>()
   private pathObjects = new Map<string, THREE.Object3D>()
@@ -132,7 +133,7 @@ export class Viewport3D {
     this.catalog = options.catalog ?? options.document.getCatalog()
     this.readonly = options.readonly ?? false
     this.onInteraction = options.onInteraction
-    this.proceduralResolve = options.proceduralResolve
+    this.proceduralResolvers = options.proceduralResolvers ?? []
 
     this.runtime = new ThreeRuntime({
       container,
@@ -161,9 +162,9 @@ export class Viewport3D {
     this.environment = new EnvironmentService({
       runtime: this.runtime,
       envGroup: this.envGroup,
-      resolveEnclosure: this.proceduralResolve
+      resolveEnclosure: this.proceduralResolvers.length
         ? async (kind, size) => {
-            if (kind !== 'outdoorCabinet' || !this.proceduralResolve) return null
+            if (kind !== 'outdoorCabinet') return null
             const item: CatalogItem = {
               id: '__enclosure-outdoorCabinet__',
               version: '0',
@@ -172,10 +173,11 @@ export class Viewport3D {
               footprint: {
                 width: size.width,
                 depth: size.depth,
-                height: size.height,
-              },
+                height: size.height
+              }
             }
-            const built = await this.proceduralResolve(
+            const built = await runProceduralResolvers(
+              this.proceduralResolvers,
               { id: 'outdoor-cabinet' },
               { item, THREE }
             )
@@ -629,13 +631,14 @@ export class Viewport3D {
       const width = json?.bounds.width ?? item.footprint.width
       const depth = json?.bounds.depth ?? item.footprint.depth
       const height = json?.bounds.height ?? item.footprint.height ?? 2
-      if (enclosure === 'outdoorCabinet' && this.proceduralResolve) {
+      if (enclosure === 'outdoorCabinet' && this.proceduralResolvers.length) {
         const enclosureItem: CatalogItem = {
           ...item,
-          footprint: { width, depth, height },
+          footprint: { width, depth, height }
         }
         try {
-          const built = await this.proceduralResolve(
+          const built = await runProceduralResolvers(
+            this.proceduralResolvers,
             { id: 'outdoor-cabinet' },
             { item: enclosureItem, THREE }
           )
@@ -707,14 +710,18 @@ export class Viewport3D {
           return this.buildFootprintBox(item)
         }
       }
-      if (!this.proceduralResolve) {
+      if (!this.proceduralResolvers.length) {
         console.warn(
-          `[viewport3d] procedural model "${spec.id}" but no procedural.resolve injected; fallback box`
+          `[viewport3d] procedural model "${spec.id}" but no procedural.resolvers injected; fallback box`
         )
         return this.buildFootprintBox(item)
       }
       try {
-        const built = await this.proceduralResolve({ id: spec.id }, { item, THREE, node })
+        const built = await runProceduralResolvers(
+          this.proceduralResolvers,
+          { id: spec.id },
+          { item, THREE, node }
+        )
         if (built) return built
         console.warn(`[viewport3d] procedural resolve returned empty for "${spec.id}"; fallback box`)
       } catch (error) {

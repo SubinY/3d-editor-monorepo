@@ -14,7 +14,7 @@ import {
   toVisualState,
   type DeviceStatus
 } from '@/business/device-status'
-import { createProceduralResolver } from '@/models/registry'
+import { createProceduralResolvers } from '@/models/registry'
 import CabinetDetailModal from '@/components/CabinetDetailModal.vue'
 
 interface AlarmLog {
@@ -147,7 +147,7 @@ onMounted(async () => {
       }
     },
     procedural: {
-      resolve: createProceduralResolver()
+      resolvers: createProceduralResolvers()
     }
   })
 

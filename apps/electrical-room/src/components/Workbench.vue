@@ -30,7 +30,7 @@ import {
   writeNodeBindings,
   type NodeBindingsProps
 } from '@/business/node-bindings'
-import { createProceduralResolver } from '@/models/registry'
+import { createProceduralResolvers } from '@/models/registry'
 import { panel } from '@mh/3d-editor-assets/common'
 
 const props = defineProps<{
@@ -229,7 +229,7 @@ onMounted(async () => {
       hoverOutline: true
     },
     procedural: {
-      resolve: createProceduralResolver()
+      resolvers: createProceduralResolvers()
     },
     interaction: {
       transformModes: ['translate', 'rotate']
