@@ -153,15 +153,9 @@ function removeSelected() {
 function duplicateSelected() {
   const node = selectedNode.value
   const d = doc.value
-  if (!node?.catalogRef || !d) return
-  const item = catalogItems.value.find(i => i.id === node.catalogRef!.id)
-  if (!item) return
-  const p = node.transform.position
-  d.commands.placeItem(item, {
-    position: [p[0] + 0.7, p[1], p[2] + 0.4],
-    rotation: [...node.transform.rotation] as [number, number, number],
-    name: `${node.name ?? item.name} 副本`
-  })
+  if (!node || !d) return
+  const result = d.commands.duplicateNode(node.id)
+  if (result.denied) return
   showToast('已复制')
 }
 

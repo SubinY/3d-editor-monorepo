@@ -38,6 +38,7 @@ import type { NodeInteractionHandler } from '../interaction-events'
 import { findNodePath, isObjectUnder } from './utils/node-path'
 import { disposeObject3D } from './utils/dispose'
 import { bumpBuildToken, isBuildStale } from './utils/build-token'
+import { getAssetHandle } from '../../catalog/asset-handle'
 import {
   createIndoorDefaultView,
   type CreateIndoorDefaultViewOptions
@@ -123,6 +124,8 @@ export class Viewport3D {
   /** buildNode 竞态 token：同 id 递增使在途 await 失效 */
   private buildTokens = new Map<string, number>()
   private wallRebuildScheduled = false
+  /** 上次已应用到 3D 的 props 引用；变化时才调 AssetHandle.apply */
+  private lastAppliedProps = new Map<string, Record<string, unknown> | undefined>()
 
   constructor(container: HTMLElement, options: Viewport3DOptions) {
     this.doc = options.document
@@ -532,6 +535,7 @@ export class Viewport3D {
     this.nodeRoots.set(node.id, root)
     this.pathObjects.set(node.id, root)
     this.pickables.push(root)
+    this.lastAppliedProps.set(node.id, node.props)
     this.runtime.scene.add(root)
     this.runtime.markShadowNeedsUpdate()
 
@@ -758,6 +762,7 @@ export class Viewport3D {
     }
     this.runtime.scene.remove(root)
     this.nodeRoots.delete(id)
+    this.lastAppliedProps.delete(id)
     const pickIdx = this.pickables.indexOf(root)
     if (pickIdx >= 0) this.pickables.splice(pickIdx, 1)
     Array.from(this.pathObjects.keys())
@@ -777,6 +782,23 @@ export class Viewport3D {
       this.selection.syncGizmo([])
     } else if (node.visible !== false && this.doc.selection.first() === node.id) {
       this.selection.syncGizmo([node.id])
+    }
+    // transform / visible 变化后刷新阴影（Tier0: autoUpdate=false，按需 needsUpdate）
+    this.runtime.markShadowNeedsUpdate()
+
+    const prevProps = this.lastAppliedProps.get(node.id)
+    if (node.props === prevProps) return
+    this.lastAppliedProps.set(node.id, node.props)
+    const handle = getAssetHandle(root)
+    if (handle) {
+      void Promise.resolve(handle.apply(node.props)).then(() => {
+        if (!this.disposed) this.runtime.markShadowNeedsUpdate()
+      })
+      return
+    }
+    // 无 handle 且带 props：整节点重建（兜底未知 procedural）
+    if (node.props !== undefined) {
+      void this.buildNode(node)
     }
   }
 
@@ -975,6 +997,7 @@ export class Viewport3D {
     Array.from(this.nodeRoots.keys()).forEach(id => this.removeNodeObject(id))
     this.pickables.length = 0
     this.buildTokens.clear()
+    this.lastAppliedProps.clear()
     if (this.wallMaterialHandle) {
       this.wallMaterialHandle.dispose()
       this.wallMaterialHandle = null

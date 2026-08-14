@@ -1,4 +1,5 @@
 import type * as ThreeNS from 'three'
+import { MH_ASSET_HANDLE_KEY } from '@mh/3d-editor'
 import { bakeToCanvas } from './bake'
 import { createDefaultContent, isContent } from './content'
 import type { PanelBillboardMode, PanelContentJSON, PanelHandle } from './types'
@@ -121,10 +122,18 @@ export async function createModel(
   }
   root.userData[USERDATA_KEY] = handle
   mesh.userData[USERDATA_KEY] = handle
+  root.userData[MH_ASSET_HANDLE_KEY] = {
+    apply: (props: Record<string, unknown> | undefined) => {
+      const raw = props?.panel
+      const next = isContent(raw) ? raw : createDefaultContent()
+      return handle.apply(next)
+    },
+    dispose: () => handle.dispose()
+  }
   return handle
 }
 
-/** 刷新已挂到节点上的面板贴图 */
+/** 刷新已挂到节点上的面板贴图（调试/特殊路径；常规编辑走 Viewport3D props 同步） */
 export async function applyToObject(
   root: ThreeNS.Object3D | undefined,
   content: PanelContentJSON

@@ -498,27 +498,10 @@ function removeSelected() {
   }
 }
 
-async function duplicateSelected() {
+function duplicateSelected() {
   const d = doc.value
   if (!d || !selectedNode.id) return
-  const node = d.getNode(selectedNode.id)
-  if (!node?.catalogRef) {
-    showToast('当前选中不支持复制', 'error')
-    return
-  }
-  const item =
-    d.getCachedItem(node) ??
-    (await props.catalog.get(node.catalogRef.id, node.catalogRef.version))
-  if (!item) {
-    showToast('找不到可复制的资源', 'error')
-    return
-  }
-  const p = node.transform.position
-  const result = d.commands.placeItem(item, {
-    position: [p[0] + 0.7, p[1], p[2] + 0.4],
-    rotation: [...node.transform.rotation] as [number, number, number],
-    name: `${node.name ?? item.name} 副本`
-  })
+  const result = d.commands.duplicateNode(selectedNode.id)
   if (result.denied) {
     showToast(deniedMessage(result.denied), 'error')
     return
@@ -602,8 +585,6 @@ async function confirmPanelEdit(content: panel.PanelContentJSON) {
       panel: content
     }
   })
-  const obj = session?.viewport3d?.getNodeObject(selectedNode.id)
-  await panel.applyToObject(obj, content)
   ElMessage.success('面板已更新')
 }
 </script>

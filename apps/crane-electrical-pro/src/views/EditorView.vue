@@ -406,8 +406,6 @@ async function confirmPanelEdit(content: panel.PanelContentJSON) {
       panel: content
     }
   })
-  const obj = api.session.value?.viewport3d?.getNodeObject(selected.id)
-  await panel.applyToObject(obj, content)
   message.success('面板已更新')
 }
 

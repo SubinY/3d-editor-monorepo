@@ -5,10 +5,11 @@ import type { EnvironmentJSON, FloorCoverage } from '@mh/3d-editor'
 import {
   CEILING_PRESETS,
   FLOOR_PRESETS,
+  WALL_PRESETS,
   resolveCeilingPreset,
-  resolveFloorPreset
-} from '@/business/floor-presets'
-import { WALL_PRESETS, resolveWallPreset } from '@/business/wall-presets'
+  resolveFloorPreset,
+  resolveWallPreset
+} from '@mh/3d-editor-assets/common'
 
 const props = defineProps<{
   environment: EnvironmentJSON | null

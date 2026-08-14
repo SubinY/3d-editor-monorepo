@@ -1,8 +1,22 @@
 /**
  * 通用 procedural 资产入口。
- * Host: `import { panel, glowRing, alertBox } from '@mh/3d-editor-assets/common'`
+ * Host: `import { panel, glowRing, alertBox, FLOOR_PRESETS } from '@mh/3d-editor-assets/common'`
  * 各模型 API / 类型见对应子目录（如 `./panel`），勿在此堆积类型再导出。
  */
 export * as panel from './panel'
 export * as glowRing from './glow-ring'
 export * as alertBox from './alert-box'
+export {
+  FLOOR_PRESETS,
+  CEILING_PRESETS,
+  WALL_PRESETS,
+  resolveFloorPreset,
+  resolveCeilingPreset,
+  resolveWallPreset
+} from './surface-presets'
+export type {
+  FloorPreset,
+  FloorPresetId,
+  WallPreset,
+  WallPresetId
+} from './surface-presets'

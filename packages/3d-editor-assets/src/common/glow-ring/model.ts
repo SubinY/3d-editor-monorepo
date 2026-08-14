@@ -1,4 +1,5 @@
 import type * as ThreeNS from 'three'
+import { MH_ASSET_HANDLE_KEY } from '@mh/3d-editor'
 import { createDefaultContent, isContent } from './content'
 import type { GlowRingContentJSON, GlowRingHandle } from './types'
 
@@ -114,10 +115,18 @@ export function createModel(
 
   root.userData[USERDATA_KEY] = handle
   mesh.userData[USERDATA_KEY] = handle
+  root.userData[MH_ASSET_HANDLE_KEY] = {
+    apply: (props: Record<string, unknown> | undefined) => {
+      const raw = props?.glowRing
+      const next = isContent(raw) ? raw : createDefaultContent()
+      handle.apply(next)
+    },
+    dispose: () => handle.dispose()
+  }
   return handle
 }
 
-/** 刷新已挂到节点上的光圈参数 */
+/** 刷新已挂到节点上的光圈参数（调试路径；常规走 Viewport3D props 同步） */
 export function applyToObject(
   root: ThreeNS.Object3D | undefined,
   content: GlowRingContentJSON

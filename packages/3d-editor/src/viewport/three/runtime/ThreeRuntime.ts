@@ -118,6 +118,8 @@ export class ThreeRuntime {
       this.transform = new TransformControls(this._camera, this.renderer.domElement)
       this.transform.setMode(options.transformMode ?? 'translate')
       this.transform.addEventListener('dragging-changed', this.handleDraggingChanged)
+      // 拖拽中物体已动、文档尚未写回；需按帧标记阴影（idle 仍不重渲）
+      this.transform.addEventListener('objectChange', this.handleTransformObjectChange)
       this.scene.add(this.transform)
     } else {
       this.transform = null
@@ -389,6 +391,7 @@ export class ThreeRuntime {
     this.orbit.removeEventListener('change', this.handleOrbitChange)
     if (this.transform) {
       this.transform.removeEventListener('dragging-changed', this.handleDraggingChanged)
+      this.transform.removeEventListener('objectChange', this.handleTransformObjectChange)
       this.transform.dispose()
     }
     this.stopLoop()
@@ -486,6 +489,12 @@ export class ThreeRuntime {
       this.transformEndHandlers.forEach(handler => handler(payload))
     }
     this.transformBefore = undefined
+    // 松手后再刷一次，覆盖仅改 visible/同步路径漏标的情况
+    this.markShadowNeedsUpdate()
+  }
+
+  private handleTransformObjectChange = (): void => {
+    this.markShadowNeedsUpdate()
   }
 
   private handleGizmoPointerDown = (event: PointerEvent): void => {

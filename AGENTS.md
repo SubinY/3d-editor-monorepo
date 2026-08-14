@@ -2,9 +2,12 @@
 
 对外 npm 包：`@mh/3d-editor`（内网 `@mh` scope）。`apps/electrical-room*` 仅作本地联调。
 
+架构定稿（D1–D7）：[`docs/architecture.md`](docs/architecture.md)。
+
 ## Structure
 
 - `packages/3d-editor` — `createEditor`、Document、Catalog、2D/3D Viewport
+- `packages/3d-editor-assets` — 通用 / 行业 procedural 资产
 - `apps/electrical-room` — Host UI
 - `apps/electrical-room-api` — JSON 落盘
 

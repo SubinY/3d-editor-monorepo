@@ -15,7 +15,8 @@ export {
 } from './document/defaults'
 export { createEmptyDocumentJSON } from './document/serialize'
 export { isDocumentItem } from './catalog/types'
-/** AI / ???????? url ?? procedural ESM??? Host ? createEditor.procedural? */
+export { MH_ASSET_HANDLE_KEY, getAssetHandle } from './catalog/asset-handle'
+/** AI / 远程 procedural ESM；Host 也可走 createEditor.procedural */
 export { instantiateProceduralModule } from './viewport/three/services/procedural-module-loader'
 export { createIndoorDefaultView } from './viewport/three/utils/indoor-view'
 
@@ -46,7 +47,12 @@ export type {
   CameraViewType,
   VisualState
 } from './document/types'
-export type { EditorDocument, PlaceResult, PlaceOptions } from './document/EditorDocument'
+export type {
+  EditorDocument,
+  PlaceResult,
+  PlaceOptions,
+  DuplicateOptions
+} from './document/EditorDocument'
 export type {
   CatalogItem,
   CatalogCategory,
@@ -58,6 +64,7 @@ export type {
   ProceduralResolveContext,
   ProceduralModelResolver
 } from './catalog/types'
+export type { AssetHandle } from './catalog/asset-handle'
 export type { PublishBundle } from './catalog/publish'
 export type { Tool2D, Viewport2DOptions } from './viewport/canvas2d/types'
 export type { Viewport2D } from './viewport/canvas2d/Viewport2D'

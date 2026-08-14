@@ -75,6 +75,58 @@ describe('EditorDocument 命令与历史', () => {
     expect(doc.getNodes()).toHaveLength(1)
     expect(doc.getNode(node!.id)).toBeDefined()
   })
+
+  it('duplicateNode 深拷贝 props / children，单条历史可撤销', () => {
+    const doc = createSceneDoc()
+    const { node } = doc.commands.placeItem(cabinetItem, {
+      position: [1, 0, 2],
+      name: '柜A',
+      props: { panel: { title: 'A柜' }, bindings: [{ key: 'temp', path: 'a.temp' }] }
+    })
+    const childResult = doc.commands.placeItem(cabinetItem, {
+      parentId: node!.id,
+      position: [0.1, 0.5, 0],
+      name: '子件',
+      props: { tag: 'inner' },
+      select: false
+    })
+    expect(childResult.node).toBeDefined()
+
+    const result = doc.commands.duplicateNode(node!.id, { offset: [1.5, 0, 1] })
+    expect(result.denied).toBeUndefined()
+    const copy = result.node!
+    expect(copy.id).not.toBe(node!.id)
+    expect(copy.name).toBe('柜A 副本')
+    expect(copy.transform.position).toEqual([2.5, 0, 3])
+    expect(copy.props).toEqual({
+      panel: { title: 'A柜' },
+      bindings: [{ key: 'temp', path: 'a.temp' }]
+    })
+    expect(copy.children).toHaveLength(1)
+    expect(copy.children![0].id).not.toBe(childResult.node!.id)
+    expect(copy.children![0].props).toEqual({ tag: 'inner' })
+    expect(doc.getNodes()).toHaveLength(2)
+    expect(doc.selection.first()).toBe(copy.id)
+
+    expect(doc.history.undo()).toBe(true)
+    expect(doc.getNodes()).toHaveLength(1)
+    expect(doc.getNode(copy.id)).toBeUndefined()
+    expect(doc.history.redo()).toBe(true)
+    expect(doc.getNodes()).toHaveLength(2)
+  })
+
+  it('history.transaction 将多条命令合并为一次撤销', () => {
+    const doc = createSceneDoc()
+    doc.history.transaction('batch place', () => {
+      doc.commands.placeItem(cabinetItem, { position: [0, 0, 0], select: false })
+      doc.commands.placeItem(cabinetItem, { position: [2, 0, 0], select: false })
+    })
+    expect(doc.getNodes()).toHaveLength(2)
+    expect(doc.history.undo()).toBe(true)
+    expect(doc.getNodes()).toHaveLength(0)
+    expect(doc.history.redo()).toBe(true)
+    expect(doc.getNodes()).toHaveLength(2)
+  })
 })
 
 describe('约束引擎', () => {

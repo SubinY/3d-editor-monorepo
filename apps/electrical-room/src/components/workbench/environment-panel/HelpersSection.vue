@@ -7,8 +7,12 @@ import type {
   EnvironmentWallJSON,
   FloorCoverage
 } from '@mh/3d-editor'
-import { FLOOR_PRESETS, resolveFloorPreset } from '@/business/floor-presets'
-import { WALL_PRESETS, resolveWallPreset } from '@/business/wall-presets'
+import {
+  FLOOR_PRESETS,
+  WALL_PRESETS,
+  resolveFloorPreset,
+  resolveWallPreset
+} from '@mh/3d-editor-assets/common'
 
 const props = defineProps<{
   form: EnvironmentJSON

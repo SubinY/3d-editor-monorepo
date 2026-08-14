@@ -54,6 +54,14 @@ export interface PlaceResult {
   denied?: string
 }
 
+export interface DuplicateOptions {
+  /** 根节点 position 偏移；默认 [0.7, 0, 0.4] */
+  offset?: [number, number, number]
+  name?: string
+  select?: boolean
+  source?: string
+}
+
 export interface TransformOptions {
   source?: string
 }
@@ -365,6 +373,38 @@ export class EditorDocument {
       return true
     },
 
+    /**
+     * 深拷贝节点（含 props / children），新 id；根节点 position 加 offset。
+     */
+    duplicateNode: (id: string, options?: DuplicateOptions): PlaceResult => {
+      const src = this.nodeIndex.get(id)
+      if (!src) return { denied: 'node-not-found' }
+      const parentId = this.parentIndex.get(id)
+      const offset = options?.offset ?? ([0.7, 0, 0.4] as [number, number, number])
+      const clone = cloneNodeTree(src, {
+        offset,
+        name: options?.name ?? (src.name ? `${src.name} 副本` : undefined)
+      })
+
+      const item = this.getCachedItem(clone)
+      const hit = this.checkCollision(clone.transform, item, { parentId })
+      if (hit) {
+        return { denied: `collision:${hit.nodeName ?? hit.nodeId}` }
+      }
+
+      const source = options?.source
+      this.insertNodeInternal(clone, parentId, source)
+      this.history.push({
+        label: `duplicate ${src.name ?? id}`,
+        undo: () => this.removeNodeInternal(clone.id),
+        redo: () => this.insertNodeInternal(clone, parentId)
+      })
+      if (options?.select !== false) {
+        this.selection.set(clone.id)
+      }
+      return { node: clone }
+    },
+
     updateNode: (
       id: string,
       patch: Partial<Pick<EditorNodeJSON, 'name' | 'visible' | 'props'>>,
@@ -634,4 +674,25 @@ export class EditorDocument {
     })
     return doc
   }
+}
+
+function cloneNodeTree(
+  src: EditorNodeJSON,
+  opts: { offset?: [number, number, number]; name?: string }
+): EditorNodeJSON {
+  const clone: EditorNodeJSON = JSON.parse(JSON.stringify(src))
+  const remap = (node: EditorNodeJSON): void => {
+    node.id = crypto.randomUUID()
+    node.children?.forEach(remap)
+  }
+  remap(clone)
+  if (opts.name !== undefined) clone.name = opts.name
+  if (opts.offset) {
+    const p = clone.transform.position
+    clone.transform = {
+      ...clone.transform,
+      position: [p[0] + opts.offset[0], p[1] + opts.offset[1], p[2] + opts.offset[2]]
+    }
+  }
+  return clone
 }
