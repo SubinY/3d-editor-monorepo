@@ -1,16 +1,18 @@
 import type { DataSource, DataSourceNeed, PointSample } from '../types'
-import { parseSamplesJson } from './parse-samples'
-import type { WsSourceConfig } from './types'
+import { resolveSamplesJson } from './parse-samples'
+import type { MapResponseFn, WsSourceConfig } from './types'
 
 export class WsDataSource implements DataSource {
   private need: DataSourceNeed[] = []
   private listeners = new Set<(samples: PointSample[]) => void>()
   private socket: WebSocket | undefined
   private readonly url: string
+  private readonly mapResponse: MapResponseFn | undefined
   private intentionallyClosed = false
 
   constructor(config: Omit<WsSourceConfig, 'type'>) {
     this.url = config.url
+    this.mapResponse = config.mapResponse
   }
 
   start(need: DataSourceNeed[]): void {
@@ -60,7 +62,7 @@ export class WsDataSource implements DataSource {
     }
     ws.onmessage = ev => {
       if (typeof ev.data !== 'string') return
-      const samples = parseSamplesJson(ev.data)
+      const samples = resolveSamplesJson(ev.data, this.need, this.mapResponse)
       if (samples.length === 0 || this.listeners.size === 0) return
       for (const listener of this.listeners) listener(samples)
     }

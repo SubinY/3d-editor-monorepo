@@ -1,15 +1,16 @@
 <script setup lang="ts">
-import { computed, reactive, ref, watch } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { Connection, Lightning } from '@element-plus/icons-vue'
 import type { ConditionOp, TwinPoint, TwinProps, TwinRule } from '@mh/3d-editor-twin'
 import { createTwinPoint, createTwinRule, emptyTwin } from '@mh/3d-editor-twin'
+import { loadCommBundle } from '@/business/comm-store'
 import {
-  BUILTIN_POINT_KEYS,
-  BUILTIN_POINT_LABELS,
-  CONDITION_OP_LABELS,
-  pointLabel,
-  type BuiltinPointKey
-} from '@/business/point-dictionary'
+  COMM_PROTOCOL_LABEL,
+  COMM_PROTOCOLS,
+  type CommProtocol,
+  type CommSource
+} from '@/business/comm-types'
+import { CONDITION_OP_LABELS, pointLabel } from '@/business/point-dictionary'
 import { DEVICE_STATUS_OPTIONS, type DeviceStatus } from '@/business/device-status'
 
 const props = defineProps<{
@@ -53,31 +54,88 @@ function commit() {
 }
 
 const usedKeys = computed(() => new Set(local.points.map(p => p.key)))
-const availableKeys = computed(() =>
-  BUILTIN_POINT_KEYS.filter(key => !usedKeys.value.has(key))
-)
+
+type CommPointOption = {
+  value: string
+  label: string
+  sourceId: string
+  key: string
+  name: string
+}
+
+const commSources = ref<CommSource[]>([])
+
+function reloadCommSources() {
+  commSources.value = loadCommBundle().sources
+}
+
+onMounted(reloadCommSources)
+watch(section, s => {
+  if (s === 'points') reloadCommSources()
+})
 
 const pointDialogVisible = ref(false)
 const pointForm = reactive({
-  keys: [] as BuiltinPointKey[],
+  protocol: 'http' as CommProtocol,
+  pick: '' as string,
   alias: ''
 })
 
+const protocolsWithPoints = computed(() =>
+  COMM_PROTOCOLS.filter(p =>
+    commSources.value.some(s => s.protocol === p && s.points.length > 0)
+  )
+)
+
+const availableCommOptions = computed((): CommPointOption[] => {
+  const out: CommPointOption[] = []
+  for (const source of commSources.value) {
+    if (source.protocol !== pointForm.protocol) continue
+    for (const pt of source.points) {
+      if (usedKeys.value.has(pt.key)) continue
+      out.push({
+        value: `${source.id}::${pt.id}`,
+        label: `${source.name} / ${pt.name}（${pt.key}）`,
+        sourceId: source.id,
+        key: pt.key,
+        name: pt.name
+      })
+    }
+  }
+  return out
+})
+
+const canAddPoint = computed(() =>
+  commSources.value.some(s => s.points.some(pt => !usedKeys.value.has(pt.key)))
+)
+
 function openAddPoints() {
-  pointForm.keys = []
+  reloadCommSources()
+  pointForm.protocol = protocolsWithPoints.value[0] ?? 'http'
+  pointForm.pick = ''
   pointForm.alias = ''
   pointDialogVisible.value = true
 }
 
+function onProtocolChange() {
+  pointForm.pick = ''
+  pointForm.alias = ''
+}
+
+function onPickChange(value: string) {
+  const opt = availableCommOptions.value.find(o => o.value === value)
+  pointForm.alias = opt?.name ?? ''
+}
+
 function confirmAddPoints() {
-  if (pointForm.keys.length === 0) return
-  const alias = pointForm.alias.trim()
-  for (const key of pointForm.keys) {
-    if (usedKeys.value.has(key)) continue
-    local.points.push(
-      createTwinPoint(key, pointForm.keys.length === 1 && alias ? { alias } : undefined)
-    )
-  }
+  const opt = availableCommOptions.value.find(o => o.value === pointForm.pick)
+  if (!opt || usedKeys.value.has(opt.key)) return
+  local.points.push(
+    createTwinPoint(opt.key, {
+      alias: pointForm.alias.trim() || opt.name,
+      source: opt.sourceId
+    })
+  )
   pointDialogVisible.value = false
   commit()
 }
@@ -97,7 +155,7 @@ const eventDialogVisible = ref(false)
 const editingEventId = ref<string | null>(null)
 const eventForm = reactive({
   name: '',
-  pointKey: 'temp' as string,
+  pointKey: '' as string,
   op: 'gt' as ConditionOp,
   value: 80 as number | string,
   highlight: 'fault' as DeviceStatus,
@@ -114,7 +172,7 @@ const boundPointOptions = computed(() =>
 function openAddEvent() {
   editingEventId.value = null
   eventForm.name = ''
-  eventForm.pointKey = local.points[0]?.key ?? 'temp'
+  eventForm.pointKey = local.points[0]?.key ?? ''
   eventForm.op = 'gt'
   eventForm.value = 80
   eventForm.highlight = 'fault'
@@ -173,7 +231,8 @@ function toggleEvent(rule: TwinRule, enabled: boolean) {
 }
 
 function ruleSummary(rule: TwinRule): string {
-  const label = BUILTIN_POINT_LABELS[rule.when.point as BuiltinPointKey] ?? rule.when.point
+  const bound = local.points.find(p => p.key === rule.when.point)
+  const label = pointLabel(rule.when.point, bound?.alias)
   const op = CONDITION_OP_LABELS[rule.when.op]
   const hlRaw = rule.then.slots.highlight
   const hl =
@@ -209,24 +268,20 @@ const navItems = [
       <template v-if="section === 'points'">
         <div class="section-head row">
           <span>点位绑定</span>
-          <el-button
-            size="small"
-            type="primary"
-            :disabled="availableKeys.length === 0"
-            @click="openAddPoints"
-          >
+          <el-button size="small" type="primary" :disabled="!canAddPoint" @click="openAddPoints">
             新增
           </el-button>
         </div>
-        <p class="hint">写入 props.twin.points；字典 key 由 Host 约定，可设别名。</p>
+        <p class="hint">从「通信」面板已配置的点位中单选绑定；写入 props.twin.points。</p>
         <div v-if="local.points.length === 0" class="empty">尚未绑定点位</div>
         <ul v-else class="list">
           <li v-for="point in local.points" :key="point.key" class="list-item">
             <div class="item-main">
-              <div class="item-title">
-                {{ BUILTIN_POINT_LABELS[point.key as BuiltinPointKey] ?? point.key }}
+              <div class="item-title">{{ point.alias || point.key }}</div>
+              <div class="item-sub">
+                {{ point.key }}
+                <template v-if="point.source"> · {{ point.source }}</template>
               </div>
-              <div class="item-sub">{{ point.key }}</div>
               <el-input
                 :model-value="point.alias ?? ''"
                 size="small"
@@ -279,29 +334,51 @@ const navItems = [
 
     <el-dialog v-model="pointDialogVisible" title="新增点位" width="360px" append-to-body>
       <el-form label-position="top" size="small">
-        <el-form-item label="选择点位">
+        <el-form-item label="协议">
           <el-select
-            v-model="pointForm.keys"
-            multiple
-            filterable
-            placeholder="未占用的内置 key"
+            v-model="pointForm.protocol"
+            placeholder="选择协议"
             style="width: 100%"
+            @change="onProtocolChange"
           >
             <el-option
-              v-for="key in availableKeys"
-              :key="key"
-              :label="`${BUILTIN_POINT_LABELS[key]} (${key})`"
-              :value="key"
+              v-for="p in protocolsWithPoints"
+              :key="p"
+              :label="COMM_PROTOCOL_LABEL[p]"
+              :value="p"
             />
           </el-select>
         </el-form-item>
-        <el-form-item v-if="pointForm.keys.length === 1" label="别名">
-          <el-input v-model="pointForm.alias" placeholder="可选" />
+        <el-form-item label="选择点位">
+          <el-select
+            v-model="pointForm.pick"
+            filterable
+            clearable
+            placeholder="该协议下未绑定的通信点位"
+            style="width: 100%"
+            @change="onPickChange"
+          >
+            <el-option
+              v-for="opt in availableCommOptions"
+              :key="opt.value"
+              :label="opt.label"
+              :value="opt.value"
+            />
+          </el-select>
         </el-form-item>
+        <el-form-item v-if="pointForm.pick" label="别名">
+          <el-input v-model="pointForm.alias" placeholder="可选，默认用变量名称" />
+        </el-form-item>
+        <p v-if="protocolsWithPoints.length === 0" class="hint">
+          请先在「通信」面板为数据源添加变量点位。
+        </p>
+        <p v-else-if="availableCommOptions.length === 0" class="hint">
+          该协议下暂无未绑定点位。
+        </p>
       </el-form>
       <template #footer>
         <el-button @click="pointDialogVisible = false">取消</el-button>
-        <el-button type="primary" :disabled="pointForm.keys.length === 0" @click="confirmAddPoints">
+        <el-button type="primary" :disabled="!pointForm.pick" @click="confirmAddPoints">
           确定
         </el-button>
       </template>
@@ -340,7 +417,7 @@ const navItems = [
             <el-input v-model="eventForm.value" placeholder="阈值" />
           </div>
         </el-form-item>
-        <el-form-item label="触发高亮">
+        <el-form-item label="高亮效果">
           <el-select v-model="eventForm.highlight" style="width: 100%">
             <el-option
               v-for="opt in DEVICE_STATUS_OPTIONS"

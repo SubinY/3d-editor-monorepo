@@ -1,8 +1,8 @@
 import mqtt from 'mqtt'
 import type { MqttClient } from 'mqtt'
 import type { DataSource, DataSourceNeed, PointSample } from '../types'
-import { parseSamplesJson, parseSamplesPayload } from './parse-samples'
-import type { MqttSourceConfig } from './types'
+import { resolveSamplesJson } from './parse-samples'
+import type { MapResponseFn, MqttSourceConfig } from './types'
 
 function resolveTopics(config: Omit<MqttSourceConfig, 'type'>): string[] {
   if (config.topics?.length) return [...config.topics]
@@ -16,10 +16,12 @@ export class MqttDataSource implements DataSource {
   private client: MqttClient | undefined
   private readonly config: Omit<MqttSourceConfig, 'type'>
   private readonly topics: string[]
+  private readonly mapResponse: MapResponseFn | undefined
 
   constructor(config: Omit<MqttSourceConfig, 'type'>) {
     this.config = config
     this.topics = resolveTopics(config)
+    this.mapResponse = config.mapResponse
     if (this.topics.length === 0) {
       console.warn('[MqttDataSource] no topic configured')
     }
@@ -69,16 +71,8 @@ export class MqttDataSource implements DataSource {
 
     client.on('message', (_topic, payload) => {
       const text = payload.toString()
-      let samples = parseSamplesJson(text)
-      if (samples.length === 0) {
-        try {
-          samples = parseSamplesPayload(JSON.parse(text) as unknown)
-        } catch {
-          return
-        }
-      }
+      const samples = resolveSamplesJson(text, this.need, this.mapResponse)
       if (samples.length === 0 || this.listeners.size === 0) return
-      // 若报文带 twinId/key，直接推；否则不按 need 过滤（由上游保证）
       for (const listener of this.listeners) listener(samples)
     })
 

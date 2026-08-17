@@ -1,6 +1,6 @@
 import type { DataSource, DataSourceNeed, PointSample } from '../types'
-import { parseSamplesPayload } from './parse-samples'
-import type { HttpSourceConfig } from './types'
+import { resolveSamples } from './parse-samples'
+import type { HttpSourceConfig, MapResponseFn } from './types'
 
 export class HttpDataSource implements DataSource {
   private need: DataSourceNeed[] = []
@@ -10,6 +10,7 @@ export class HttpDataSource implements DataSource {
   private readonly method: 'GET' | 'POST'
   private readonly intervalMs: number
   private readonly headers: Record<string, string>
+  private readonly mapResponse: MapResponseFn | undefined
   private inFlight = false
 
   constructor(config: Omit<HttpSourceConfig, 'type'>) {
@@ -17,6 +18,7 @@ export class HttpDataSource implements DataSource {
     this.method = config.method ?? 'POST'
     this.intervalMs = config.intervalMs ?? 2000
     this.headers = config.headers ?? {}
+    this.mapResponse = config.mapResponse
   }
 
   start(need: DataSourceNeed[]): void {
@@ -79,7 +81,7 @@ export class HttpDataSource implements DataSource {
         return
       }
       const body: unknown = await res.json()
-      const samples = parseSamplesPayload(body)
+      const samples = resolveSamples(body, this.need, this.mapResponse)
       if (samples.length === 0) return
       for (const listener of this.listeners) listener(samples)
     } catch (err) {

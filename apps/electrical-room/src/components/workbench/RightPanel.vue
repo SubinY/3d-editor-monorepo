@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
-import { Setting, Monitor, DataLine } from '@element-plus/icons-vue'
+import { Setting, Monitor, DataLine, Connection } from '@element-plus/icons-vue'
 import type { EnvironmentJSON, WallJSON } from '@mh/3d-editor'
 import type { ViewMode } from './types'
 import PropertyPanel from './PropertyPanel.vue'
 import DataPanel from './DataPanel.vue'
+import CommPanel from './CommPanel.vue'
 import EnvironmentPanel from './environment-panel/EnvironmentPanel.vue'
 import type { LiveCameraPose } from './environment-panel/types'
 import type { BoundsForm, SelectedNodeForm } from './PropertyPanel.vue'
@@ -38,12 +39,11 @@ const emit = defineEmits<{
 
 const activeTab = ref('props')
 
+/** 选中 / 取消选中节点时都回到属性面板 */
 watch(
   () => props.selectedNode.id,
-  id => {
-    if (!id && activeTab.value === 'data') {
-      activeTab.value = 'props'
-    }
+  () => {
+    activeTab.value = 'props'
   }
 )
 </script>
@@ -93,6 +93,16 @@ watch(
           @enter-indoor="emit('enter-indoor')"
         />
         <el-empty v-else description="编辑器未就绪" :image-size="48" />
+      </el-tab-pane>
+
+      <el-tab-pane name="comm" v-if="!selectedNode.id">
+        <template #label>
+          <span class="tab-label">
+            <el-icon><Connection /></el-icon>
+            通信
+          </span>
+        </template>
+        <CommPanel />
       </el-tab-pane>
 
       <el-tab-pane v-if="selectedNode.id" name="data">

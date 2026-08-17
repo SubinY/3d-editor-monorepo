@@ -41,16 +41,21 @@ export {
 export type { PointValueMap } from './evaluate'
 
 export {
+  createCompositeDataSource,
+  createCompositeDataSourceFromConfigs,
   createDataSource,
   HttpDataSource,
   MqttDataSource,
   WsDataSource,
   parseSamplesJson,
-  parseSamplesPayload
+  parseSamplesPayload,
+  resolveSamples,
+  resolveSamplesJson
 } from './data-source'
 export type {
   DataSourceConfig,
   HttpSourceConfig,
+  MapResponseFn,
   MqttSourceConfig,
   SubscribeMessage,
   TwinSamplesPayload,

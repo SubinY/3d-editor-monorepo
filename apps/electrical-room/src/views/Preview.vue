@@ -2,9 +2,11 @@
 import { onBeforeUnmount, onMounted, ref } from 'vue'
 import { createEditor } from '@mh/3d-editor'
 import type { EditorDocument, EditorSession, NodeInteractionEvent } from '@mh/3d-editor'
-import { createDataSource, TwinPlayer } from '@mh/3d-editor-twin'
+import { createCompositeDataSourceFromConfigs, createDataSource, TwinPlayer } from '@mh/3d-editor-twin'
 import { useRoute, useRouter } from 'vue-router'
 import { createPreviewCatalog } from '@/business/catalog'
+import { loadCommBundle } from '@/business/comm-store'
+import { toDataSourceConfigs } from '@/business/comm-to-configs'
 import * as api from '@/business/api'
 import {
   DEVICE_STATUS_META,
@@ -47,7 +49,6 @@ const router = useRouter()
 
 onMounted(async () => {
   const id = route.params.id as string | undefined
-  sourceLabel.value = 'HttpDataSource → /api/twin/points'
   const catalog = await createPreviewCatalog()
   const rec = id ? await api.getDocument('scene', id) : undefined
   const list = id ? [] : await api.listScenes()
@@ -80,15 +81,26 @@ onMounted(async () => {
   doc = session.document
   if (!session.viewport3d) return
 
+  const configs = toDataSourceConfigs(loadCommBundle())
+  console.log(configs, 'configs')
+  const source =
+    configs.length > 0
+      ? createCompositeDataSourceFromConfigs(configs)
+      : createDataSource({
+          type: 'http',
+          url: '/api/twin/points',
+          method: 'POST',
+          intervalMs: 2000
+        })
+  sourceLabel.value =
+    configs.length > 0
+      ? `CompositeDataSource × ${configs.length}`
+      : 'HttpDataSource → /api/twin/points（默认）'
+
   player = new TwinPlayer({
     document: session.document,
     viewport: session.viewport3d,
-    source: createDataSource({
-      type: 'http',
-      url: '/api/twin/points',
-      method: 'POST',
-      intervalMs: 2000
-    }),
+    source,
     mapHighlight: effect =>
       toVisualState(isDeviceStatus(effect) ? effect : 'fault'),
     getPaused: () => !running.value,

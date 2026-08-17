@@ -41,6 +41,7 @@ export const CONDITION_OP_LABELS: Record<
 }
 
 export function pointLabel(key: string, alias?: string): string {
-  const label = BUILTIN_POINT_LABELS[key as BuiltinPointKey] ?? key
-  return alias ? `${alias}（${label}）` : label
+  if (alias?.trim()) return `${alias.trim()}（${key}）`
+  const builtin = BUILTIN_POINT_LABELS[key as BuiltinPointKey]
+  return builtin ? `${builtin}（${key}）` : key
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { createDataSource, parseSamplesPayload } from '../data-source'
+import { createCompositeDataSource, createDataSource, parseSamplesPayload } from '../data-source'
 import { evaluateHighlight, PointValueStore } from '../evaluate'
 import {
   createTwinPoint,
@@ -208,6 +208,52 @@ describe('parseSamplesPayload / createDataSource', () => {
     ).toEqual([{ twinId: 'A', key: 'temp', value: 30 }])
   })
 
+  it('mapResponse 可将 dataId 列表转为 samples', async () => {
+    vi.useFakeTimers()
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => [
+        { dataId: 'temp', value: 27 },
+        { dataId: 'alarm', value: 1 }
+      ]
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const source = createDataSource({
+      type: 'http',
+      url: '/api/x',
+      method: 'POST',
+      intervalMs: 1000,
+      mapResponse: (raw, ctx) => {
+        if (!Array.isArray(raw)) return raw
+        return {
+          samples: raw.map((row: { dataId: string; value: unknown }) => {
+            const hit = ctx.need.find(n => n.key === row.dataId)
+            return {
+              twinId: hit?.twinId ?? 'unknown',
+              key: row.dataId,
+              value: row.value
+            }
+          })
+        }
+      }
+    })
+    const batches: PointSample[][] = []
+    source.subscribe(s => batches.push(s))
+    source.start([
+      { twinId: 'cab-1', key: 'temp' },
+      { twinId: 'cab-1', key: 'alarm' }
+    ])
+    await vi.advanceTimersByTimeAsync(0)
+    expect(batches[0]).toEqual([
+      { twinId: 'cab-1', key: 'temp', value: 27 },
+      { twinId: 'cab-1', key: 'alarm', value: 1 }
+    ])
+    source.stop()
+    vi.unstubAllGlobals()
+    vi.useRealTimers()
+  })
+
   it('createDataSource(http) 按 need POST 并推样本', async () => {
     vi.useFakeTimers()
     const fetchMock = vi.fn().mockResolvedValue({
@@ -250,6 +296,34 @@ describe('parseSamplesPayload / createDataSource', () => {
     source.stop()
     vi.unstubAllGlobals()
     vi.useRealTimers()
+  })
+})
+
+describe('createCompositeDataSource', () => {
+  it('合并两路源的样本并转发 start need', () => {
+    const a = new FakeDataSource()
+    const b = new FakeDataSource()
+    const composite = createCompositeDataSource([a, b])
+    const batches: PointSample[][] = []
+    composite.subscribe(s => batches.push(s))
+    composite.start([{ twinId: 'X', key: 'temp' }])
+    expect(a.need).toEqual([{ twinId: 'X', key: 'temp' }])
+    expect(b.need).toEqual([{ twinId: 'X', key: 'temp' }])
+    a.emit([{ twinId: 'X', key: 'temp', value: 1 }])
+    b.emit([{ twinId: 'X', key: 'alarm', value: 0 }])
+    expect(batches).toEqual([
+      [{ twinId: 'X', key: 'temp', value: 1 }],
+      [{ twinId: 'X', key: 'alarm', value: 0 }]
+    ])
+    composite.stop()
+    expect(a.need).toEqual([])
+    expect(b.need).toEqual([])
+  })
+
+  it('空列表返回可安全 start 的空源', () => {
+    const empty = createCompositeDataSource([])
+    expect(() => empty.start([{ twinId: 'A', key: 'temp' }])).not.toThrow()
+    empty.stop()
   })
 })
 
