@@ -83,7 +83,8 @@ export class EditorSessionImpl implements EditorSession {
       catalog: this.catalog,
       onDenied: this.onDenied,
       snapEnabled: this.snapEnabled,
-      showNodeNames: this.viewport2dOptions?.showNodeNames
+      showNodeNames: this.viewport2dOptions?.showNodeNames,
+      onPickCandidates: this.viewport2dOptions?.onPickCandidates
     }
     this.viewport2d = new Viewport2D(el, options)
     return this.viewport2d

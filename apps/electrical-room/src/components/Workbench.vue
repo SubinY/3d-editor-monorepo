@@ -11,6 +11,7 @@ import type {
   EditorNodeJSON,
   EditorSession,
   EnvironmentJSON,
+  PickCandidatesEvent,
   TransformMode,
   WallJSON
 } from '@mh/3d-editor'
@@ -22,6 +23,7 @@ import ContextToolbar from './workbench/ContextToolbar.vue'
 import ViewModeBar from './workbench/ViewModeBar.vue'
 import BottomBar from './workbench/BottomBar.vue'
 import PanelEditorModal from './workbench/panel-editor/PanelEditorModal.vue'
+import PickCandidatesMenu from './workbench/PickCandidatesMenu.vue'
 import type { LiveCameraPose } from './workbench/environment-panel/types'
 import type { AssetGroup, EditorTool, LayerTreeItem, ViewMode } from './workbench/types'
 import {
@@ -85,6 +87,12 @@ let unsubCameraPose: (() => void) | undefined
 let cameraPosePersistTimer: number | undefined
 const panelEditorOpen = ref(false)
 const panelDraft = ref<panel.PanelContentJSON | null>(null)
+const workbenchEl = ref<HTMLElement>()
+const pickMenu = ref<{
+  items: Array<{ id: string; label: string }>
+  x: number
+  y: number
+} | null>(null)
 
 const isScene = computed(() => props.kind === 'scene')
 const isPanelSelected = computed(() => selectedNode.catalog.startsWith('ui-info-panel@'))
@@ -212,6 +220,36 @@ function refreshSelected() {
   if (wall) selectedWall.value = { ...wall }
 }
 
+function onPickCandidates(event: PickCandidatesEvent) {
+  const root = workbenchEl.value
+  const rect = root?.getBoundingClientRect()
+  const x = rect ? event.pointer.x - rect.left : event.pointer.x
+  const y = rect ? event.pointer.y - rect.top : event.pointer.y
+  pickMenu.value = {
+    x,
+    y,
+    items: event.nodes.map(node => ({
+      id: node.id,
+      label: node.name?.trim() || catalogLabel(node) || node.id
+    }))
+  }
+}
+
+function catalogLabel(node: EditorNodeJSON): string {
+  if (!node.catalogRef) return ''
+  const cached = doc.value?.getCachedItem(node)
+  return cached?.name ?? `${node.catalogRef.id}@${node.catalogRef.version}`
+}
+
+function pickCandidate(id: string) {
+  doc.value?.selection.set(id)
+  pickMenu.value = null
+}
+
+function dismissPickMenu() {
+  pickMenu.value = null
+}
+
 onMounted(async () => {
   session = await createEditor({
     catalog: props.catalog,
@@ -219,6 +257,9 @@ onMounted(async () => {
     mount: {
       canvas2d: el2d.value,
       canvas3d: el3d.value
+    },
+    viewport2d: {
+      onPickCandidates
     },
     viewport3d: {
       hoverOutline: true
@@ -585,7 +626,7 @@ async function confirmPanelEdit(content: panel.PanelContentJSON) {
 </script>
 
 <template>
-  <div class="workbench">
+  <div ref="workbenchEl" class="workbench">
     <WorkbenchToolbar
       v-model:doc-name="docName"
       :is-scene="isScene"
@@ -668,6 +709,15 @@ async function confirmPanelEdit(content: panel.PanelContentJSON) {
       @update:collision-enabled="setCollisionEnabled"
       @update:rulers-enabled="setRulersEnabled"
       @update:perf-visible="setPerfStatsVisible"
+    />
+
+    <PickCandidatesMenu
+      v-if="pickMenu"
+      :items="pickMenu.items"
+      :x="pickMenu.x"
+      :y="pickMenu.y"
+      @pick="pickCandidate"
+      @dismiss="dismissPickMenu"
     />
 
     <PanelEditorModal

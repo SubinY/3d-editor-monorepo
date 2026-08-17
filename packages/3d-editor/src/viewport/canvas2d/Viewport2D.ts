@@ -31,6 +31,7 @@ export class Viewport2D {
   private onDenied?: (reason: string) => void
   private onPlaceResult?: (result: PlaceResult) => void
   private onWallSelect?: Viewport2DOptions['onWallSelect']
+  private onPickCandidates?: Viewport2DOptions['onPickCandidates']
   private snapEnabled: boolean
 
   private camera: Camera2D
@@ -55,6 +56,7 @@ export class Viewport2D {
     this.onDenied = options.onDenied
     this.onPlaceResult = options.onPlaceResult
     this.onWallSelect = options.onWallSelect
+    this.onPickCandidates = options.onPickCandidates
     this.snapEnabled = options.snapEnabled ?? true
     this.showNodeNames = options.showNodeNames ?? false
 
@@ -125,6 +127,9 @@ export class Viewport2D {
       },
       get onWallSelect() {
         return self.onWallSelect
+      },
+      get onPickCandidates() {
+        return self.onPickCandidates
       },
       clientToPlane: (x, y) => self.camera.clientToPlane(self.canvas, x, y),
       planeFromPosition: pos => self.planeFromPosition(pos),

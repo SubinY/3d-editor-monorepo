@@ -83,6 +83,22 @@ editor.dispose()
 
 素材拖放：Host 在 `dragstart` 写入 `CATALOG_ITEM_MIME`，并调用 `viewport2d.beginExternalDrag(item)`。
 
+### 2D 重叠点选
+
+按鼠标落点（非物体相交）：同一 `(u,v)` 落在 ≥2 个 footprint 内时，若提供 `viewport2d.onPickCandidates`，松手（未拖移）回调候选列表（上→下）；Host 弹面板后自行 `doc.selection.set(id)`。未提供回调时仍选最上层并拖。拖移超过约 5px 则拖已选中且在候选内的节点，否则拖最上层。
+
+```ts
+createEditor({
+  document: draft,
+  catalog,
+  viewport2d: {
+    onPickCandidates: ({ nodes, pointer }) => {
+      // Host 在 pointer 处弹面板；选中后 selection.set(nodes[i].id)
+    }
+  }
+})
+```
+
 ---
 
 ## 公共导出面

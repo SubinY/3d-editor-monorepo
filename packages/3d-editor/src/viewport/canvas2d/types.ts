@@ -1,6 +1,14 @@
 import type { CatalogProvider } from '../../catalog/types'
 import type { EditorDocument, PlaceResult } from '../../document/EditorDocument'
-import type { WallJSON } from '../../document/types'
+import type { EditorNodeJSON, WallJSON } from '../../document/types'
+
+/** 2D 鼠标点同时命中多个节点时通知 Host（上→下）；Host 弹面板后自行 selection.set */
+export interface PickCandidatesEvent {
+  nodes: EditorNodeJSON[]
+  pointer: { x: number; y: number }
+}
+
+export type PickCandidatesHandler = (event: PickCandidatesEvent) => void
 
 export type Tool2D = 'select' | 'wall'
 
@@ -69,6 +77,11 @@ export interface Viewport2DOptions {
   onDenied?: (reason: string) => void
   onPlaceResult?: (result: PlaceResult) => void
   onWallSelect?: (wall: WallJSON) => void
+  /**
+   * 同一鼠标点落在 ≥2 个 footprint 内、且未拖移松手时回调。
+   * 未提供时保持「选最上层并拖」旧行为。
+   */
+  onPickCandidates?: PickCandidatesHandler
 }
 
 export const WALL_POINT_SNAP = 0.1

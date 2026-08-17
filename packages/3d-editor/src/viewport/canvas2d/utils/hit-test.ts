@@ -16,16 +16,24 @@ export function hitTestRotateHandle(
   return Math.hypot(u - layout.handle.u, v - layout.handle.v) <= threshold
 }
 
-export function hitTestNode(opts: {
+export interface HitTestNodeOpts {
   nodes: EditorNodeJSON[]
+  /** 鼠标落点平面坐标（点测，非物体相交） */
   u: number
   v: number
   isElevation: boolean
   planeFromPosition: (pos: [number, number, number]) => PlanePoint
   footprintSize: (item: CatalogItem | undefined) => { wu: number; wv: number }
   itemFor: (node: EditorNodeJSON) => CatalogItem | undefined
-}): EditorNodeJSON | undefined {
+}
+
+/**
+ * 收集包含鼠标点的全部节点，绘制顺序后置为上（数组尾 → 头）。
+ * 仅当点落在 footprint 内才入选；两物体别处重叠但未点到交叠区不会同时命中。
+ */
+export function hitTestNodes(opts: HitTestNodeOpts): EditorNodeJSON[] {
   const { nodes, u, v, isElevation, planeFromPosition, footprintSize, itemFor } = opts
+  const hits: EditorNodeJSON[] = []
   for (let i = nodes.length - 1; i >= 0; i--) {
     const node = nodes[i]
     if (node.visible === false) continue
@@ -45,9 +53,13 @@ export function hitTestNode(opts: {
     /** 与手柄 (sin φ, cos φ) / ctx.rotate(φ) 同构：local+v 朝手柄 */
     const lu = cos * du - sin * dv
     const lv = sin * du + cos * dv
-    if (Math.abs(lu) <= wu / 2 && Math.abs(lv) <= wv / 2) return node
+    if (Math.abs(lu) <= wu / 2 && Math.abs(lv) <= wv / 2) hits.push(node)
   }
-  return undefined
+  return hits
+}
+
+export function hitTestNode(opts: HitTestNodeOpts): EditorNodeJSON | undefined {
+  return hitTestNodes(opts)[0]
 }
 
 export function hitTestWall(

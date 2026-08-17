@@ -9,13 +9,14 @@ import {
   planeHandleAngle,
   yawToDisplayAngle,
 } from '../utils/node-layout'
-import { hitTestNode, hitTestRotateHandle } from '../utils/hit-test'
+import { hitTestNodes, hitTestRotateHandle } from '../utils/hit-test'
 import type { WallDragMode, WallDragPatch } from '../utils/wall-snap'
 import { applyWallDrag, hitWallDragTarget } from '../utils/wall-snap'
 import type { PlanePoint } from '../types'
 import type { PointerInteraction, Viewport2DContext } from './types'
 
 const SOURCE = 'viewport2d'
+const MOVE_THRESHOLD_PX = 5
 
 /** 选择 / 平移 / 旋转手柄 / 墙拖 */
 export class SelectInteraction implements PointerInteraction {
@@ -43,7 +44,11 @@ export class SelectInteraction implements PointerInteraction {
   wallDragPatches: WallDragPatch[] = []
   wallDragMoved = false
 
-  constructor(private host: Viewport2DContext) { }
+  /** 多命中待定：按下未选，松手弹面板或拖移后开始拖 */
+  private pendingPickHits: EditorNodeJSON[] | null = null
+  private pendingPickDown: { x: number; y: number } | null = null
+
+  constructor(private host: Viewport2DContext) {}
 
   reset(): void {
     this.dragNodeId = null
@@ -61,6 +66,8 @@ export class SelectInteraction implements PointerInteraction {
     this.wallDragOrigin = null
     this.wallDragPatches = []
     this.wallDragMoved = false
+    this.pendingPickHits = null
+    this.pendingPickDown = null
   }
 
   onPointerDown(event: PointerEvent, plane: PlanePoint): boolean {
@@ -88,24 +95,24 @@ export class SelectInteraction implements PointerInteraction {
       }
     }
 
-    const hitNode = hitTestNode({
+    const hits = hitTestNodes({
       nodes: doc.getNodes(),
       u: plane.u,
       v: plane.v,
       isElevation: this.host.isElevation,
       planeFromPosition: p => this.host.planeFromPosition(p),
       footprintSize: item => this.host.footprintSize(item),
-      itemFor: n => this.host.itemFor(n)
+      itemFor: n => this.host.itemFor(n),
     })
-    if (hitNode) {
-      doc.selection.set(hitNode.id)
-      const nodePlane = this.host.planeFromPosition(hitNode.transform.position)
-      this.dragNodeId = hitNode.id
-      this.dragOffset = { u: nodePlane.u - plane.u, v: nodePlane.v - plane.v }
-      this.dragGhost = { ...nodePlane }
-      this.dragColliding = false
-      this.dragMoved = false
-      this.host.requestRender()
+
+    if (hits.length > 1 && this.host.onPickCandidates) {
+      this.pendingPickHits = hits
+      this.pendingPickDown = { x: event.clientX, y: event.clientY }
+      return true
+    }
+
+    if (hits[0]) {
+      this.beginNodeDrag(hits[0], plane)
       return true
     }
 
@@ -134,8 +141,24 @@ export class SelectInteraction implements PointerInteraction {
     return true
   }
 
-  onPointerMove(_event: PointerEvent, plane: PlanePoint): boolean {
+  onPointerMove(event: PointerEvent, plane: PlanePoint): boolean {
     if (this.host.readonly) return false
+
+    if (this.pendingPickHits && this.pendingPickDown) {
+      const moved = Math.hypot(
+        event.clientX - this.pendingPickDown.x,
+        event.clientY - this.pendingPickDown.y
+      )
+      if (moved > MOVE_THRESHOLD_PX) {
+        const selectedId = this.host.doc.selection.first()
+        const preferred =
+          this.pendingPickHits.find(n => n.id === selectedId) ?? this.pendingPickHits[0]
+        this.pendingPickHits = null
+        this.pendingPickDown = null
+        if (preferred) this.beginNodeDrag(preferred, plane)
+      }
+      return true
+    }
 
     if (this.rotateNodeId && this.rotateCenter) {
       this.rotateMoved = true
@@ -234,6 +257,17 @@ export class SelectInteraction implements PointerInteraction {
       return false
     }
 
+    if (this.pendingPickHits && this.pendingPickDown) {
+      this.host.onPickCandidates?.({
+        nodes: this.pendingPickHits,
+        pointer: { x: this.pendingPickDown.x, y: this.pendingPickDown.y },
+      })
+      this.pendingPickHits = null
+      this.pendingPickDown = null
+      this.host.requestRender()
+      return true
+    }
+
     if (this.rotateNodeId && this.rotateMoved) {
       const node = this.host.doc.getNode(this.rotateNodeId)
       if (node) {
@@ -281,6 +315,17 @@ export class SelectInteraction implements PointerInteraction {
       wu,
       wv
     })
+  }
+
+  private beginNodeDrag(node: EditorNodeJSON, plane: PlanePoint): void {
+    this.host.doc.selection.set(node.id)
+    const nodePlane = this.host.planeFromPosition(node.transform.position)
+    this.dragNodeId = node.id
+    this.dragOffset = { u: nodePlane.u - plane.u, v: nodePlane.v - plane.v }
+    this.dragGhost = { ...nodePlane }
+    this.dragColliding = false
+    this.dragMoved = false
+    this.host.requestRender()
   }
 
   private hitRotate(node: EditorNodeJSON, u: number, v: number): boolean {

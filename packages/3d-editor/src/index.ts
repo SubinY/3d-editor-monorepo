@@ -67,7 +67,12 @@ export type {
 } from './catalog/types'
 export type { AssetHandle } from './catalog/asset-handle'
 export type { PublishBundle } from './catalog/publish'
-export type { Tool2D, Viewport2DOptions } from './viewport/canvas2d/types'
+export type {
+  Tool2D,
+  Viewport2DOptions,
+  PickCandidatesEvent,
+  PickCandidatesHandler
+} from './viewport/canvas2d/types'
 export type { Viewport2D } from './viewport/canvas2d/Viewport2D'
 export type {
   Viewport3D,

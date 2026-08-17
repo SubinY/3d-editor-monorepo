@@ -1,6 +1,7 @@
 import type { CatalogProvider, ProceduralModelResolver } from '../catalog/types'
 import type { CreateDocumentOptions, EditorDocument } from '../document/EditorDocument'
 import type { EditorDocumentJSON } from '../document/types'
+import type { PickCandidatesHandler } from '../viewport/canvas2d/types'
 import type { NodeInteractionHandler } from '../viewport/interaction-events'
 import type { Viewport2D } from '../viewport/canvas2d/Viewport2D'
 import type { Viewport3D } from '../viewport/three/Viewport3D'
@@ -47,6 +48,8 @@ export interface CreateEditorOptions {
   viewport2d?: {
     /** 是否绘制节点 name；默认 false */
     showNodeNames?: boolean
+    /** 同一鼠标点命中多个节点时通知 Host；未设则选最上层 */
+    onPickCandidates?: PickCandidatesHandler
   }
   /**
    * Host 程序化模型：Catalog `model3d.type === 'procedural'` 时按 id 解析。

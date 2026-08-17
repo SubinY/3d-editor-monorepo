@@ -2,7 +2,7 @@
 import type { CatalogItem } from '../../../catalog/types'
 import type { EditorDocument } from '../../../document/EditorDocument'
 import type { EditorNodeJSON, TransformJSON, WallJSON } from '../../../document/types'
-import type { PlanePoint } from '../types'
+import type { PickCandidatesHandler, PlanePoint } from '../types'
 
 /** 由 Viewport2D 注入给各 service 的视口能力 */
 export interface Viewport2DContext {
@@ -32,6 +32,7 @@ export interface Viewport2DContext {
   requestRender(): void
   onDenied?: (reason: string) => void
   onWallSelect?: (wall: WallJSON) => void
+  onPickCandidates?: PickCandidatesHandler
 }
 
 export interface PointerInteraction {
