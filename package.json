@@ -11,7 +11,7 @@
     "dev:crane": "turbo run dev --filter=@mh/3d-editor --filter=crane-electrical-pro",
     "build": "pnpm test && turbo run build --filter=@mh/3d-editor",
     "build:all": "turbo run build",
-    "test": "turbo run test --filter=@mh/3d-editor",
+    "test": "turbo run test --filter=@mh/3d-editor --filter=@mh/3d-editor-twin",
     "lint": "turbo run lint --filter=@mh/3d-editor",
     "format": "prettier --write \"**/*.{ts,tsx,js,jsx,vue,md,json}\"",
     "clean": "turbo run clean",

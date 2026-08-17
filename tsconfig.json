@@ -29,7 +29,9 @@
     "types": ["vitest/globals"],
     "paths": {
       "@mh/3d-editor": ["packages/3d-editor/src/index.ts"],
-      "@mh/3d-editor/*": ["packages/3d-editor/src/*"]
+      "@mh/3d-editor/*": ["packages/3d-editor/src/*"],
+      "@mh/3d-editor-twin": ["packages/3d-editor-twin/src/index.ts"],
+      "@mh/3d-editor-twin/*": ["packages/3d-editor-twin/src/*"]
     }
   },
   "exclude": ["node_modules", "dist"]

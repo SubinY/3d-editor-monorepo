@@ -9,6 +9,7 @@ export default defineConfig({
       '@': resolve(__dirname, 'src'),
       // 开发期直连源码，改包代码即时热更
       '@mh/3d-editor': resolve(__dirname, '../../packages/3d-editor/src'),
+      '@mh/3d-editor-twin': resolve(__dirname, '../../packages/3d-editor-twin/src'),
       '@mh/3d-editor-assets/common': resolve(
         __dirname,
         '../../packages/3d-editor-assets/src/common'
@@ -22,7 +23,8 @@ export default defineConfig({
     proxy: {
       '/api': {
         target: 'http://localhost:8787',
-        changeOrigin: true
+        changeOrigin: true,
+        ws: true
       },
       '/models': {
         target: 'http://localhost:8787',

@@ -1,49 +1,40 @@
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue'
 import { Connection, Lightning } from '@element-plus/icons-vue'
-import type {
-  BuiltinPointKey,
-  ConditionOp,
-  NodeBindingsProps,
-  NodeEventRule,
-  PointBinding
-} from '@/business/node-bindings'
+import type { ConditionOp, TwinPoint, TwinProps, TwinRule } from '@mh/3d-editor-twin'
+import { createTwinPoint, createTwinRule, emptyTwin } from '@mh/3d-editor-twin'
 import {
   BUILTIN_POINT_KEYS,
   BUILTIN_POINT_LABELS,
   CONDITION_OP_LABELS,
-  HIGHLIGHT_STATUS_OPTIONS,
-  createConditionEvent,
-  createPointBinding,
-  pointDisplayName
-} from '@/business/node-bindings'
-import type { DeviceStatus } from '@/business/device-status'
+  pointLabel,
+  type BuiltinPointKey
+} from '@/business/point-dictionary'
+import { DEVICE_STATUS_OPTIONS, type DeviceStatus } from '@/business/device-status'
 
 const props = defineProps<{
   nodeId: string
-  modelValue: NodeBindingsProps
+  modelValue: TwinProps
 }>()
 
 const emit = defineEmits<{
-  'update:modelValue': [value: NodeBindingsProps]
+  'update:modelValue': [value: TwinProps]
 }>()
 
 type DataSection = 'points' | 'events'
 const section = ref<DataSection>('points')
 
-const local = reactive<NodeBindingsProps>({
-  bindings: [],
-  events: []
-})
+const local = reactive<TwinProps>(emptyTwin())
 
 watch(
   () => props.modelValue,
   value => {
-    local.bindings = value.bindings.map(b => ({ ...b }))
-    local.events = value.events.map(e => ({
-      ...e,
-      when: { ...e.when },
-      then: { ...e.then }
+    local.id = value.id
+    local.points = value.points.map(p => ({ ...p }))
+    local.rules = (value.rules ?? []).map(r => ({
+      ...r,
+      when: { ...r.when },
+      then: { slots: { ...r.then.slots } }
     }))
   },
   { immediate: true, deep: true }
@@ -51,16 +42,17 @@ watch(
 
 function commit() {
   emit('update:modelValue', {
-    bindings: local.bindings.map(b => ({ ...b })),
-    events: local.events.map(e => ({
-      ...e,
-      when: { ...e.when },
-      then: { ...e.then }
+    ...(local.id ? { id: local.id } : {}),
+    points: local.points.map(p => ({ ...p })),
+    rules: (local.rules ?? []).map(r => ({
+      ...r,
+      when: { ...r.when },
+      then: { slots: { ...r.then.slots } }
     }))
   })
 }
 
-const usedKeys = computed(() => new Set(local.bindings.map(b => b.key)))
+const usedKeys = computed(() => new Set(local.points.map(p => p.key)))
 const availableKeys = computed(() =>
   BUILTIN_POINT_KEYS.filter(key => !usedKeys.value.has(key))
 )
@@ -82,25 +74,22 @@ function confirmAddPoints() {
   const alias = pointForm.alias.trim()
   for (const key of pointForm.keys) {
     if (usedKeys.value.has(key)) continue
-    local.bindings.push(
-      createPointBinding(key, pointForm.keys.length === 1 && alias ? alias : undefined)
+    local.points.push(
+      createTwinPoint(key, pointForm.keys.length === 1 && alias ? { alias } : undefined)
     )
   }
   pointDialogVisible.value = false
   commit()
 }
 
-function updateAlias(binding: PointBinding, alias: string) {
-  binding.alias = alias.trim() || undefined
+function updateAlias(point: TwinPoint, alias: string) {
+  point.alias = alias.trim() || undefined
   commit()
 }
 
-function removeBinding(id: string) {
-  local.bindings = local.bindings.filter(b => b.id !== id)
-  local.events = local.events.filter(e => {
-    const stillBound = local.bindings.some(b => b.key === e.when.pointKey)
-    return stillBound || e.kind === 'script'
-  })
+function removePoint(key: string) {
+  local.points = local.points.filter(p => p.key !== key)
+  local.rules = (local.rules ?? []).filter(r => local.points.some(p => p.key === r.when.point))
   commit()
 }
 
@@ -108,8 +97,7 @@ const eventDialogVisible = ref(false)
 const editingEventId = ref<string | null>(null)
 const eventForm = reactive({
   name: '',
-  kind: 'condition' as NodeEventRule['kind'],
-  pointKey: 'temp' as BuiltinPointKey,
+  pointKey: 'temp' as string,
   op: 'gt' as ConditionOp,
   value: 80 as number | string,
   highlight: 'fault' as DeviceStatus,
@@ -117,17 +105,16 @@ const eventForm = reactive({
 })
 
 const boundPointOptions = computed(() =>
-  local.bindings.map(b => ({
-    value: b.key,
-    label: pointDisplayName(b)
+  local.points.map(p => ({
+    value: p.key,
+    label: pointLabel(p.key, p.alias)
   }))
 )
 
 function openAddEvent() {
   editingEventId.value = null
   eventForm.name = ''
-  eventForm.kind = 'condition'
-  eventForm.pointKey = (local.bindings[0]?.key ?? 'temp') as BuiltinPointKey
+  eventForm.pointKey = local.points[0]?.key ?? 'temp'
   eventForm.op = 'gt'
   eventForm.value = 80
   eventForm.highlight = 'fault'
@@ -135,64 +122,64 @@ function openAddEvent() {
   eventDialogVisible.value = true
 }
 
-function openEditEvent(rule: NodeEventRule) {
+function openEditEvent(rule: TwinRule) {
   editingEventId.value = rule.id
   eventForm.name = rule.name ?? ''
-  eventForm.kind = rule.kind
-  eventForm.pointKey = rule.when.pointKey
+  eventForm.pointKey = rule.when.point
   eventForm.op = rule.when.op
   eventForm.value = rule.when.value as number | string
-  eventForm.highlight = rule.then.highlight
+  eventForm.highlight = (typeof rule.then.slots.highlight === 'string'
+    ? rule.then.slots.highlight
+    : 'fault') as DeviceStatus
   eventForm.enabled = rule.enabled !== false
   eventDialogVisible.value = true
 }
 
 function confirmEvent() {
-  if (eventForm.kind === 'script') return
-  if (!local.bindings.some(b => b.key === eventForm.pointKey)) return
-  const payload = createConditionEvent({
+  if (!local.points.some(p => p.key === eventForm.pointKey)) return
+  const payload = createTwinRule({
     id: editingEventId.value ?? undefined,
     name: eventForm.name.trim() || undefined,
     when: {
-      pointKey: eventForm.pointKey,
+      point: eventForm.pointKey,
       op: eventForm.op,
-      value: Number.isFinite(Number(eventForm.value))
-        ? Number(eventForm.value)
-        : eventForm.value
+      value: Number.isFinite(Number(eventForm.value)) ? Number(eventForm.value) : eventForm.value
     },
-    then: { highlight: eventForm.highlight },
+    then: { slots: { highlight: eventForm.highlight } },
     enabled: eventForm.enabled
   })
+  const rules = local.rules ?? (local.rules = [])
   if (editingEventId.value) {
-    const index = local.events.findIndex(e => e.id === editingEventId.value)
+    const index = rules.findIndex(e => e.id === editingEventId.value)
     if (index >= 0) {
       payload.id = editingEventId.value
-      local.events[index] = payload
+      rules[index] = payload
     }
   } else {
-    local.events.push(payload)
+    rules.push(payload)
   }
   eventDialogVisible.value = false
   commit()
 }
 
 function removeEvent(id: string) {
-  local.events = local.events.filter(e => e.id !== id)
+  local.rules = (local.rules ?? []).filter(e => e.id !== id)
   commit()
 }
 
-function toggleEvent(rule: NodeEventRule, enabled: boolean) {
+function toggleEvent(rule: TwinRule, enabled: boolean) {
   rule.enabled = enabled
   commit()
 }
 
-function ruleSummary(rule: NodeEventRule): string {
-  if (rule.kind === 'script') return '高级脚本（未启用）'
-  const label = BUILTIN_POINT_LABELS[rule.when.pointKey] ?? rule.when.pointKey
+function ruleSummary(rule: TwinRule): string {
+  const label = BUILTIN_POINT_LABELS[rule.when.point as BuiltinPointKey] ?? rule.when.point
   const op = CONDITION_OP_LABELS[rule.when.op]
+  const hlRaw = rule.then.slots.highlight
   const hl =
-    HIGHLIGHT_STATUS_OPTIONS.find(o => o.value === rule.then.highlight)?.label ??
-    rule.then.highlight
+    typeof hlRaw === 'string'
+      ? (DEVICE_STATUS_OPTIONS.find(o => o.value === hlRaw)?.label ?? hlRaw)
+      : '?'
   return `${label} ${op} ${rule.when.value} → ${hl}`
 }
 
@@ -231,21 +218,23 @@ const navItems = [
             新增
           </el-button>
         </div>
-        <p class="hint">从内置 10 个属性 key 中绑定；可设别名，支持删除。</p>
-        <div v-if="local.bindings.length === 0" class="empty">尚未绑定点位</div>
+        <p class="hint">写入 props.twin.points；字典 key 由 Host 约定，可设别名。</p>
+        <div v-if="local.points.length === 0" class="empty">尚未绑定点位</div>
         <ul v-else class="list">
-          <li v-for="binding in local.bindings" :key="binding.id" class="list-item">
+          <li v-for="point in local.points" :key="point.key" class="list-item">
             <div class="item-main">
-              <div class="item-title">{{ BUILTIN_POINT_LABELS[binding.key] }}</div>
-              <div class="item-sub">{{ binding.key }}</div>
+              <div class="item-title">
+                {{ BUILTIN_POINT_LABELS[point.key as BuiltinPointKey] ?? point.key }}
+              </div>
+              <div class="item-sub">{{ point.key }}</div>
               <el-input
-                :model-value="binding.alias ?? ''"
+                :model-value="point.alias ?? ''"
                 size="small"
                 placeholder="别名（可选）"
-                @change="(v: string) => updateAlias(binding, v)"
+                @change="(v: string) => updateAlias(point, v)"
               />
             </div>
-            <el-button type="danger" link size="small" @click="removeBinding(binding.id)">
+            <el-button type="danger" link size="small" @click="removePoint(point.key)">
               删除
             </el-button>
           </li>
@@ -258,16 +247,16 @@ const navItems = [
           <el-button
             size="small"
             type="primary"
-            :disabled="local.bindings.length === 0"
+            :disabled="local.points.length === 0"
             @click="openAddEvent"
           >
             新增
           </el-button>
         </div>
-        <p class="hint">条件满足后触发物体高亮类型；高级脚本暂为占位。</p>
-        <div v-if="local.events.length === 0" class="empty">尚未配置事件</div>
+        <p class="hint">条件满足后写入 slots.highlight 效果令牌（色板由 Host 映射）。</p>
+        <div v-if="!(local.rules && local.rules.length)" class="empty">尚未配置事件</div>
         <ul v-else class="list">
-          <li v-for="rule in local.events" :key="rule.id" class="list-item">
+          <li v-for="rule in local.rules" :key="rule.id" class="list-item">
             <div class="item-main">
               <div class="item-title">{{ rule.name || '未命名规则' }}</div>
               <div class="item-sub">{{ ruleSummary(rule) }}</div>
@@ -328,56 +317,48 @@ const navItems = [
         <el-form-item label="名称">
           <el-input v-model="eventForm.name" placeholder="可选" />
         </el-form-item>
-        <el-form-item label="类型">
-          <el-radio-group v-model="eventForm.kind">
-            <el-radio value="condition">条件判断</el-radio>
-            <el-radio value="script" disabled>高级代码（即将支持）</el-radio>
-          </el-radio-group>
+        <el-form-item label="点位">
+          <el-select v-model="eventForm.pointKey" style="width: 100%">
+            <el-option
+              v-for="opt in boundPointOptions"
+              :key="opt.value"
+              :label="opt.label"
+              :value="opt.value"
+            />
+          </el-select>
         </el-form-item>
-        <template v-if="eventForm.kind === 'condition'">
-          <el-form-item label="点位">
-            <el-select v-model="eventForm.pointKey" style="width: 100%">
+        <el-form-item label="条件">
+          <div class="cond-row">
+            <el-select v-model="eventForm.op" style="width: 88px">
               <el-option
-                v-for="opt in boundPointOptions"
-                :key="opt.value"
-                :label="opt.label"
-                :value="opt.value"
+                v-for="(label, op) in CONDITION_OP_LABELS"
+                :key="op"
+                :label="label"
+                :value="op"
               />
             </el-select>
-          </el-form-item>
-          <el-form-item label="条件">
-            <div class="cond-row">
-              <el-select v-model="eventForm.op" style="width: 88px">
-                <el-option
-                  v-for="(label, op) in CONDITION_OP_LABELS"
-                  :key="op"
-                  :label="label"
-                  :value="op"
-                />
-              </el-select>
-              <el-input v-model="eventForm.value" placeholder="阈值" />
-            </div>
-          </el-form-item>
-          <el-form-item label="触发高亮">
-            <el-select v-model="eventForm.highlight" style="width: 100%">
-              <el-option
-                v-for="opt in HIGHLIGHT_STATUS_OPTIONS"
-                :key="opt.value"
-                :label="opt.label"
-                :value="opt.value"
-              />
-            </el-select>
-          </el-form-item>
-          <el-form-item label="启用">
-            <el-switch v-model="eventForm.enabled" />
-          </el-form-item>
-        </template>
+            <el-input v-model="eventForm.value" placeholder="阈值" />
+          </div>
+        </el-form-item>
+        <el-form-item label="触发高亮">
+          <el-select v-model="eventForm.highlight" style="width: 100%">
+            <el-option
+              v-for="opt in DEVICE_STATUS_OPTIONS"
+              :key="opt.value"
+              :label="opt.label"
+              :value="opt.value"
+            />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="启用">
+          <el-switch v-model="eventForm.enabled" />
+        </el-form-item>
       </el-form>
       <template #footer>
         <el-button @click="eventDialogVisible = false">取消</el-button>
         <el-button
           type="primary"
-          :disabled="eventForm.kind !== 'condition' || boundPointOptions.length === 0"
+          :disabled="boundPointOptions.length === 0"
           @click="confirmEvent"
         >
           确定

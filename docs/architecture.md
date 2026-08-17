@@ -97,4 +97,24 @@ schema 只有 `structure.walls`（`a` / `b` / `height` / `thickness`），没有
 
 ---
 
-**一句话：** D1–D3 是引擎骨架（谁说了算、资产怎么嵌、怎么发包）；D4–D7 是 XZ 场景编辑语义（墙、碰撞、2D、会话开关）。行业壳与目录在 assets / Host。
+## 可选层：`@mh/3d-editor-twin`（孪生绑定，非只读播放器）
+
+与内核并列的**可选**包；不装也能编辑 / 预览 / 手写 `setNodeVisualState`。
+
+| 层 | 职责 |
+|----|------|
+| `@mh/3d-editor` | Document、`props` 不透明、`setNodeVisualState`、`onInteraction` |
+| `@mh/3d-editor-twin` | `props.twin` 读写、`DataSource` 接口、规则求值、`TwinPlayer` |
+| Host | 点位字典、色板、MQTT/WS/HTTP 实现、KPI / 告警壳 |
+
+- **编辑态**：`readTwin` / `writeTwin`（内部 `updateNode`，可撤销）；不必创建 Player
+- **预览/监控态**：注入 `DataSource`（`createDataSource` 内置 http/ws/mqtt；本仓库演示默认 http → `/api/twin/points`）+ `TwinPlayer`；`readonly` 是内核视口开关，与 twin 包无关
+- 落盘约定在 `node.props.twin`（`points` + 可选 `rules`，`then.slots.highlight` 为效果令牌）；**不**进 `EditorDocumentJSON` 一级字段；Broker/URL **不**进 Document
+- 只认 `props.twin`；写只写 `twin`
+- 值表按 `twinId + key`；协议换实现只换 `DataSource`，不改场景 JSON
+
+参考 Host：`apps/electrical-room`（Workbench 写 twin，Preview / Dashboard 播 Player）。
+
+---
+
+**一句话：** D1–D3 是引擎骨架（谁说了算、资产怎么嵌、怎么发包）；D4–D7 是 XZ 场景编辑语义（墙、碰撞、2D、会话开关）。行业壳与目录在 assets / Host；孪生绑定在可选 `@mh/3d-editor-twin`。

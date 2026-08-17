@@ -1,25 +1,17 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { createEditor, createPackCatalog, isDocumentItem } from '@mh/3d-editor'
-import type { EditorDocument, EditorSession, NodeInteractionEvent } from '@mh/3d-editor'
+import { createEditor, createPackCatalog } from '@mh/3d-editor'
+import type { EditorSession, NodeInteractionEvent } from '@mh/3d-editor'
+import { createDataSource, TwinPlayer } from '@mh/3d-editor-twin'
 import { getHomePublish } from '@/business/api'
-import { readNodeBindings, type NodeBindingsProps } from '@/business/node-bindings'
-import { fetchMockPointValues } from '@/business/mock-point-api'
-import { PointValueStore, evaluateNodeRules } from '@/business/point-runtime'
 import {
   DEVICE_STATUS_META,
-  clearVisualState,
+  isDeviceStatus,
   toVisualState,
   type DeviceStatus
 } from '@/business/device-status'
 import { createProceduralResolvers } from '@/models/registry'
-
-interface Target {
-  path: string
-  label: string
-  bindings: NodeBindingsProps
-}
 
 const router = useRouter()
 const el3d = ref<HTMLElement>()
@@ -39,65 +31,13 @@ const envStats = ref([
 ])
 
 let session: EditorSession | undefined
-let doc: EditorDocument | undefined
-let timer = 0
-let paintedPaths: string[] = []
-const store = new PointValueStore()
+let player: TwinPlayer | undefined
 
 const legendItems = (Object.keys(DEVICE_STATUS_META) as DeviceStatus[]).map(status => ({
   status,
   label: DEVICE_STATUS_META[status].label,
   color: DEVICE_STATUS_META[status].color
 }))
-
-async function collectTargets(): Promise<Target[]> {
-  if (!doc) return []
-  const catalog = doc.getCatalog()
-  const targets: Target[] = []
-  for (const node of doc.getNodes()) {
-    const selfBindings = readNodeBindings(node)
-    if (selfBindings.events.length > 0) {
-      targets.push({ path: node.id, label: node.name ?? node.id, bindings: selfBindings })
-    }
-    if (!node.catalogRef || !catalog) continue
-    const item = await catalog.get(node.catalogRef.id, node.catalogRef.version)
-    if (!item || !isDocumentItem(item) || !item.document) continue
-    for (const child of item.document.nodes) {
-      const childBindings = readNodeBindings(child)
-      if (childBindings.events.length === 0) continue
-      targets.push({
-        path: `${node.id}/${child.id}`,
-        label: `${node.name ?? node.id} / ${child.name ?? child.id}`,
-        bindings: childBindings
-      })
-    }
-  }
-  return targets
-}
-
-async function tick(targets: Target[]) {
-  const viewport = session?.viewport3d
-  if (!viewport || !running.value || targets.length === 0) return
-  try {
-    const values = await fetchMockPointValues()
-    store.setMany(values)
-  } catch {
-    return
-  }
-  const values = store.getAll()
-  paintedPaths.forEach(path => viewport.setNodeVisualState(path, clearVisualState()))
-  paintedPaths = []
-  let alarms = 0
-  for (const target of targets) {
-    const status = evaluateNodeRules(target.bindings, values) ?? 'normal'
-    if (status === 'normal') continue
-    alarms++
-    viewport.setNodeVisualState(target.path, toVisualState(status))
-    paintedPaths.push(target.path)
-  }
-  const alarmStat = envStats.value.find(s => s.label === '告警数量')
-  if (alarmStat) alarmStat.value = String(alarms)
-}
 
 onMounted(async () => {
   const home = await getHomePublish()
@@ -127,17 +67,33 @@ onMounted(async () => {
       resolvers: createProceduralResolvers()
     }
   })
-  doc = session.document
   ready.value = true
-  const targets = await collectTargets()
-  timer = window.setInterval(() => {
-    void tick(targets)
-  }, 2000)
-  void tick(targets)
+  if (!session.viewport3d) return
+
+  player = new TwinPlayer({
+    document: session.document,
+    viewport: session.viewport3d,
+    source: createDataSource({
+      type: 'http',
+      url: '/api/twin/points',
+      method: 'POST',
+      intervalMs: 2000
+    }),
+    mapHighlight: effect =>
+      toVisualState(isDeviceStatus(effect) ? effect : 'fault'),
+    getPaused: () => !running.value,
+    onPaint: results => {
+      const alarms = results.filter(r => r.effect && r.effect !== 'normal').length
+      const alarmStat = envStats.value.find(s => s.label === '告警数量')
+      if (alarmStat) alarmStat.value = String(alarms)
+    }
+  })
+  await player.start()
 })
 
 onBeforeUnmount(() => {
-  window.clearInterval(timer)
+  player?.stop()
+  player = undefined
   session?.dispose()
 })
 </script>
@@ -179,7 +135,7 @@ onBeforeUnmount(() => {
             <i class="dot" :style="{ background: item.color }" />{{ item.label }}
           </span>
         </div>
-        <div class="hint">拖拽旋转视角 · 滚轮缩放 · 点选柜体查看实时数据（mock）</div>
+        <div class="hint">拖拽旋转视角 · 滚轮缩放 · TwinPlayer + HttpDataSource</div>
         <el-switch v-model="running" inline-prompt active-text="轮询" inactive-text="暂停" />
       </footer>
     </template>

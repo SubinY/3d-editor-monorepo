@@ -1,16 +1,14 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref } from 'vue'
-import { createEditor, isDocumentItem } from '@mh/3d-editor'
+import { createEditor } from '@mh/3d-editor'
 import type { EditorDocument, EditorSession, NodeInteractionEvent } from '@mh/3d-editor'
+import { createDataSource, TwinPlayer } from '@mh/3d-editor-twin'
 import { useRoute, useRouter } from 'vue-router'
 import { createPreviewCatalog } from '@/business/catalog'
 import * as api from '@/business/api'
-import { readNodeBindings, type NodeBindingsProps } from '@/business/node-bindings'
-import { fetchMockPointValues } from '@/business/mock-point-api'
-import { PointValueStore, evaluateNodeRules } from '@/business/point-runtime'
 import {
   DEVICE_STATUS_META,
-  clearVisualState,
+  isDeviceStatus,
   toVisualState,
   type DeviceStatus
 } from '@/business/device-status'
@@ -25,12 +23,6 @@ interface AlarmLog {
   detail: string
 }
 
-interface Target {
-  path: string
-  label: string
-  bindings: NodeBindingsProps
-}
-
 const el3d = ref<HTMLElement>()
 const logs = ref<AlarmLog[]>([])
 const running = ref(true)
@@ -42,9 +34,7 @@ const cabinetDetailName = ref('')
 
 let session: EditorSession | undefined
 let doc: EditorDocument | undefined
-let timer = 0
-let paintedPaths: string[] = []
-const store = new PointValueStore()
+let player: TwinPlayer | undefined
 
 const legendItems = (Object.keys(DEVICE_STATUS_META) as DeviceStatus[]).map(status => ({
   status,
@@ -52,76 +42,12 @@ const legendItems = (Object.keys(DEVICE_STATUS_META) as DeviceStatus[]).map(stat
   color: DEVICE_STATUS_META[status].color
 }))
 
-async function collectTargets(): Promise<Target[]> {
-  if (!doc) return []
-  const catalog = doc.getCatalog()
-  const targets: Target[] = []
-
-  for (const node of doc.getNodes()) {
-    const selfBindings = readNodeBindings(node)
-    if (selfBindings.events.length > 0) {
-      targets.push({
-        path: node.id,
-        label: node.name ?? node.id,
-        bindings: selfBindings
-      })
-    }
-
-    if (!node.catalogRef || !catalog) continue
-    const item = await catalog.get(node.catalogRef.id, node.catalogRef.version)
-    if (!item || !isDocumentItem(item) || !item.document) continue
-    for (const child of item.document.nodes) {
-      const childBindings = readNodeBindings(child)
-      if (childBindings.events.length === 0) continue
-      targets.push({
-        path: `${node.id}/${child.id}`,
-        label: `${node.name ?? node.id} / ${child.name ?? child.id}`,
-        bindings: childBindings
-      })
-    }
-  }
-  return targets
-}
-
-async function tick(targets: Target[]) {
-  const viewport = session?.viewport3d
-  if (!viewport || !running.value || targets.length === 0) return
-
-  try {
-    const values = await fetchMockPointValues()
-    store.setMany(values)
-    lastValues.value = `temp=${values.temp} alarm=${values.alarm}`
-  } catch {
-    return
-  }
-
-  const values = store.getAll()
-  paintedPaths.forEach(path => viewport.setNodeVisualState(path, clearVisualState()))
-  paintedPaths = []
-
-  const now = new Date().toLocaleTimeString()
-  for (const target of targets) {
-    const status = evaluateNodeRules(target.bindings, values) ?? 'normal'
-    if (status === 'normal') continue
-    viewport.setNodeVisualState(target.path, toVisualState(status))
-    paintedPaths.push(target.path)
-    logs.value.unshift({
-      time: now,
-      path: target.path,
-      label: target.label,
-      status,
-      detail: lastValues.value
-    })
-  }
-  logs.value = logs.value.slice(0, 30)
-}
-
 const route = useRoute()
 const router = useRouter()
 
 onMounted(async () => {
   const id = route.params.id as string | undefined
-  sourceLabel.value = '已保存草稿 + 活 Catalog'
+  sourceLabel.value = 'HttpDataSource → /api/twin/points'
   const catalog = await createPreviewCatalog()
   const rec = id ? await api.getDocument('scene', id) : undefined
   const list = id ? [] : await api.listScenes()
@@ -152,15 +78,43 @@ onMounted(async () => {
   })
 
   doc = session.document
-  const targets = await collectTargets()
-  timer = window.setInterval(() => {
-    void tick(targets)
-  }, 2000)
-  void tick(targets)
+  if (!session.viewport3d) return
+
+  player = new TwinPlayer({
+    document: session.document,
+    viewport: session.viewport3d,
+    source: createDataSource({
+      type: 'http',
+      url: '/api/twin/points',
+      method: 'POST',
+      intervalMs: 2000
+    }),
+    mapHighlight: effect =>
+      toVisualState(isDeviceStatus(effect) ? effect : 'fault'),
+    getPaused: () => !running.value,
+    onHighlight: ({ path, label, effect, twinId }) => {
+      if (!effect || effect === 'normal' || !isDeviceStatus(effect)) return
+      const values = player?.getStore().getAllForTwin(twinId) ?? {}
+      const detail = Object.entries(values)
+        .map(([k, v]) => `${k}=${v}`)
+        .join(' ')
+      lastValues.value = detail
+      logs.value.unshift({
+        time: new Date().toLocaleTimeString(),
+        path,
+        label,
+        status: effect,
+        detail
+      })
+      logs.value = logs.value.slice(0, 30)
+    }
+  })
+  await player.start()
 })
 
 onBeforeUnmount(() => {
-  window.clearInterval(timer)
+  player?.stop()
+  player = undefined
   session?.dispose()
   session = undefined
 })

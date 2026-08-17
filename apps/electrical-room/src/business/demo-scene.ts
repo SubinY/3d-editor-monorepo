@@ -4,13 +4,13 @@ import {
   createMemoryCatalog
 } from '@mh/3d-editor'
 import type { EditorDocumentJSON } from '@mh/3d-editor'
+import { createTwinPoint, createTwinRule } from '@mh/3d-editor-twin'
 import {
   builtinCabinetDocuments,
   cabinetItemFromDocument,
   INITIAL_CABINET_VERSION
 } from './catalog'
 import * as api from './api'
-import { createConditionEvent, createPointBinding } from './node-bindings'
 
 /**
  * 示例场景：只写分命名空间 documents（柜 container + 室 scene），不双写 catalog。
@@ -44,28 +44,32 @@ export async function createDemoSceneJSON(): Promise<EditorDocumentJSON> {
   const rows = [-5, -2.5, 0, 2.5, 5]
 
   rows.forEach((z, index) => {
-    const sampleBindings =
+    const sampleTwin =
       index === 0
         ? {
-            bindings: [createPointBinding('temp', '柜温')],
-            events: [
-              createConditionEvent({
-                name: '过温故障',
-                when: { pointKey: 'temp', op: 'gt', value: 60 },
-                then: { highlight: 'fault' }
-              })
-            ]
+            twin: {
+              points: [createTwinPoint('temp', { alias: '柜温' })],
+              rules: [
+                createTwinRule({
+                  name: '过温故障',
+                  when: { point: 'temp', op: 'gt', value: 60 },
+                  then: { slots: { highlight: 'fault' } }
+                })
+              ]
+            }
           }
         : index === 1
           ? {
-              bindings: [createPointBinding('alarm', '告警')],
-              events: [
-                createConditionEvent({
-                  name: '告警码',
-                  when: { pointKey: 'alarm', op: 'eq', value: 1 },
-                  then: { highlight: 'warning' }
-                })
-              ]
+              twin: {
+                points: [createTwinPoint('alarm', { alias: '告警' })],
+                rules: [
+                  createTwinRule({
+                    name: '告警码',
+                    when: { point: 'alarm', op: 'eq', value: 1 },
+                    then: { slots: { highlight: 'warning' } }
+                  })
+                ]
+              }
             }
           : undefined
 
@@ -73,7 +77,7 @@ export async function createDemoSceneJSON(): Promise<EditorDocumentJSON> {
       position: [-4, 0, z],
       rotation: [0, Math.PI / 2, 0],
       name: `左列柜-${index + 1}`,
-      props: { circuit: `L-${index + 1}`, ...sampleBindings },
+      props: { circuit: `L-${index + 1}`, ...sampleTwin },
       select: false
     })
     doc.commands.placeItem(index % 2 === 0 ? control : power, {

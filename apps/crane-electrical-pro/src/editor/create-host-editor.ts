@@ -53,6 +53,62 @@ export async function createDefaultSceneJSON(): Promise<EditorDocumentJSON> {
   const cabinetXs = [-3.2, -1.6, 0, 1.6, 3.2]
   cabinetXs.forEach((x, index) => {
     const item = index % 2 === 0 ? lv : ctrl
+    const twin =
+      index === 0
+        ? {
+            twin: {
+              id: 'C-01',
+              points: [
+                { key: 'temp', alias: '柜温' },
+                { key: 'voltage' },
+                { key: 'current' }
+              ],
+              rules: [
+                {
+                  id: 'rule-overtemp',
+                  name: '过温故障',
+                  when: { point: 'temp', op: 'gt' as const, value: 60 },
+                  then: { slots: { highlight: 'fault' } }
+                }
+              ]
+            }
+          }
+        : index === 1
+          ? {
+              twin: {
+                id: 'C-02',
+                points: [
+                  { key: 'alarm', alias: '告警' },
+                  { key: 'temp' },
+                  { key: 'voltage' }
+                ],
+                rules: [
+                  {
+                    id: 'rule-alarm',
+                    name: '告警码',
+                    when: { point: 'alarm', op: 'eq' as const, value: 1 },
+                    then: { slots: { highlight: 'warning' } }
+                  }
+                ]
+              }
+            }
+          : index === 2
+            ? {
+                twin: {
+                  id: 'C-03',
+                  points: [{ key: 'temp' }, { key: 'voltage' }, { key: 'current' }],
+                  rules: [
+                    {
+                      id: 'rule-warn-temp',
+                      name: '高温预警',
+                      when: { point: 'temp', op: 'gt' as const, value: 50 },
+                      then: { slots: { highlight: 'warning' } }
+                    }
+                  ]
+                }
+              }
+            : undefined
+
     doc.commands.placeItem(item, {
       position: [x, 0, -1.2],
       rotation: [0, 0, 0],
@@ -61,7 +117,8 @@ export async function createDefaultSceneJSON(): Promise<EditorDocumentJSON> {
         ratedVoltage: 380,
         ratedCurrent: index % 2 === 0 ? 250 : 100,
         status: 'normal',
-        deviceCode: `C-${String(index + 1).padStart(2, '0')}`
+        deviceCode: `C-${String(index + 1).padStart(2, '0')}`,
+        ...twin
       },
       select: false
     })

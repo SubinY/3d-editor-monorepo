@@ -9,6 +9,7 @@ export default defineConfig({
     alias: {
       '@': resolve(__dirname, 'src'),
       '@mh/3d-editor': resolve(__dirname, '../../packages/3d-editor/src'),
+      '@mh/3d-editor-twin': resolve(__dirname, '../../packages/3d-editor-twin/src'),
       '@mh/3d-editor-assets/common': resolve(
         __dirname,
         '../../packages/3d-editor-assets/src/common/index.ts'
@@ -18,6 +19,13 @@ export default defineConfig({
   },
   server: {
     host: true,
-    port: 5176
+    port: 5176,
+    proxy: {
+      '/api': {
+        target: 'http://localhost:8787',
+        changeOrigin: true,
+        ws: true
+      }
+    }
   }
 })

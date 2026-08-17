@@ -25,11 +25,11 @@ import PanelEditorModal from './workbench/panel-editor/PanelEditorModal.vue'
 import type { LiveCameraPose } from './workbench/environment-panel/types'
 import type { AssetGroup, EditorTool, LayerTreeItem, ViewMode } from './workbench/types'
 import {
-  emptyNodeBindings,
-  readNodeBindings,
-  writeNodeBindings,
-  type NodeBindingsProps
-} from '@/business/node-bindings'
+  emptyTwin,
+  readTwin,
+  writeTwin,
+  type TwinProps
+} from '@mh/3d-editor-twin'
 import { createProceduralResolvers } from '@/models/registry'
 import { panel } from '@mh/3d-editor-assets/common'
 
@@ -76,7 +76,7 @@ const selectedNode = reactive({
   yawDeg: 0,
   catalog: ''
 })
-const nodeBindings = reactive<NodeBindingsProps>(emptyNodeBindings())
+const nodeTwin = reactive<TwinProps>(emptyTwin())
 const selectedWall = shallowRef<WallJSON | null>(null)
 const boundsForm = reactive({ width: 0, depth: 0, height: 0 })
 const environment = shallowRef<EnvironmentJSON | null>(null)
@@ -167,12 +167,13 @@ async function refreshLayers() {
   selectedId.value = d.selection.first() ?? ''
 }
 
-function syncBindingsFrom(next: NodeBindingsProps) {
-  nodeBindings.bindings = next.bindings.map(b => ({ ...b }))
-  nodeBindings.events = next.events.map(e => ({
-    ...e,
-    when: { ...e.when },
-    then: { ...e.then }
+function syncTwinFrom(next: TwinProps) {
+  nodeTwin.id = next.id
+  nodeTwin.points = next.points.map(p => ({ ...p }))
+  nodeTwin.rules = (next.rules ?? []).map(r => ({
+    ...r,
+    when: { ...r.when },
+    then: { slots: { ...r.then.slots } }
   }))
 }
 
@@ -183,7 +184,7 @@ function refreshSelected() {
   selectedId.value = id ?? ''
   if (!d || !id) {
     selectedNode.id = ''
-    syncBindingsFrom(emptyNodeBindings())
+    syncTwinFrom(emptyTwin())
     return
   }
   const node = d.getNode(id)
@@ -202,11 +203,11 @@ function refreshSelected() {
     selectedNode.catalog = node.catalogRef
       ? `${node.catalogRef.id}@${node.catalogRef.version}`
       : '-'
-    syncBindingsFrom(readNodeBindings(node))
+    syncTwinFrom(readTwin(node))
     return
   }
   selectedNode.id = ''
-  syncBindingsFrom(emptyNodeBindings())
+  syncTwinFrom(emptyTwin())
   const wall = d.getWall(id)
   if (wall) selectedWall.value = { ...wall }
 }
@@ -473,10 +474,10 @@ function applyNodeName() {
   doc.value?.commands.updateNode(selectedNode.id, { name: selectedNode.name })
 }
 
-function applyNodeBindings(next: NodeBindingsProps) {
+function applyNodeTwin(next: TwinProps) {
   if (!selectedNode.id || !doc.value) return
-  writeNodeBindings(doc.value, selectedNode.id, next)
-  syncBindingsFrom(next)
+  writeTwin(doc.value, selectedNode.id, next)
+  syncTwinFrom(next)
 }
 
 function removeSelected() {
@@ -637,7 +638,7 @@ async function confirmPanelEdit(content: panel.PanelContentJSON) {
         :bounds-form="boundsForm"
         :selected-node="selectedNode"
         :selected-wall="selectedWall"
-        :node-bindings="nodeBindings"
+        :node-twin="nodeTwin"
         :environment="environment"
         :view-mode="viewMode"
         :live-camera-pose="liveCameraPose"
@@ -646,7 +647,7 @@ async function confirmPanelEdit(content: panel.PanelContentJSON) {
         @update:bounds="applyBounds"
         @update:name="applyNodeName"
         @update:transform="applyNodeTransform"
-        @update:bindings="applyNodeBindings"
+        @update:twin="applyNodeTwin"
         @update:enclosure="applyEnvironment"
         @edit-panel="openPanelEditor"
         @remove="removeSelected"

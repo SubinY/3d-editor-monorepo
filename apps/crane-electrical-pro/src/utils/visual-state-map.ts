@@ -24,3 +24,7 @@ export function toVisualState(status: DeviceStatus, intensity = 1): VisualState 
 export function clearVisualState(): VisualState {
   return { color: null }
 }
+
+export function isDeviceStatus(value: unknown): value is DeviceStatus {
+  return typeof value === 'string' && value in DEVICE_STATUS_META
+}

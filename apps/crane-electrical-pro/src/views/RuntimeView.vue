@@ -11,9 +11,10 @@ import { createHostEditor } from '@/editor/create-host-editor'
 import { createDefaultSceneJSON } from '@/editor/create-host-editor'
 import { useEditorStore } from '@/stores/editor'
 import { useRuntimeStore } from '@/stores/runtime'
-import { toVisualState, clearVisualState } from '@/utils/visual-state-map'
+import { toVisualState, clearVisualState, isDeviceStatus } from '@/utils/visual-state-map'
 import { cloneEnvironment } from '@mh/3d-editor'
 import type { EditorSession } from '@mh/3d-editor'
+import { createDataSource, TwinPlayer, readTwin, resolveTwinId } from '@mh/3d-editor-twin'
 
 const editorStore = useEditorStore()
 const runtime = useRuntimeStore()
@@ -30,6 +31,7 @@ const {
 const canvasHost = ref<HTMLElement>()
 const showAlarms = ref(true)
 let session: EditorSession | undefined
+let player: TwinPlayer | undefined
 
 const metricCards = computed(() => [
   {
@@ -62,29 +64,12 @@ const metricCards = computed(() => [
   }
 ])
 
-function applyVisualStates() {
+function applySelectionHighlight() {
   const vp = session?.viewport3d
-  if (!vp) return
-  vp.clearVisualStates()
-  for (const d of devices.value) {
-    const state =
-      d.nodeId === selectedNodeId.value && d.status === 'normal'
-        ? { color: '#60A5FA', intensity: 0.85 }
-        : toVisualState(d.status)
-    vp.setNodeVisualState(d.nodeId, state)
-  }
-  if (selectedNodeId.value) {
-    const selected = devices.value.find(d => d.nodeId === selectedNodeId.value)
-    if (selected?.status === 'normal') {
-      vp.setNodeVisualState(selectedNodeId.value, { color: '#60A5FA', intensity: 0.9 })
-    }
-  }
-}
-
-function clearRuntimeVisuals() {
-  session?.viewport3d?.clearVisualStates()
-  for (const d of devices.value) {
-    session?.viewport3d?.setNodeVisualState(d.nodeId, clearVisualState())
+  if (!vp || !selectedNodeId.value) return
+  const selected = devices.value.find(d => d.nodeId === selectedNodeId.value)
+  if (selected?.status === 'normal') {
+    vp.setNodeVisualState(selectedNodeId.value, { color: '#60A5FA', intensity: 0.9 })
   }
 }
 
@@ -101,7 +86,6 @@ function waitFrames(n = 2) {
   })
 }
 
-/** 布局稳定后 resize，恢复整屋视角并选中首台设备 */
 function fitRuntimeCamera() {
   window.dispatchEvent(new Event('resize'))
   const doc = session?.document
@@ -124,7 +108,6 @@ function fitRuntimeCamera() {
   const first = cabinets[0]
   runtime.selectDevice(first.nodeId)
   doc.selection.set(first.nodeId)
-  // 大 padding：在选中柜基础上拉开距离，近似整屋可读构图，并覆盖用户拖动后的相机
   session?.viewport3d?.focusSelection({ padding: 4.2 })
 }
 
@@ -144,15 +127,46 @@ onMounted(async () => {
     readonly: true
   })
 
-  runtime.seedFromNodes(
-    session.document.getNodes().map(n => ({
-      id: n.id,
-      name: n.name,
-      props: n.props as Record<string, unknown> | undefined
-    }))
-  )
-  applyVisualStates()
-  runtime.start()
+  if (!session.viewport3d) return
+
+  player = new TwinPlayer({
+    document: session.document,
+    viewport: session.viewport3d,
+    source: createDataSource({
+      type: 'http',
+      url: '/api/twin/points',
+      method: 'POST',
+      intervalMs: 2000
+    }),
+    mapHighlight: effect => {
+      if (!isDeviceStatus(effect) || effect === 'normal') return clearVisualState()
+      return toVisualState(effect)
+    },
+    onPaint: results => {
+      const store = player?.getStore()
+      runtime.applyPaint(
+        results.map(r => {
+          const nodeId = r.path.includes('/') ? r.path.split('/')[0] : r.path
+          const node = session?.document.getNode(nodeId)
+          const twin = node ? readTwin(node) : undefined
+          const deviceCode =
+            typeof node?.props?.deviceCode === 'string'
+              ? node.props.deviceCode
+              : twin?.id ?? resolveTwinId({ id: nodeId, props: node?.props })
+          return {
+            nodeId,
+            name: r.label,
+            twinId: r.twinId,
+            effect: r.effect,
+            values: store?.getAllForTwin(r.twinId) ?? {},
+            deviceCode
+          }
+        })
+      )
+      applySelectionHighlight()
+    }
+  })
+  await player.start()
 
   session.document.on('selection:changed', () => {
     const id = session?.document.selection.first()
@@ -165,19 +179,16 @@ onMounted(async () => {
 })
 
 onBeforeUnmount(() => {
-  runtime.stop()
-  clearRuntimeVisuals()
+  player?.stop()
+  player = undefined
+  session?.viewport3d?.clearVisualStates()
   session?.dispose()
   session = undefined
 })
 
-watch(
-  [devices, selectedNodeId],
-  () => {
-    applyVisualStates()
-  },
-  { deep: true }
-)
+watch(selectedNodeId, () => {
+  applySelectionHighlight()
+})
 
 function onSelectDevice(nodeId: string) {
   runtime.selectDevice(nodeId)
@@ -244,7 +255,7 @@ function resetView() {
     <footer class="status">
       <div class="left-s">
         <span class="pulse" />
-        数字孪生运行时 · 状态同步中
+        TwinPlayer · HttpDataSource
       </div>
       <div>更新时间: {{ updatedAt }}</div>
       <div class="right-s">

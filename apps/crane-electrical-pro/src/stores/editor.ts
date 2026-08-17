@@ -6,7 +6,7 @@ export type ViewMode = '2d' | 'split' | '3d'
 export type LeftTab = 'resource' | 'outline'
 export type RightTab = 'property' | 'scene' | 'data'
 
-const DOC_KEY = 'crane-electrical-pro:document:v2'
+const DOC_KEY = 'crane-electrical-pro:document:v3'
 
 export const useEditorStore = defineStore('editor', () => {
   const projectName = ref('Substation B - 电气室设计')

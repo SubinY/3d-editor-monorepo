@@ -8,14 +8,14 @@ import DataPanel from './DataPanel.vue'
 import EnvironmentPanel from './environment-panel/EnvironmentPanel.vue'
 import type { LiveCameraPose } from './environment-panel/types'
 import type { BoundsForm, SelectedNodeForm } from './PropertyPanel.vue'
-import type { NodeBindingsProps } from '@/business/node-bindings'
+import type { TwinProps } from '@mh/3d-editor-twin'
 
 const props = defineProps<{
   isScene: boolean
   boundsForm: BoundsForm
   selectedNode: SelectedNodeForm
   selectedWall: WallJSON | null
-  nodeBindings: NodeBindingsProps
+  nodeTwin: TwinProps
   environment: EnvironmentJSON | null
   viewMode: ViewMode
   liveCameraPose?: LiveCameraPose | null
@@ -27,7 +27,7 @@ const emit = defineEmits<{
   'update:bounds': []
   'update:name': []
   'update:transform': []
-  'update:bindings': [value: NodeBindingsProps]
+  'update:twin': [value: TwinProps]
   'update:enclosure': [env: EnvironmentJSON]
   'edit-panel': []
   remove: []
@@ -104,8 +104,8 @@ watch(
         </template>
         <DataPanel
           :node-id="selectedNode.id"
-          :model-value="nodeBindings"
-          @update:model-value="emit('update:bindings', $event)"
+          :model-value="nodeTwin"
+          @update:model-value="emit('update:twin', $event)"
         />
       </el-tab-pane>
     </el-tabs>

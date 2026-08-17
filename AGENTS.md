@@ -8,10 +8,11 @@
 
 - `packages/3d-editor` — `createEditor`、Document、Catalog、2D/3D Viewport
 - `packages/3d-editor-assets` — 通用 / 行业 procedural 资产
+- `packages/3d-editor-twin` — 可选孪生绑定（`props.twin` / DataSource / TwinPlayer）
 - `apps/electrical-room` — Host UI
 - `apps/electrical-room-api` — JSON 落盘
 
-依赖：`apps → @mh/3d-editor`（peer `three`）；禁止反向。行业语义只出现在 apps。
+依赖：`apps → @mh/3d-editor`（peer `three`）；禁止反向。行业语义只出现在 apps。孪生绑定按需依赖 `@mh/3d-editor-twin`。
 
 ## Commands
 
@@ -34,4 +35,4 @@ pnpm run publish     # build + npm publish @mh/3d-editor
 
 ## Testing
 
-Vitest（`packages/3d-editor` 内 `*.test.ts`）。改公共面时同步 `packages/3d-editor/README.md`。
+Vitest（`packages/3d-editor`、`packages/3d-editor-twin` 内 `*.test.ts`）。改公共面时同步对应 README。
