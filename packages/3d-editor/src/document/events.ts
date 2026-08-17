@@ -2,7 +2,6 @@ import type { BoundsJSON, EditorNodeJSON, EnvironmentJSON, WallJSON } from './ty
 
 export interface NodeEventPayload {
   node: EditorNodeJSON
-  parentId?: string
   /** 事件发起方标识（viewport 用于避免自回放） */
   source?: string
 }

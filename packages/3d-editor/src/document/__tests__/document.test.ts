@@ -76,21 +76,13 @@ describe('EditorDocument 命令与历史', () => {
     expect(doc.getNode(node!.id)).toBeDefined()
   })
 
-  it('duplicateNode 深拷贝 props / children，单条历史可撤销', () => {
+  it('duplicateNode 深拷贝 props，单条历史可撤销', () => {
     const doc = createSceneDoc()
     const { node } = doc.commands.placeItem(cabinetItem, {
       position: [1, 0, 2],
       name: '柜A',
       props: { panel: { title: 'A柜' }, bindings: [{ key: 'temp', path: 'a.temp' }] }
     })
-    const childResult = doc.commands.placeItem(cabinetItem, {
-      parentId: node!.id,
-      position: [0.1, 0.5, 0],
-      name: '子件',
-      props: { tag: 'inner' },
-      select: false
-    })
-    expect(childResult.node).toBeDefined()
 
     const result = doc.commands.duplicateNode(node!.id, { offset: [1.5, 0, 1] })
     expect(result.denied).toBeUndefined()
@@ -102,9 +94,6 @@ describe('EditorDocument 命令与历史', () => {
       panel: { title: 'A柜' },
       bindings: [{ key: 'temp', path: 'a.temp' }]
     })
-    expect(copy.children).toHaveLength(1)
-    expect(copy.children![0].id).not.toBe(childResult.node!.id)
-    expect(copy.children![0].props).toEqual({ tag: 'inner' })
     expect(doc.getNodes()).toHaveLength(2)
     expect(doc.selection.first()).toBe(copy.id)
 

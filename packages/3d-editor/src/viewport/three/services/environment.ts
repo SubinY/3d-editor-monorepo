@@ -1,5 +1,6 @@
 import * as THREE from 'three'
 import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js'
+import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js'
 import type { BoundsJSON, EnvironmentJSON } from '../../../document/types'
 import type { ThreeRuntime } from '../runtime/ThreeRuntime'
 import { buildEnclosure } from '../helpers/enclosure'
@@ -18,7 +19,7 @@ export interface EnvironmentServiceOptions {
 }
 
 /**
- * Document.environment → Three 场景呈现（背景 / 灯 / 阴影 / grid / enclosure）。
+ * Document.environment → Three 场景呈现（背景 / IBL / 灯 / 阴影 / grid / enclosure）。
  */
 export class EnvironmentService {
   private runtime: ThreeRuntime
@@ -26,11 +27,18 @@ export class EnvironmentService {
   private resolveEnclosure?: EnvironmentServiceOptions['resolveEnclosure']
   private applyToken = 0
   private bgTexture: THREE.Texture | null = null
+  private pmrem: THREE.PMREMGenerator
+  /** RoomEnvironment 预烘焙缓存；跨 apply 复用 */
+  private roomEnvMap: THREE.Texture | null = null
+  /** 当前挂在 scene.environment 上的 RT（equirect 派生时需单独释放） */
+  private activeEnvMap: THREE.Texture | null = null
+  private activeEnvFromRoom = false
 
   constructor(options: EnvironmentServiceOptions) {
     this.runtime = options.runtime
     this.envGroup = options.envGroup
     this.resolveEnclosure = options.resolveEnclosure
+    this.pmrem = new THREE.PMREMGenerator(this.runtime.renderer)
   }
 
   async apply(env: EnvironmentJSON, bounds: BoundsJSON): Promise<void> {
@@ -41,7 +49,7 @@ export class EnvironmentService {
       type: env.shadows.type ?? 'pcfsoft'
     })
 
-    await this.applyBackground(env, token)
+    await this.applyBackgroundAndIbl(env, token)
     if (token !== this.applyToken) return
 
     for (const spec of env.lights) {
@@ -94,13 +102,20 @@ export class EnvironmentService {
     this.applyToken++
     this.clearEnvGroup()
     this.disposeBgTexture()
+    this.clearSceneEnvironment()
+    if (this.roomEnvMap) {
+      this.roomEnvMap.dispose()
+      this.roomEnvMap = null
+    }
+    this.pmrem.dispose()
   }
 
-  private async applyBackground(env: EnvironmentJSON, token: number): Promise<void> {
+  private async applyBackgroundAndIbl(env: EnvironmentJSON, token: number): Promise<void> {
     const bg = env.background
     if (bg.type === 'color') {
       this.disposeBgTexture()
       this.runtime.scene.background = new THREE.Color(bg.value)
+      this.setRoomEnvironment()
       return
     }
 
@@ -114,10 +129,45 @@ export class EnvironmentService {
       texture.mapping = THREE.EquirectangularReflectionMapping
       this.bgTexture = texture
       this.runtime.scene.background = texture
+      this.setEnvironmentFromEquirect(texture)
     } catch {
       if (token !== this.applyToken) return
       this.disposeBgTexture()
       this.runtime.scene.background = new THREE.Color(FALLBACK_BG)
+      this.setRoomEnvironment()
+    }
+  }
+
+  /** 默认 IBL：RoomEnvironment 烘焙一次后缓存 */
+  private setRoomEnvironment(): void {
+    if (!this.roomEnvMap) {
+      this.roomEnvMap = this.pmrem.fromScene(new RoomEnvironment(), 0.04).texture
+    }
+    this.clearSceneEnvironment({ keepRoomCache: true })
+    this.runtime.scene.environment = this.roomEnvMap
+    this.activeEnvMap = this.roomEnvMap
+    this.activeEnvFromRoom = true
+  }
+
+  /** equirect/HDR 同时作 background 与 environment */
+  private setEnvironmentFromEquirect(source: THREE.Texture): void {
+    const envMap = this.pmrem.fromEquirectangular(source).texture
+    this.clearSceneEnvironment({ keepRoomCache: true })
+    this.runtime.scene.environment = envMap
+    this.activeEnvMap = envMap
+    this.activeEnvFromRoom = false
+  }
+
+  private clearSceneEnvironment(options?: { keepRoomCache?: boolean }): void {
+    this.runtime.scene.environment = null
+    if (this.activeEnvMap && !this.activeEnvFromRoom) {
+      this.activeEnvMap.dispose()
+    }
+    this.activeEnvMap = null
+    this.activeEnvFromRoom = false
+    if (!options?.keepRoomCache && this.roomEnvMap) {
+      this.roomEnvMap.dispose()
+      this.roomEnvMap = null
     }
   }
 

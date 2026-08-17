@@ -44,6 +44,8 @@ import type { CatalogItem, EditorDocumentJSON, EditorSession } from '@mh/3d-edit
 | 只读 3D 监控 | 任意 | `viewport3d.readonly` + `setNodeVisualState` |
 | 复合资产 | scene 嵌 document | 3D 展开深度上限 2 |
 
+节点在各自 document 内**平铺**；嵌套只走 document 型 catalog（`catalogRef` → 另一份 JSON）。
+
 ### 空间壳 `helpers.enclosure`
 
 开放字符串。内核只内建 `none` / `openBox`；`openBoxDoor`、`openBoxDoubleDoor`、`outdoorCabinet` 等由 `@mh/3d-editor-assets` 的 `commonProceduralResolvers` 按同名 id 解析。container 新建默认 `openBox`。

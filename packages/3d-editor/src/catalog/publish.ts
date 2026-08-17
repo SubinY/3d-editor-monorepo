@@ -20,10 +20,7 @@ function cloneJson<T>(value: T): T {
 }
 
 function walkNodes(nodes: EditorNodeJSON[], visit: (node: EditorNodeJSON) => void): void {
-  for (const node of nodes) {
-    visit(node)
-    if (node.children?.length) walkNodes(node.children, visit)
-  }
+  for (const node of nodes) visit(node)
 }
 
 /**

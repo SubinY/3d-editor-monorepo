@@ -103,6 +103,8 @@ export class ThreeRuntime {
     })
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
     this.renderer.setSize(options.container.clientWidth, options.container.clientHeight)
+    this.renderer.toneMapping = THREE.ACESFilmicToneMapping
+    this.renderer.toneMappingExposure = 1.05
     this.renderer.shadowMap.enabled = true
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap
     // 静态场景不每帧重渲阴影；结构变化时由 Viewport3D 置 needsUpdate

@@ -44,7 +44,6 @@ export interface PlaceOptions {
   scale?: [number, number, number]
   name?: string
   props?: Record<string, unknown>
-  parentId?: string
   select?: boolean
   source?: string
 }
@@ -55,7 +54,7 @@ export interface PlaceResult {
 }
 
 export interface DuplicateOptions {
-  /** 根节点 position 偏移；默认 [0.7, 0, 0.4] */
+  /** position 偏移；默认 [0.7, 0, 0.4] */
   offset?: [number, number, number]
   name?: string
   select?: boolean
@@ -98,7 +97,6 @@ export class EditorDocument {
   private nodes: EditorNodeJSON[] = []
   private walls: WallJSON[] = []
   private nodeIndex = new Map<string, EditorNodeJSON>()
-  private parentIndex = new Map<string, string | undefined>()
   private emitter = new DocumentEmitter()
   private itemCache = new Map<string, CatalogItem>()
   private catalog?: CatalogProvider
@@ -152,15 +150,11 @@ export class EditorDocument {
   async resolveItems(): Promise<void> {
     if (!this.catalog) return
     const refs = new Map<string, { id: string; version: string }>()
-    const collect = (nodes: EditorNodeJSON[]) => {
-      nodes.forEach(node => {
-        if (node.catalogRef) {
-          refs.set(catalogKey(node.catalogRef.id, node.catalogRef.version), node.catalogRef)
-        }
-        if (node.children) collect(node.children)
-      })
-    }
-    collect(this.nodes)
+    this.nodes.forEach(node => {
+      if (node.catalogRef) {
+        refs.set(catalogKey(node.catalogRef.id, node.catalogRef.version), node.catalogRef)
+      }
+    })
     await Promise.all(
       Array.from(refs.values()).map(async ref => {
         if (this.itemCache.has(catalogKey(ref.id, ref.version))) return
@@ -178,10 +172,6 @@ export class EditorDocument {
     return this.nodeIndex.get(id)
   }
 
-  getParentId(id: string): string | undefined {
-    return this.parentIndex.get(id)
-  }
-
   getWalls(): WallJSON[] {
     return this.walls
   }
@@ -190,19 +180,14 @@ export class EditorDocument {
     return this.walls.find(wall => wall.id === id)
   }
 
-  private siblingsOf(parentId?: string): EditorNodeJSON[] {
-    if (!parentId) return this.nodes
-    return this.nodeIndex.get(parentId)?.children ?? []
-  }
-
   checkCollision(
     transform: TransformJSON,
     item: CatalogItem | undefined,
-    options?: { excludeId?: string; parentId?: string }
+    options?: { excludeId?: string }
   ): CollisionHit | undefined {
     if (!this.collisionEnabled) return undefined
     return findCollision(
-      this.siblingsOf(options?.parentId),
+      this.nodes,
       transform,
       item,
       options?.excludeId,
@@ -211,54 +196,40 @@ export class EditorDocument {
     )
   }
 
-  private indexNode(node: EditorNodeJSON, parentId?: string): void {
+  private indexNode(node: EditorNodeJSON): void {
     this.nodeIndex.set(node.id, node)
-    this.parentIndex.set(node.id, parentId)
-    node.children?.forEach(child => this.indexNode(child, node.id))
   }
 
   private unindexNode(node: EditorNodeJSON): void {
     this.nodeIndex.delete(node.id)
-    this.parentIndex.delete(node.id)
-    node.children?.forEach(child => this.unindexNode(child))
   }
 
-  private insertNodeInternal(node: EditorNodeJSON, parentId: string | undefined, source?: string): void {
-    if (parentId) {
-      const parent = this.nodeIndex.get(parentId)
-      if (!parent) throw new Error(`parent node "${parentId}" not found`)
-      parent.children = parent.children ?? []
-      parent.children.push(node)
-    } else {
-      this.nodes.push(node)
-    }
-    this.indexNode(node, parentId)
-    this.emitter.emit('node:added', { node, parentId, source })
+  private insertNodeInternal(node: EditorNodeJSON, source?: string): void {
+    this.nodes.push(node)
+    this.indexNode(node)
+    this.emitter.emit('node:added', { node, source })
     this.emitChange()
   }
 
-  private removeNodeInternal(id: string, source?: string): { node: EditorNodeJSON; parentId?: string } | undefined {
+  private removeNodeInternal(id: string, source?: string): EditorNodeJSON | undefined {
     const node = this.nodeIndex.get(id)
     if (!node) return undefined
-    const parentId = this.parentIndex.get(id)
-    const list = parentId ? this.nodeIndex.get(parentId)?.children : this.nodes
-    if (!list) return undefined
-    const index = list.indexOf(node)
-    if (index >= 0) list.splice(index, 1)
+    const index = this.nodes.indexOf(node)
+    if (index >= 0) this.nodes.splice(index, 1)
     this.unindexNode(node)
     if (this.selection.isSelected(id)) {
       this.selection.set(this.selection.get().filter(sid => sid !== id))
     }
-    this.emitter.emit('node:removed', { node, parentId, source })
+    this.emitter.emit('node:removed', { node, source })
     this.emitChange()
-    return { node, parentId }
+    return node
   }
 
   private applyTransformInternal(id: string, transform: TransformJSON, source?: string): void {
     const node = this.nodeIndex.get(id)
     if (!node) return
     node.transform = cloneTransform(transform)
-    this.emitter.emit('node:updated', { node, parentId: this.parentIndex.get(id), source })
+    this.emitter.emit('node:updated', { node, source })
     this.emitChange()
   }
 
@@ -272,7 +243,7 @@ export class EditorDocument {
     if (patch.name !== undefined) node.name = patch.name
     if (patch.visible !== undefined) node.visible = patch.visible
     if (patch.props !== undefined) node.props = { ...(node.props ?? {}), ...patch.props }
-    this.emitter.emit('node:updated', { node, parentId: this.parentIndex.get(id), source })
+    this.emitter.emit('node:updated', { node, source })
     this.emitChange()
   }
 
@@ -305,18 +276,17 @@ export class EditorDocument {
       }
       if (verdict.transform) node.transform = verdict.transform
 
-      const parentId = options?.parentId
-      const hit = this.checkCollision(node.transform, item, { parentId })
+      const hit = this.checkCollision(node.transform, item)
       if (hit) {
         return { denied: `collision:${hit.nodeName ?? hit.nodeId}` }
       }
 
       const source = options?.source
-      this.insertNodeInternal(node, parentId, source)
+      this.insertNodeInternal(node, source)
       this.history.push({
         label: `place ${node.name ?? node.id}`,
         undo: () => this.removeNodeInternal(node.id),
-        redo: () => this.insertNodeInternal(node, parentId)
+        redo: () => this.insertNodeInternal(node)
       })
 
       if (options?.select !== false) {
@@ -345,10 +315,7 @@ export class EditorDocument {
       }
       const finalTransform = verdict.transform ?? target
 
-      const hit = this.checkCollision(finalTransform, this.getCachedItem(node), {
-        excludeId: id,
-        parentId: this.parentIndex.get(id)
-      })
+      const hit = this.checkCollision(finalTransform, this.getCachedItem(node), { excludeId: id })
       if (hit) {
         return { ok: false, denied: `collision:${hit.nodeName ?? hit.nodeId}` }
       }
@@ -366,38 +333,35 @@ export class EditorDocument {
       const removed = this.removeNodeInternal(id, options?.source)
       if (!removed) return false
       this.history.push({
-        label: `remove ${removed.node.name ?? id}`,
-        undo: () => this.insertNodeInternal(removed.node, removed.parentId),
+        label: `remove ${removed.name ?? id}`,
+        undo: () => this.insertNodeInternal(removed),
         redo: () => this.removeNodeInternal(id)
       })
       return true
     },
 
-    /**
-     * 深拷贝节点（含 props / children），新 id；根节点 position 加 offset。
-     */
+    /** 深拷贝节点（含 props），新 id；position 加 offset。 */
     duplicateNode: (id: string, options?: DuplicateOptions): PlaceResult => {
       const src = this.nodeIndex.get(id)
       if (!src) return { denied: 'node-not-found' }
-      const parentId = this.parentIndex.get(id)
       const offset = options?.offset ?? ([0.7, 0, 0.4] as [number, number, number])
-      const clone = cloneNodeTree(src, {
+      const clone = cloneNode(src, {
         offset,
         name: options?.name ?? (src.name ? `${src.name} 副本` : undefined)
       })
 
       const item = this.getCachedItem(clone)
-      const hit = this.checkCollision(clone.transform, item, { parentId })
+      const hit = this.checkCollision(clone.transform, item)
       if (hit) {
         return { denied: `collision:${hit.nodeName ?? hit.nodeId}` }
       }
 
       const source = options?.source
-      this.insertNodeInternal(clone, parentId, source)
+      this.insertNodeInternal(clone, source)
       this.history.push({
         label: `duplicate ${src.name ?? id}`,
         undo: () => this.removeNodeInternal(clone.id),
-        redo: () => this.insertNodeInternal(clone, parentId)
+        redo: () => this.insertNodeInternal(clone)
       })
       if (options?.select !== false) {
         this.selection.set(clone.id)
@@ -431,7 +395,7 @@ export class EditorDocument {
           target.name = before.name
           target.visible = before.visible
           target.props = before.props
-          this.emitter.emit('node:updated', { node: target, parentId: this.parentIndex.get(id) })
+          this.emitter.emit('node:updated', { node: target })
           this.emitChange()
         },
         redo: () => {
@@ -440,7 +404,7 @@ export class EditorDocument {
           target.name = after.name
           target.visible = after.visible
           target.props = after.props
-          this.emitter.emit('node:updated', { node: target, parentId: this.parentIndex.get(id) })
+          this.emitter.emit('node:updated', { node: target })
           this.emitChange()
         }
       })
@@ -669,23 +633,22 @@ export class EditorDocument {
     })
     const nodes: EditorNodeJSON[] = JSON.parse(JSON.stringify(json.nodes ?? []))
     nodes.forEach(node => {
+      // 丢弃历史字段 children（若有）；嵌套只走 catalog document
+      delete (node as { children?: unknown }).children
       doc.nodes.push(node)
-      doc.indexNode(node, undefined)
+      doc.indexNode(node)
     })
     return doc
   }
 }
 
-function cloneNodeTree(
+function cloneNode(
   src: EditorNodeJSON,
   opts: { offset?: [number, number, number]; name?: string }
 ): EditorNodeJSON {
   const clone: EditorNodeJSON = JSON.parse(JSON.stringify(src))
-  const remap = (node: EditorNodeJSON): void => {
-    node.id = crypto.randomUUID()
-    node.children?.forEach(remap)
-  }
-  remap(clone)
+  delete (clone as { children?: unknown }).children
+  clone.id = crypto.randomUUID()
   if (opts.name !== undefined) clone.name = opts.name
   if (opts.offset) {
     const p = clone.transform.position

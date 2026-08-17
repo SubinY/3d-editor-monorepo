@@ -295,19 +295,13 @@ export class Viewport2D {
   private async prefetchItems(): Promise<void> {
     const catalog = this.catalog
     if (!catalog) return
-    const walk = async (nodes: EditorNodeJSON[]) => {
-      for (const node of nodes) {
-        if (node.catalogRef) {
-          const key = catalogKey(node.catalogRef.id, node.catalogRef.version)
-          if (!this.itemCache.has(key)) {
-            const item = await catalog.get(node.catalogRef.id, node.catalogRef.version)
-            if (item) this.itemCache.set(key, item)
-          }
-        }
-        if (node.children) await walk(node.children)
-      }
+    for (const node of this.doc.getNodes()) {
+      if (!node.catalogRef) continue
+      const key = catalogKey(node.catalogRef.id, node.catalogRef.version)
+      if (this.itemCache.has(key)) continue
+      const item = await catalog.get(node.catalogRef.id, node.catalogRef.version)
+      if (item) this.itemCache.set(key, item)
     }
-    await walk(this.doc.getNodes())
     this.requestRender()
   }
 

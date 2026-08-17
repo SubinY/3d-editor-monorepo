@@ -153,7 +153,7 @@ export class SelectInteraction implements PointerInteraction {
         const hit = this.host.doc.checkCollision(
           { position: node.transform.position, rotation, scale: node.transform.scale },
           this.host.itemFor(node),
-          { excludeId: this.rotateNodeId, parentId: this.host.doc.getParentId(this.rotateNodeId) }
+          { excludeId: this.rotateNodeId }
         )
         this.rotateColliding = Boolean(hit)
       }
@@ -214,7 +214,7 @@ export class SelectInteraction implements PointerInteraction {
         const hit = this.host.doc.checkCollision(
           { position: nextPos, rotation: node.transform.rotation, scale: node.transform.scale },
           item,
-          { excludeId: this.dragNodeId, parentId: this.host.doc.getParentId(this.dragNodeId) }
+          { excludeId: this.dragNodeId }
         )
         this.dragColliding = Boolean(hit)
       } else {

@@ -95,12 +95,7 @@ function refreshOutline() {
       id: n.id,
       name: n.name || '未命名',
       visible: n.visible !== false,
-      kind: item?.kind,
-      children: n.children?.map(c => ({
-        id: c.id,
-        name: c.name || '未命名',
-        visible: c.visible !== false
-      }))
+      kind: item?.kind
     }
   })
   outlineNodes.value = [...walls, ...nodes]

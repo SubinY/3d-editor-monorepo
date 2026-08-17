@@ -49,7 +49,6 @@ export interface EditorNodeJSON {
   catalogRef?: CatalogRefJSON
   transform: TransformJSON
   visible?: boolean
-  children?: EditorNodeJSON[]
   /** 业务扩展字段，编辑器不解释 */
   props?: Record<string, unknown>
 }

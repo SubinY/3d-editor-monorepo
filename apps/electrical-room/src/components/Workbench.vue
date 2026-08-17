@@ -135,12 +135,6 @@ async function mapLayerItem(node: EditorNodeJSON, d: EditorDocument): Promise<La
     editable: true
   }
 
-  // 文档内真子节点：可编辑层级
-  if (node.children?.length) {
-    item.children = await Promise.all(node.children.map(child => mapLayerItem(child, d)))
-    return item
-  }
-
   // catalog document 型：只读投影内部 nodes（非场景 document 成员）
   if (node.catalogRef) {
     const catalogItem =

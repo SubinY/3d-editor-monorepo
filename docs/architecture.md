@@ -30,6 +30,7 @@
 细节：
 
 - Catalog 分两型：`model`（GLB / procedural）与 `document`（整份 container JSON）
+- 节点在各自 document 内**平铺**（顶层 `nodes`）；嵌套只走 document 型 catalog（`catalogRef` → 另一份 JSON）
 - 寻址：`setNodeVisualState('父节点/子节点', …)` 支持元件级高亮
 - 深度上限 2：scene → container → 内部节点
 - 发布把资产钉成 `(id, version)` 快照（`buildPublishBundle` / PackCatalog），监控端不回活库
@@ -87,7 +88,7 @@ schema 只有 `structure.walls`（`a` / `b` / `height` / `thickness`），没有
 | API | 作用 |
 |-----|------|
 | `doc.commands.placeItem` | 放置 |
-| `doc.commands.duplicateNode` | 深拷贝 props/children，单条历史 |
+| `doc.commands.duplicateNode` | 深拷贝 props，单条历史 |
 | `doc.commands.transformNode` / `updateNode` / `removeNode` | 变换 / 属性 / 删除 |
 | `doc.commands.*Wall*` / `setBounds` / `setEnvironment` | 结构与环境 |
 | `doc.history.undo` / `redo` / `transaction` | 历史 |
