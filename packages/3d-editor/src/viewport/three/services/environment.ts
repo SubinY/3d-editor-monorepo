@@ -4,6 +4,7 @@ import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment
 import type { BoundsJSON, EnvironmentJSON } from '../../../document/types'
 import type { ThreeRuntime } from '../runtime/ThreeRuntime'
 import { buildEnclosure } from '../helpers/enclosure'
+import { createInfiniteGrid } from '../helpers/infinite-grid'
 import { disposeObject3D } from '../utils/dispose'
 
 const FALLBACK_BG = '#0c1420'
@@ -65,17 +66,7 @@ export class EnvironmentService {
     const h = height ?? 2
 
     if (env.helpers.grid) {
-      const size = Math.max(width, depth, 1)
-      const grid = new THREE.GridHelper(size, Math.max(Math.round(size), 1), 0x2b3b4d, 0x1c2836)
-      const mats = Array.isArray(grid.material) ? grid.material : [grid.material]
-      mats.forEach(m => {
-        m.transparent = true
-        m.opacity = 0.5
-        m.depthWrite = false
-      })
-      // 略高于 y=0 地板，减轻与地面共面闪烁
-      grid.position.y = 0.02
-      this.envGroup.add(grid)
+      this.envGroup.add(createInfiniteGrid())
     }
 
     const enclosureKind = env.helpers.enclosure
