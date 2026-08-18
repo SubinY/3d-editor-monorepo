@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Back, Bottom, FullScreen, RefreshLeft, RefreshRight, Upload } from '@element-plus/icons-vue'
+import { Back, Bottom, FullScreen, RefreshLeft, RefreshRight } from '@element-plus/icons-vue'
 import type { EditorTool } from './types'
 
 defineProps<{
@@ -21,7 +21,6 @@ const emit = defineEmits<{
   'snap-surface': []
   'set-tool': [tool: EditorTool]
   save: []
-  publish: []
 }>()
 </script>
 
@@ -72,7 +71,6 @@ const emit = defineEmits<{
 
     <div class="right">
       <el-button type="primary" @click="emit('save')">保存</el-button>
-      <el-button v-if="isScene" type="success" :icon="Upload" @click="emit('publish')">发布</el-button>
     </div>
   </header>
 </template>

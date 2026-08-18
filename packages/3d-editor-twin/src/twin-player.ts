@@ -4,12 +4,18 @@ import type {
   DataSource,
   DataSourceNeed,
   TwinDocument,
+  TwinDocumentNode,
   TwinProps,
   TwinTarget,
   TwinViewport
 } from './types'
 
 export type VisualStateLike = { color?: string | null; intensity?: number }
+
+/** 解析一层嵌套 document nodes（如柜内元件）；未实现则只扫顶层 */
+export type ResolveNested = (
+  node: TwinDocumentNode
+) => Promise<TwinDocumentNode[] | undefined> | TwinDocumentNode[] | undefined
 
 export interface TwinPlayerOptions {
   document: TwinDocument
@@ -32,30 +38,64 @@ export interface TwinPlayerOptions {
   ) => void
   /** 暂停时仍接收数据但不刷色 */
   getPaused?: () => boolean
+  /** 嵌套document节点时作为辅助函数使用；即使父节点无 twin，也扫一层子节点；path = `${parentId}/${childId}` */
+  resolveNested?: ResolveNested
 }
 
 function hasPlayableRules(twin: TwinProps): boolean {
   return (twin.rules ?? []).some(r => r.enabled !== false && typeof r.then.slots.highlight === 'string')
 }
 
+function pushTarget(targets: TwinTarget[], node: TwinDocumentNode, path: string): void {
+  const raw = readTwin(node)
+  if (!hasPlayableRules(raw)) return
+  const twinId = resolveTwinId(node, raw)
+  targets.push({
+    path,
+    label: node.name ?? node.id,
+    twinId,
+    twin: { ...raw, id: twinId }
+  })
+}
+
 /**
- * 收集场景顶层可播目标（有 highlight 规则）。
+ * 收集可播目标（有 highlight 规则）。
+ * 顶层 path = node.id；嵌套 path = `${parentId}/${childId}`（与视口 setNodeVisualState 一致）。
  * twinId = props.twin.id ?? node.id；写入 target.twin.id 便于调试/下游一致。
  */
-export function collectTwinTargets(doc: TwinDocument): TwinTarget[] {
+export async function collectTwinTargets(
+  doc: TwinDocument,
+  resolveNested?: ResolveNested
+): Promise<TwinTarget[]> {
   const targets: TwinTarget[] = []
   for (const node of doc.getNodes()) {
-    const raw = readTwin(node)
-    if (!hasPlayableRules(raw)) continue
-    const twinId = resolveTwinId(node, raw)
-    targets.push({
-      path: node.id,
-      label: node.name ?? node.id,
-      twinId,
-      twin: { ...raw, id: twinId }
-    })
+    pushTarget(targets, node, node.id)
+    if (!resolveNested) continue
+    const children = await resolveNested(node)
+    if (!children) continue
+    for (const child of children) {
+      pushTarget(targets, child, `${node.id}/${child.id}`)
+    }
   }
   return targets
+}
+
+/**
+ * 从文档可播目标收集 `points[].source` 去重，供 Host 按需建连。
+ * 无 source 的点位不计入。
+ */
+export async function collectUsedSourceIds(
+  doc: TwinDocument,
+  resolveNested?: ResolveNested
+): Promise<string[]> {
+  const targets = await collectTwinTargets(doc, resolveNested)
+  const ids = new Set<string>()
+  for (const t of targets) {
+    for (const p of t.twin.points) {
+      if (p.source) ids.add(p.source)
+    }
+  }
+  return [...ids]
 }
 
 function buildNeed(targets: TwinTarget[]): DataSourceNeed[] {
@@ -99,7 +139,7 @@ export class TwinPlayer {
   async start(): Promise<void> {
     if (this.started) return
     this.started = true
-    this.targets = collectTwinTargets(this.opts.document)
+    this.targets = await collectTwinTargets(this.opts.document, this.opts.resolveNested)
     const need = buildNeed(this.targets)
     this.unsub = this.opts.source.subscribe(samples => {
       this.store.applySamples(samples)

@@ -132,8 +132,6 @@ function setWallPreset(id: string) {
         <el-option label="无" value="none" />
         <el-option label="开口盒" value="openBox" />
         <el-option label="单开门" value="openBoxDoor" />
-        <el-option label="双开门" value="openBoxDoubleDoor" />
-        <el-option label="户外双门柜" value="outdoorCabinet" />
       </el-select>
     </el-form-item>
     <p class="hint">网格用于编辑参照；柜体空间壳也可在属性面板切换。</p>

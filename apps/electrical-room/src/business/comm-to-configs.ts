@@ -72,6 +72,8 @@ function sourceToConfig(
 export interface ToDataSourceConfigsOptions {
   /** 默认挂 mapDataIdRows；传 null 关闭 */
   mapResponse?: MapResponseFn | null
+  /** 只映射这些 source id；缺省映射全部 */
+  sourceIds?: string[]
 }
 
 /** 通信 bundle → Twin DataSourceConfig[]（忽略点位表，只映射连接） */
@@ -81,8 +83,10 @@ export function toDataSourceConfigs(
 ): DataSourceConfig[] {
   const mapResponse =
     options?.mapResponse === null ? undefined : (options?.mapResponse ?? mapDataIdRows)
+  const allow = options?.sourceIds ? new Set(options.sourceIds) : null
   const out: DataSourceConfig[] = []
   for (const s of bundle.sources) {
+    if (allow && !allow.has(s.id)) continue
     const cfg = sourceToConfig(s, mapResponse)
     if (cfg) out.push(cfg)
   }

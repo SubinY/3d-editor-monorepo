@@ -2,7 +2,7 @@
 import { onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { buildPublishBundle, createEmptyDocumentJSON } from '@mh/3d-editor'
+import { createEmptyDocumentJSON } from '@mh/3d-editor'
 import type { CatalogProvider, DocumentKind, EditorDocumentJSON } from '@mh/3d-editor'
 import Workbench from '@/components/Workbench.vue'
 import {
@@ -100,18 +100,6 @@ async function onSave(json: EditorDocumentJSON) {
   }
 }
 
-async function onPublish(json: EditorDocumentJSON) {
-  if (!catalog.value) return
-  try {
-    await api.saveDocument(json, json.name)
-    const bundle = await buildPublishBundle(json, catalog.value)
-    await api.publishScene(json.id, bundle)
-    ElMessage.success('场景已发布（资产包已冻结）')
-  } catch (e) {
-    ElMessage.error(e instanceof Error ? e.message : '发布失败')
-  }
-}
-
 function onBack() {
   router.push(kind === 'scene' ? '/manage/rooms' : '/manage/cabinets')
 }
@@ -126,7 +114,6 @@ function onBack() {
     :initial="initial"
     :editing-version="kind === 'container' ? editingVersion : undefined"
     @save="onSave"
-    @publish="onPublish"
     @back="onBack"
   />
 </template>

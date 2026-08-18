@@ -77,14 +77,13 @@ export async function createDemoSceneJSON(): Promise<EditorDocumentJSON> {
       position: [-4, 0, z],
       rotation: [0, Math.PI / 2, 0],
       name: `左列柜-${index + 1}`,
-      props: { circuit: `L-${index + 1}`, ...sampleTwin },
+      props: sampleTwin,
       select: false
     })
     doc.commands.placeItem(index % 2 === 0 ? control : power, {
       position: [4, 0, z],
       rotation: [0, -Math.PI / 2, 0],
       name: `右列柜-${index + 1}`,
-      props: { circuit: `R-${index + 1}` },
       select: false
     })
   })

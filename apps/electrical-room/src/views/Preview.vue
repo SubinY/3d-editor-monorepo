@@ -1,8 +1,13 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref } from 'vue'
 import { createEditor } from '@mh/3d-editor'
-import type { EditorDocument, EditorSession, NodeInteractionEvent } from '@mh/3d-editor'
-import { createCompositeDataSourceFromConfigs, createDataSource, TwinPlayer } from '@mh/3d-editor-twin'
+import type { EditorSession, NodeInteractionEvent } from '@mh/3d-editor'
+import {
+  collectUsedSourceIds,
+  createCompositeDataSourceFromConfigs,
+  TwinPlayer
+} from '@mh/3d-editor-twin'
+import type { TwinDocumentNode } from '@mh/3d-editor-twin'
 import { useRoute, useRouter } from 'vue-router'
 import { createPreviewCatalog } from '@/business/catalog'
 import { loadCommBundle } from '@/business/comm-store'
@@ -15,7 +20,6 @@ import {
   type DeviceStatus
 } from '@/business/device-status'
 import { createProceduralResolvers } from '@/models/registry'
-import CabinetDetailModal from '@/components/CabinetDetailModal.vue'
 
 interface AlarmLog {
   time: string
@@ -31,11 +35,8 @@ const running = ref(true)
 const lastInteraction = ref('')
 const lastValues = ref('')
 const sourceLabel = ref('')
-const cabinetDetailVisible = ref(false)
-const cabinetDetailName = ref('')
 
 let session: EditorSession | undefined
-let doc: EditorDocument | undefined
 let player: TwinPlayer | undefined
 
 const legendItems = (Object.keys(DEVICE_STATUS_META) as DeviceStatus[]).map(status => ({
@@ -66,11 +67,6 @@ onMounted(async () => {
       hoverOutline: false,
       onInteraction: (event: NodeInteractionEvent) => {
         lastInteraction.value = `${event.type} → ${event.nodePath}`
-        if (event.type !== 'click') return
-        const node = event.node ?? doc?.getNode(event.nodeId)
-        if (!node) return
-        cabinetDetailName.value = node.name || event.nodeId
-        cabinetDetailVisible.value = true
       }
     },
     procedural: {
@@ -78,29 +74,32 @@ onMounted(async () => {
     }
   })
 
-  doc = session.document
   if (!session.viewport3d) return
 
-  const configs = toDataSourceConfigs(loadCommBundle())
-  console.log(configs, 'configs')
-  const source =
-    configs.length > 0
-      ? createCompositeDataSourceFromConfigs(configs)
-      : createDataSource({
-          type: 'http',
-          url: '/api/twin/points',
-          method: 'POST',
-          intervalMs: 2000
-        })
+  const resolveNested = async (node: TwinDocumentNode) => {
+    const ref = (node as { catalogRef?: { id: string; version: string } }).catalogRef
+    if (!ref?.id) return undefined
+    const item = await catalog.get(ref.id, ref.version)
+    return item?.document?.nodes
+  }
+
+  const usedIds = await collectUsedSourceIds(session.document, resolveNested)
+  const bundle = await loadCommBundle()
+  const configs =
+    usedIds.length > 0 ? toDataSourceConfigs(bundle, { sourceIds: usedIds }) : []
+  const source = createCompositeDataSourceFromConfigs(configs)
   sourceLabel.value =
     configs.length > 0
-      ? `CompositeDataSource × ${configs.length}`
-      : 'HttpDataSource → /api/twin/points（默认）'
+      ? `使用 ${configs.length} 个源`
+      : usedIds.length > 0
+        ? '绑定源未在清单中，未建连'
+        : '无绑定，未建连'
 
   player = new TwinPlayer({
     document: session.document,
     viewport: session.viewport3d,
     source,
+    resolveNested,
     mapHighlight: effect =>
       toVisualState(isDeviceStatus(effect) ? effect : 'fault'),
     getPaused: () => !running.value,
@@ -164,8 +163,6 @@ function toggle() {
         </div>
       </div>
     </aside>
-
-    <CabinetDetailModal v-model="cabinetDetailVisible" :cabinet-name="cabinetDetailName" />
   </div>
 </template>
 

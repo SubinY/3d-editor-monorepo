@@ -78,7 +78,7 @@ editor.dispose()
 1. 真相源是 `EditorDocumentJSON`（Host 落库）与运行时 `editor.document`。
 2. 编辑一律 `doc.commands.*`（含 `duplicateNode`）；撤销走 `doc.history`（可用 `transaction` 合并）。
 3. 2D / 3D 共享同一 `document`；`mount` 传哪些容器就挂哪些视口。
-4. `node.props` 为不透明业务袋；变更由视口 `AssetHandle` 同步到 3D。`VisualState` 只做运行时呈现、不落库。
+4. `node.props` 为不透明业务袋；变更由视口 `AssetHandle` 同步到 3D。`VisualState` 只做运行时呈现、不落库：`setNodeVisualState` 改子树 albedo（primitive / procedural / gltf 同一套 traverse），清除贴图并关掉 emissive 叠加。
 5. 架构硬约束见仓库根 [`docs/architecture.md`](../../docs/architecture.md)（D1–D7）。
 
 素材拖放：Host 在 `dragstart` 写入 `CATALOG_ITEM_MIME`，并调用 `viewport2d.beginExternalDrag(item)`。

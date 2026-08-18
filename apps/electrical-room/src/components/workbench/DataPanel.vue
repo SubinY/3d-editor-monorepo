@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { RouterLink } from 'vue-router'
 import { Connection, Lightning } from '@element-plus/icons-vue'
 import type { ConditionOp, TwinPoint, TwinProps, TwinRule } from '@mh/3d-editor-twin'
 import { createTwinPoint, createTwinRule, emptyTwin } from '@mh/3d-editor-twin'
@@ -65,13 +66,15 @@ type CommPointOption = {
 
 const commSources = ref<CommSource[]>([])
 
-function reloadCommSources() {
-  commSources.value = loadCommBundle().sources
+async function reloadCommSources() {
+  commSources.value = (await loadCommBundle()).sources
 }
 
-onMounted(reloadCommSources)
+onMounted(() => {
+  void reloadCommSources()
+})
 watch(section, s => {
-  if (s === 'points') reloadCommSources()
+  if (s === 'points') void reloadCommSources()
 })
 
 const pointDialogVisible = ref(false)
@@ -109,8 +112,8 @@ const canAddPoint = computed(() =>
   commSources.value.some(s => s.points.some(pt => !usedKeys.value.has(pt.key)))
 )
 
-function openAddPoints() {
-  reloadCommSources()
+async function openAddPoints() {
+  await reloadCommSources()
   pointForm.protocol = protocolsWithPoints.value[0] ?? 'http'
   pointForm.pick = ''
   pointForm.alias = ''
@@ -272,7 +275,10 @@ const navItems = [
             新增
           </el-button>
         </div>
-        <p class="hint">从「通信」面板已配置的点位中单选绑定；写入 props.twin.points。</p>
+        <p class="hint">
+          从「数据源」页已配置的点位中单选绑定；写入 props.twin.points。
+          <RouterLink v-if="commSources.length === 0" to="/manage/sources">去配置</RouterLink>
+        </p>
         <div v-if="local.points.length === 0" class="empty">尚未绑定点位</div>
         <ul v-else class="list">
           <li v-for="point in local.points" :key="point.key" class="list-item">
@@ -370,7 +376,7 @@ const navItems = [
           <el-input v-model="pointForm.alias" placeholder="可选，默认用变量名称" />
         </el-form-item>
         <p v-if="protocolsWithPoints.length === 0" class="hint">
-          请先在「通信」面板为数据源添加变量点位。
+          请先到「数据源」页为源添加变量点位。
         </p>
         <p v-else-if="availableCommOptions.length === 0" class="hint">
           该协议下暂无未绑定点位。
@@ -524,6 +530,11 @@ const navItems = [
   color: #4d6076;
   line-height: 1.6;
   margin: 0 0 12px;
+}
+
+.hint a {
+  color: #4dabf7;
+  margin-left: 6px;
 }
 
 .empty {

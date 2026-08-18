@@ -9,7 +9,7 @@ import {
   resolveTwinId,
   writeTwin
 } from '../twin-props'
-import { TwinPlayer } from '../twin-player'
+import { TwinPlayer, collectTwinTargets, collectUsedSourceIds } from '../twin-player'
 import type { DataSource, DataSourceNeed, PointSample, TwinDocument, TwinDocumentNode, TwinViewport } from '../types'
 
 /** 测试用推送源 */
@@ -414,6 +414,84 @@ describe('TwinPlayer', () => {
     expect(painted.some(p => p.path === 'cab-1' && p.color === '#ff0000')).toBe(true)
     expect(painted.some(p => p.path === 'cab-2')).toBe(false)
 
+    player.stop()
+  })
+
+  it('resolveNested 收集 parent/child path，父无规则仍收集子', async () => {
+    const parent: TwinDocumentNode = { id: 'cab', name: '柜' }
+    const child: TwinDocumentNode = {
+      id: 'brk',
+      name: '断路器',
+      props: {
+        twin: {
+          points: [{ key: 'temp', source: 'src_a' }],
+          rules: [
+            {
+              id: 'r1',
+              when: { point: 'temp', op: 'gt', value: 1 },
+              then: { slots: { highlight: 'fault' } }
+            }
+          ]
+        }
+      }
+    }
+    const doc = makeDoc([parent])
+    const resolveNested = async (node: TwinDocumentNode) => {
+      if (node.id === 'cab') return [child]
+      return undefined
+    }
+    const targets = await collectTwinTargets(doc, resolveNested)
+    expect(targets).toHaveLength(1)
+    expect(targets[0].path).toBe('cab/brk')
+    expect(targets[0].twinId).toBe('brk')
+    expect(await collectUsedSourceIds(doc, resolveNested)).toEqual(['src_a'])
+  })
+
+  it('父与子均有规则时各收一条', async () => {
+    const parent: TwinDocumentNode = {
+      id: 'cab',
+      name: '柜',
+      props: {
+        twin: {
+          points: [{ key: 'online' }],
+          rules: [
+            {
+              id: 'r0',
+              when: { point: 'online', op: 'eq', value: 0 },
+              then: { slots: { highlight: 'offline' } }
+            }
+          ]
+        }
+      }
+    }
+    const child: TwinDocumentNode = {
+      id: 'brk',
+      props: {
+        twin: {
+          points: [{ key: 'temp', source: 'src_b' }],
+          rules: [
+            {
+              id: 'r1',
+              when: { point: 'temp', op: 'gt', value: 1 },
+              then: { slots: { highlight: 'fault' } }
+            }
+          ]
+        }
+      }
+    }
+    const viewport: TwinViewport = {
+      setNodeVisualState: () => undefined,
+      clearVisualStates: () => undefined
+    }
+    const player = new TwinPlayer({
+      document: makeDoc([parent]),
+      viewport,
+      source: new FakeDataSource(),
+      mapHighlight: () => ({ color: null }),
+      resolveNested: async node => (node.id === 'cab' ? [child] : undefined)
+    })
+    await player.start()
+    expect(player.getTargets().map(t => t.path)).toEqual(['cab', 'cab/brk'])
     player.stop()
   })
 })

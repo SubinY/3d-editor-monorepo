@@ -108,7 +108,7 @@ schema 只有 `structure.walls`（`a` / `b` / `height` / `thickness`），没有
 | Host | 点位字典、色板、MQTT/WS/HTTP 实现、KPI / 告警壳 |
 
 - **编辑态**：`readTwin` / `writeTwin`（内部 `updateNode`，可撤销）；不必创建 Player
-- **预览/监控态**：注入 `DataSource`（`createDataSource` 内置 http/ws/mqtt；本仓库演示默认 http → `/api/twin/points`）+ `TwinPlayer`；`readonly` 是内核视口开关，与 twin 包无关
+- **预览/监控态**：注入 `DataSource`（`createDataSource` 内置 http/ws/mqtt；Host 用 `collectUsedSourceIds` 按场景绑定建连）+ `TwinPlayer`；`readonly` 是内核视口开关，与 twin 包无关
 - 落盘约定在 `node.props.twin`（`points` + 可选 `rules`，`then.slots.highlight` 为效果令牌）；**不**进 `EditorDocumentJSON` 一级字段；Broker/URL **不**进 Document
 - 只认 `props.twin`；写只写 `twin`
 - 值表按 `twinId + key`；协议换实现只换 `DataSource`，不改场景 JSON

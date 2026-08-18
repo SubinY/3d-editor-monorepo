@@ -183,7 +183,7 @@ export interface EditorDocumentJSON {
 
 /** 运行时可视呈现；不含业务状态枚举（色值由 Host 传入） */
 export interface VisualState {
-  /** 发光色；省略或 null = 还原材质 */
+  /** 本体高亮色；省略或 null = 还原材质（含贴图） */
   color?: string | null
   /** 0–1，仅在有 color 时生效，默认 1 */
   intensity?: number

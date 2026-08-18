@@ -1,3 +1,4 @@
+import * as api from './api'
 import {
   emptyCommBundle,
   type CommBundle,
@@ -5,7 +6,15 @@ import {
   type CommSource
 } from './comm-types'
 
-const STORAGE_KEY = 'electrical-room:comm:v1'
+function cloneBundle(bundle: CommBundle): CommBundle {
+  return {
+    version: 1,
+    sources: bundle.sources.map(s => ({
+      ...s,
+      points: s.points.map(p => ({ ...p }))
+    }))
+  }
+}
 
 function isRecord(v: unknown): v is Record<string, unknown> {
   return !!v && typeof v === 'object' && !Array.isArray(v)
@@ -16,61 +25,48 @@ function parseBundle(raw: unknown): CommBundle | null {
   return raw as unknown as CommBundle
 }
 
-/** 读取通信配置；损坏或缺失时返回空 bundle */
-export function loadCommBundle(): CommBundle {
+/** 读取站点通信清单；损坏或失败时返回空 bundle */
+export async function loadCommBundle(): Promise<CommBundle> {
   try {
-    const text = localStorage.getItem(STORAGE_KEY)
-    if (!text) return emptyCommBundle()
-    const parsed = parseBundle(JSON.parse(text) as unknown)
+    const parsed = parseBundle(await api.getCommBundle())
     return parsed ?? emptyCommBundle()
   } catch {
     return emptyCommBundle()
   }
 }
 
-export function saveCommBundle(bundle: CommBundle): void {
-  const next: CommBundle = {
-    version: 1,
-    sources: bundle.sources.map(s => ({
-      ...s,
-      points: s.points.map(p => ({ ...p }))
-    }))
-  }
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(next))
+export async function saveCommBundle(bundle: CommBundle): Promise<CommBundle> {
+  return api.putCommBundle(cloneBundle(bundle))
 }
 
-export function upsertCommSource(source: CommSource): CommBundle {
-  const bundle = loadCommBundle()
+export async function upsertCommSource(source: CommSource): Promise<CommBundle> {
+  const bundle = await loadCommBundle()
   const idx = bundle.sources.findIndex(s => s.id === source.id)
   if (idx >= 0) bundle.sources[idx] = source
   else bundle.sources.push(source)
-  saveCommBundle(bundle)
-  return bundle
+  return saveCommBundle(bundle)
 }
 
-export function removeCommSource(sourceId: string): CommBundle {
-  const bundle = loadCommBundle()
+export async function removeCommSource(sourceId: string): Promise<CommBundle> {
+  const bundle = await loadCommBundle()
   bundle.sources = bundle.sources.filter(s => s.id !== sourceId)
-  saveCommBundle(bundle)
-  return bundle
+  return saveCommBundle(bundle)
 }
 
-export function upsertCommPoint(sourceId: string, point: CommPoint): CommBundle {
-  const bundle = loadCommBundle()
+export async function upsertCommPoint(sourceId: string, point: CommPoint): Promise<CommBundle> {
+  const bundle = await loadCommBundle()
   const source = bundle.sources.find(s => s.id === sourceId)
   if (!source) return bundle
   const idx = source.points.findIndex(p => p.id === point.id)
   if (idx >= 0) source.points[idx] = point
   else source.points.push(point)
-  saveCommBundle(bundle)
-  return bundle
+  return saveCommBundle(bundle)
 }
 
-export function removeCommPoint(sourceId: string, pointId: string): CommBundle {
-  const bundle = loadCommBundle()
+export async function removeCommPoint(sourceId: string, pointId: string): Promise<CommBundle> {
+  const bundle = await loadCommBundle()
   const source = bundle.sources.find(s => s.id === sourceId)
   if (!source) return bundle
   source.points = source.points.filter(p => p.id !== pointId)
-  saveCommBundle(bundle)
-  return bundle
+  return saveCommBundle(bundle)
 }

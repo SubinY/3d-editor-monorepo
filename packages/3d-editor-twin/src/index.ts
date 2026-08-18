@@ -62,5 +62,5 @@ export type {
   WsSourceConfig
 } from './data-source'
 
-export { TwinPlayer, collectTwinTargets } from './twin-player'
-export type { TwinPlayerOptions, VisualStateLike } from './twin-player'
+export { TwinPlayer, collectTwinTargets, collectUsedSourceIds } from './twin-player'
+export type { ResolveNested, TwinPlayerOptions, VisualStateLike } from './twin-player'

@@ -12,8 +12,6 @@ import type { DocumentRecord } from '@/business/api'
 const router = useRouter()
 const loading = ref(true)
 const rows = ref<DocumentRecord[]>([])
-const publishMap = ref<Record<string, number>>({})
-const homeSceneId = ref<string | null>(null)
 const creating = ref(false)
 const form = reactive({ name: '', location: '', ...DEFAULT_SCENE_BOUNDS })
 
@@ -25,9 +23,7 @@ const tableRows = computed(() =>
     size: boundsLabel(entry.json),
     walls: entry.json.structure?.walls?.length ?? 0,
     devices: entry.json.nodes.length,
-    updatedAt: entry.updatedAt,
-    publishedAt: publishMap.value[entry.json.id],
-    isHome: homeSceneId.value === entry.json.id
+    updatedAt: entry.updatedAt
   }))
 )
 
@@ -35,16 +31,6 @@ async function refresh() {
   loading.value = true
   try {
     rows.value = await api.listScenes()
-    const settings = await api.getSettings()
-    homeSceneId.value = settings.homeSceneId
-    const map: Record<string, number> = {}
-    await Promise.all(
-      rows.value.map(async r => {
-        const pub = await api.getPublish(r.json.id)
-        if (pub?.publishedAt) map[r.json.id] = pub.publishedAt
-      })
-    )
-    publishMap.value = map
   } catch (e) {
     ElMessage.error(e instanceof Error ? e.message : '加载失败')
   } finally {
@@ -98,29 +84,12 @@ async function createDemo() {
 }
 
 async function remove(id: string, name: string) {
-  await ElMessageBox.confirm(`删除电柜室「${name}」？相关发布包一并删除。`, '确认', {
+  await ElMessageBox.confirm(`删除电柜室「${name}」？`, '确认', {
     type: 'warning'
   })
   await api.deleteDocument('scene', id)
   ElMessage.success('已删除')
   await refresh()
-}
-
-async function setHome(id: string) {
-  const pub = await api.getPublish(id)
-  if (!pub) {
-    ElMessage.warning('请先在编辑器中发布该电柜室')
-    return
-  }
-  await api.updateSettings({ homeSceneId: id })
-  homeSceneId.value = id
-  ElMessage.success('已设为监控首页')
-}
-
-async function clearHome() {
-  await api.updateSettings({ homeSceneId: null })
-  homeSceneId.value = null
-  ElMessage.success('已取消首页显示')
 }
 </script>
 
@@ -129,7 +98,7 @@ async function clearHome() {
     <header class="head">
       <div>
         <h1>电柜室管理</h1>
-        <p>设计布局、发布静态资产包；可将已发布场景设为监控首页。</p>
+        <p>设计布局；保存后可进入预览查看柜内与点位驱动。</p>
       </div>
       <div class="actions">
         <el-button @click="createDemo">生成示例电柜室</el-button>
@@ -154,53 +123,51 @@ async function clearHome() {
       <el-table-column label="更新时间" min-width="160">
         <template #default="{ row }">{{ timeLabel(row.updatedAt) }}</template>
       </el-table-column>
-      <el-table-column label="发布" min-width="160">
-        <template #default="{ row }">
-          <el-tag v-if="row.publishedAt" type="success" size="small">
-            {{ timeLabel(row.publishedAt) }}
-          </el-tag>
-          <el-tag v-else type="info" size="small" effect="plain">未发布</el-tag>
-        </template>
-      </el-table-column>
-      <el-table-column label="首页" width="90">
-        <template #default="{ row }">
-          <el-tag v-if="row.isHome" type="warning" size="small">首页</el-tag>
-          <span v-else class="muted">—</span>
-        </template>
-      </el-table-column>
-      <el-table-column label="操作" width="320" fixed="right">
+      <el-table-column label="操作" width="220" fixed="right">
         <template #default="{ row }">
           <el-button link type="primary" @click="router.push(`/edit/scene/${row.id}`)">设计</el-button>
           <el-button link @click="router.push(`/preview/${row.id}`)">预览</el-button>
-          <el-button
-            v-if="!row.isHome"
-            link
-            type="warning"
-            @click="setHome(row.id)"
-          >
-            首页显示
-          </el-button>
-          <el-button v-else link type="info" @click="clearHome">取消首页</el-button>
           <el-button link type="danger" @click="remove(row.id, row.name)">删除</el-button>
         </template>
       </el-table-column>
     </el-table>
 
-    <el-dialog v-model="creating" title="新建电柜室" width="500px">
-      <el-form label-position="top" size="default">
+    <el-dialog
+      v-model="creating"
+      class="create-dialog"
+      title="新建电柜室"
+      width="480px"
+      align-center
+    >
+      <el-form label-position="top">
         <el-form-item label="名称"><el-input v-model="form.name" /></el-form-item>
         <el-form-item label="位置 / 备注">
           <el-input v-model="form.location" placeholder="选填" />
         </el-form-item>
         <div class="row3">
           <el-form-item label="宽 (m)">
-            <el-input-number v-model="form.width" :min="1" :step="1" controls-position="right" />
+            <el-input-number
+              v-model="form.width"
+              :min="1"
+              :step="1"
+              controls-position="right"
+            />
           </el-form-item>
           <el-form-item label="深 (m)">
-            <el-input-number v-model="form.depth" :min="1" :step="1" controls-position="right" />
+            <el-input-number
+              v-model="form.depth"
+              :min="1"
+              :step="1"
+              controls-position="right"
+            />
           </el-form-item>
           <el-form-item label="高 (m)">
-            <el-input-number v-model="form.height" :min="1" :step="0.5" controls-position="right" />
+            <el-input-number
+              v-model="form.height"
+              :min="1"
+              :step="0.5"
+              controls-position="right"
+            />
           </el-form-item>
         </div>
       </el-form>
@@ -251,12 +218,15 @@ h1 {
   --el-table-header-text-color: #8ea4bd;
   --el-table-border-color: #1d2c3e;
 }
-.muted {
-  color: #4d6076;
-}
 .row3 {
   display: grid;
-  grid-template-columns: 1fr 1fr 1fr;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 8px;
+}
+.row3 :deep(.el-form-item) {
+  margin-bottom: 0;
+}
+.row3 :deep(.el-input-number) {
+  width: 100%;
 }
 </style>

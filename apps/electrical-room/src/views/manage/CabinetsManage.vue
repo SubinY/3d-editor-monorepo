@@ -119,18 +119,46 @@ async function remove(row: CabinetRow) {
       </el-table-column>
     </el-table>
 
-    <el-dialog v-model="creating" title="新建电柜" width="420px">
+    <el-dialog
+      v-model="creating"
+      class="create-dialog"
+      title="新建电柜"
+      width="480px"
+      align-center
+    >
       <el-form label-position="top">
         <el-form-item label="名称">
           <el-input v-model="form.name" />
         </el-form-item>
-        <el-form-item label="宽 / 深 / 高 (m)">
-          <div class="dims">
-            <el-input-number v-model="form.width" :min="0.2" :step="0.1" />
-            <el-input-number v-model="form.depth" :min="0.2" :step="0.1" />
-            <el-input-number v-model="form.height" :min="0.5" :step="0.1" />
-          </div>
-        </el-form-item>
+        <div class="row3">
+          <el-form-item label="宽 (m)">
+            <el-input-number
+              v-model="form.width"
+              :min="0.2"
+              :step="0.1"
+              :precision="2"
+              controls-position="right"
+            />
+          </el-form-item>
+          <el-form-item label="深 (m)">
+            <el-input-number
+              v-model="form.depth"
+              :min="0.2"
+              :step="0.1"
+              :precision="2"
+              controls-position="right"
+            />
+          </el-form-item>
+          <el-form-item label="高 (m)">
+            <el-input-number
+              v-model="form.height"
+              :min="0.5"
+              :step="0.1"
+              :precision="2"
+              controls-position="right"
+            />
+          </el-form-item>
+        </div>
       </el-form>
       <template #footer>
         <el-button @click="creating = false">取消</el-button>
@@ -160,8 +188,15 @@ async function remove(row: CabinetRow) {
   color: #7a8fa6;
   font-size: 13px;
 }
-.dims {
-  display: flex;
+.row3 {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 8px;
+}
+.row3 :deep(.el-form-item) {
+  margin-bottom: 0;
+}
+.row3 :deep(.el-input-number) {
+  width: 100%;
 }
 </style>

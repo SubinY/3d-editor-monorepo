@@ -1,23 +1,20 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Monitor, OfficeBuilding, Box, HomeFilled, Brush, Cpu } from '@element-plus/icons-vue'
+import { Monitor, OfficeBuilding, Box, Connection } from '@element-plus/icons-vue'
 
 const route = useRoute()
 const router = useRouter()
 
 const active = computed(() => {
   if (route.path.startsWith('/manage/cabinets')) return 'cabinets'
-  if (route.path.startsWith('/manage/model-lab')) return 'model-lab'
-  if (route.path.startsWith('/home')) return 'home'
+  if (route.path.startsWith('/manage/sources')) return 'sources'
   return 'rooms'
 })
 
 function go(name: string) {
-  if (name === 'home') router.push('/home')
-  else if (name === 'cabinets') router.push('/manage/cabinets')
-  else if (name === 'model-lab') router.push('/manage/model-lab')
-  else if (name === 'ux-demo') router.push('/ux-demo')
+  if (name === 'cabinets') router.push('/manage/cabinets')
+  else if (name === 'sources') router.push('/manage/sources')
   else router.push('/manage/rooms')
 }
 </script>
@@ -29,7 +26,7 @@ function go(name: string) {
         <span class="mark">ER</span>
         <div>
           <div class="title">电气室管控</div>
-          <div class="sub">资产 · 设计 · 监控</div>
+          <div class="sub">电柜室 · 电柜 · 预览</div>
         </div>
       </div>
       <nav class="nav">
@@ -41,17 +38,9 @@ function go(name: string) {
           <el-icon><Box /></el-icon>
           电柜管理
         </button>
-        <button :class="{ active: active === 'model-lab' }" type="button" @click="go('model-lab')">
-          <el-icon><Cpu /></el-icon>
-          模型工厂
-        </button>
-        <button :class="{ active: active === 'home' }" type="button" @click="go('home')">
-          <el-icon><HomeFilled /></el-icon>
-          监控首页
-        </button>
-        <button type="button" @click="go('ux-demo')">
-          <el-icon><Brush /></el-icon>
-          产品壳 Demo
+        <button :class="{ active: active === 'sources' }" type="button" @click="go('sources')">
+          <el-icon><Connection /></el-icon>
+          数据源
         </button>
       </nav>
       <div class="rail-foot">

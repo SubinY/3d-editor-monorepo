@@ -1,4 +1,5 @@
-import type { CatalogItem, EditorDocumentJSON, PublishBundle } from '@mh/3d-editor'
+import type { EditorDocumentJSON } from '@mh/3d-editor'
+import type { CommBundle } from './comm-types'
 
 const BASE = '/api'
 const API_CODE_OK = 0
@@ -23,14 +24,6 @@ export interface DocumentRecord {
   json: EditorDocumentJSON
   updatedAt: number
   name?: string
-}
-
-export interface AppSettings {
-  homeSceneId: string | null
-}
-
-export interface HomePublishBundle extends PublishBundle {
-  sceneId: string
 }
 
 export interface SceneBootstrapData {
@@ -154,166 +147,13 @@ export async function fetchContainerBootstrap(
   return request(bootstrapPath('container', cabinetId))
 }
 
-export async function listCatalog(options?: {
-  placeableIn?: string
-  latestOnly?: boolean
-}): Promise<CatalogItem[]> {
-  const params = new URLSearchParams()
-  if (options?.placeableIn) params.set('placeableIn', options.placeableIn)
-  if (options?.latestOnly) params.set('latestOnly', '1')
-  const q = params.toString()
-  return request(`/catalog${q ? `?${q}` : ''}`)
+export async function getCommBundle(): Promise<CommBundle> {
+  return request('/comm')
 }
 
-export async function getCatalogLatest(id: string): Promise<CatalogItem | undefined> {
-  try {
-    return await request(`/catalog/${encodeURIComponent(id)}`)
-  } catch {
-    return undefined
-  }
-}
-
-export async function getCatalogVersion(
-  id: string,
-  version: string
-): Promise<CatalogItem | undefined> {
-  try {
-    return await request(`/catalog/${encodeURIComponent(id)}/${encodeURIComponent(version)}`)
-  } catch {
-    return undefined
-  }
-}
-
-export async function listCatalogVersions(id: string): Promise<string[]> {
-  return request(`/catalog/${encodeURIComponent(id)}/versions`)
-}
-
-export async function putCatalogItem(item: CatalogItem): Promise<CatalogItem> {
-  return request(`/catalog/${encodeURIComponent(item.id)}/${encodeURIComponent(item.version)}`, {
+export async function putCommBundle(bundle: CommBundle): Promise<CommBundle> {
+  return request('/comm', {
     method: 'PUT',
-    body: JSON.stringify(item)
-  })
-}
-
-export async function postCatalogItem(item: CatalogItem): Promise<CatalogItem> {
-  return request('/catalog', {
-    method: 'POST',
-    body: JSON.stringify(item)
-  })
-}
-
-export async function deleteCatalogItem(id: string, version?: string): Promise<void> {
-  const path = version
-    ? `/catalog/${encodeURIComponent(id)}/${encodeURIComponent(version)}`
-    : `/catalog/${encodeURIComponent(id)}`
-  await request(path, { method: 'DELETE' })
-}
-
-export async function publishScene(sceneId: string, bundle: PublishBundle): Promise<PublishBundle> {
-  return request(`/scenes/${encodeURIComponent(sceneId)}/publish`, {
-    method: 'POST',
     body: JSON.stringify(bundle)
-  })
-}
-
-export async function getPublish(sceneId: string): Promise<PublishBundle | undefined> {
-  try {
-    return await request(`/publishes/${encodeURIComponent(sceneId)}`)
-  } catch {
-    return undefined
-  }
-}
-
-export async function getHomePublish(): Promise<HomePublishBundle | undefined> {
-  try {
-    return await request('/publishes/home')
-  } catch {
-    return undefined
-  }
-}
-
-export async function getSettings(): Promise<AppSettings> {
-  return request('/settings')
-}
-
-export async function updateSettings(settings: Partial<AppSettings>): Promise<AppSettings> {
-  return request('/settings', {
-    method: 'PUT',
-    body: JSON.stringify(settings)
-  })
-}
-
-// —— AI model factory ——
-
-export interface ModelFactoryGenerateResult {
-  draftId: string
-  sourceCode: string
-  footprintHint: { width: number; depth: number; height: number }
-  name: string
-  inventory?: {
-    objectClass: string
-    identityFeatures: string[]
-    parts: Array<{ id: string; role: string; notes?: string }>
-    footprintMeters: { width: number; depth: number; height: number }
-    labels: string[]
-  }
-  objectClass?: string
-  partCount?: number
-}
-
-export interface ModelFactoryDraft {
-  id: string
-  name: string
-  sourceCode: string
-  footprintHint: { width: number; depth: number; height: number }
-  createdAt: number
-  updatedAt: number
-}
-
-export async function generateModelFactory(body: {
-  imageBase64: string
-  mimeType: string
-  name?: string
-  footprint: { width: number; depth: number; height: number }
-}): Promise<ModelFactoryGenerateResult> {
-  return request('/ai/model-factory/generate', {
-    method: 'POST',
-    body: JSON.stringify(body)
-  })
-}
-
-export async function getModelFactoryDraft(id: string): Promise<ModelFactoryDraft> {
-  return request(`/ai/model-factory/drafts/${encodeURIComponent(id)}`)
-}
-
-export async function updateModelFactoryDraft(
-  id: string,
-  patch: {
-    sourceCode?: string
-    name?: string
-    footprintHint?: { width: number; depth: number; height: number }
-  }
-): Promise<ModelFactoryDraft> {
-  return request(`/ai/model-factory/drafts/${encodeURIComponent(id)}`, {
-    method: 'PUT',
-    body: JSON.stringify(patch)
-  })
-}
-
-export async function previewModelFactory(draftId: string): Promise<{ url: string }> {
-  return request('/ai/model-factory/preview-build', {
-    method: 'POST',
-    body: JSON.stringify({ draftId })
-  })
-}
-
-export async function publishModelFactory(body: {
-  draftId: string
-  id: string
-  version: string
-}): Promise<{ url: string; catalogItem: CatalogItem }> {
-  return request('/ai/model-factory/publish', {
-    method: 'POST',
-    body: JSON.stringify(body)
   })
 }

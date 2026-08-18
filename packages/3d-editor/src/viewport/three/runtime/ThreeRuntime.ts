@@ -68,6 +68,8 @@ export class ThreeRuntime {
   private translationSnapSize = DEFAULT_TRANSLATION_SNAP
 
   private viewGizmo = new WorldViewGizmo()
+  /** 与 TransformControls 同开关：readonly 预览不画、不拦指针 */
+  private readonly viewGizmoEnabled: boolean
   private perfStats: PerfStatsOverlay
   private gizmoPointer: {
     pointerId: number
@@ -127,11 +129,14 @@ export class ThreeRuntime {
       this.transform = null
     }
 
-    const dom = this.renderer.domElement
-    dom.addEventListener('pointerdown', this.handleGizmoPointerDown, true)
-    window.addEventListener('pointermove', this.handleGizmoPointerMove)
-    window.addEventListener('pointerup', this.handleGizmoPointerUp)
-    window.addEventListener('pointercancel', this.handleGizmoPointerUp)
+    this.viewGizmoEnabled = options.enableTransform !== false
+    if (this.viewGizmoEnabled) {
+      const dom = this.renderer.domElement
+      dom.addEventListener('pointerdown', this.handleGizmoPointerDown, true)
+      window.addEventListener('pointermove', this.handleGizmoPointerMove)
+      window.addEventListener('pointerup', this.handleGizmoPointerUp)
+      window.addEventListener('pointercancel', this.handleGizmoPointerUp)
+    }
 
     this.perfStats = new PerfStatsOverlay(options.container)
 
@@ -383,10 +388,12 @@ export class ThreeRuntime {
   dispose(): void {
     window.removeEventListener('resize', this.handleResize)
     const dom = this.renderer.domElement
-    dom.removeEventListener('pointerdown', this.handleGizmoPointerDown, true)
-    window.removeEventListener('pointermove', this.handleGizmoPointerMove)
-    window.removeEventListener('pointerup', this.handleGizmoPointerUp)
-    window.removeEventListener('pointercancel', this.handleGizmoPointerUp)
+    if (this.viewGizmoEnabled) {
+      dom.removeEventListener('pointerdown', this.handleGizmoPointerDown, true)
+      window.removeEventListener('pointermove', this.handleGizmoPointerMove)
+      window.removeEventListener('pointerup', this.handleGizmoPointerUp)
+      window.removeEventListener('pointercancel', this.handleGizmoPointerUp)
+    }
     this.viewGizmo.dispose()
     this.perfStats.dispose()
     this.gizmoPointer = null
@@ -434,10 +441,12 @@ export class ThreeRuntime {
   private startLoop(): void {
     const step = () => {
       this.orbit.update()
-      this.viewGizmo.syncFromCamera(this._camera, this.orbit.target)
       const t0 = performance.now()
       this.renderer.render(this.scene, this._camera)
-      this.viewGizmo.render(this.renderer)
+      if (this.viewGizmoEnabled) {
+        this.viewGizmo.syncFromCamera(this._camera, this.orbit.target)
+        this.viewGizmo.render(this.renderer)
+      }
       const renderMs = performance.now() - t0
       this.perfStats.update(this.renderer, renderMs)
       this.loopId = requestAnimationFrame(step)

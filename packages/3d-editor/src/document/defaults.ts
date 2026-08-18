@@ -89,7 +89,7 @@ export function createDefaultEnvironment(kind: DocumentKind, bounds: BoundsJSON)
     lights,
     shadows: { enabled: true, type: 'pcfsoft' },
     helpers: {
-      grid: false,
+      grid: true,
       enclosure: kind === 'container' ? 'openBox' : 'none'
     },
     floor,

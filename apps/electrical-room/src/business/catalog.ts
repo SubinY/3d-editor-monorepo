@@ -11,7 +11,7 @@ import type {
   EditorDocumentJSON,
   EditorNodeJSON
 } from '@mh/3d-editor'
-import { panel, glowRing, alertBox } from '@mh/3d-editor-assets/common'
+import { panel } from '@mh/3d-editor-assets/common'
 import * as api from './api'
 
 export const FIXTURE_ITEMS: CatalogItem[] = [
@@ -48,9 +48,7 @@ export const FIXTURE_ITEMS: CatalogItem[] = [
     thumb: '#8d99a6',
     model3d: { type: 'primitive', primitive: 'box', size: [0.4, 3, 0.4], color: '#8d99a6' }
   },
-  panel.catalogItem(),
-  glowRing.catalogItem(),
-  alertBox.catalogItem()
+  panel.catalogItem()
 ]
 
 export const COMPONENT_ITEMS: CatalogItem[] = [
@@ -75,39 +73,6 @@ export const COMPONENT_ITEMS: CatalogItem[] = [
     footprint: { width: 0.09, depth: 0.1, height: 0.11 },
     thumb: '#27ae60',
     model3d: { type: 'primitive', primitive: 'box', size: [0.09, 0.11, 0.1], color: '#27ae60' }
-  },
-  {
-    id: 'comp-plc',
-    version: '1.0.0',
-    name: 'PLC 模块',
-    kind: 'component',
-    category: 'component',
-    placeableIn: ['container'],
-    footprint: { width: 0.18, depth: 0.12, height: 0.1 },
-    thumb: '#8e44ad',
-    model3d: { type: 'primitive', primitive: 'box', size: [0.18, 0.1, 0.12], color: '#8e44ad' }
-  },
-  {
-    id: 'comp-meter',
-    version: '1.0.0',
-    name: '多功能电表',
-    kind: 'component',
-    category: 'component',
-    placeableIn: ['container'],
-    footprint: { width: 0.12, depth: 0.1, height: 0.12 },
-    thumb: '#2980b9',
-    model3d: { type: 'primitive', primitive: 'box', size: [0.12, 0.12, 0.1], color: '#2980b9' }
-  },
-  {
-    id: 'comp-relay',
-    version: '1.0.0',
-    name: '继电器',
-    kind: 'component',
-    category: 'component',
-    placeableIn: ['container'],
-    footprint: { width: 0.06, depth: 0.07, height: 0.08 },
-    thumb: '#c0392b',
-    model3d: { type: 'primitive', primitive: 'box', size: [0.06, 0.08, 0.07], color: '#c0392b' }
   },
   {
     id: 'comp-terminal',
@@ -177,7 +142,7 @@ export function cabinetDocument(
   }
 }
 
-/** ContainerDocument → scene 可放置的 document 型条目 */
+/** ContainerDocument → scene 可放置的 document 型条目；壳走柜 enclosure，不写 shell3d */
 export function cabinetItemFromDocument(
   json: EditorDocumentJSON,
   version: string = INITIAL_CABINET_VERSION,
@@ -196,13 +161,7 @@ export function cabinetItemFromDocument(
       height: json.bounds.height ?? 2
     },
     thumb: options?.thumb ?? '#3f7fbf',
-    document: json,
-    shell3d: {
-      type: 'primitive',
-      primitive: 'box',
-      size: [json.bounds.width, json.bounds.height ?? 2, json.bounds.depth],
-      color: '#31424f'
-    }
+    document: json
   }
 }
 
@@ -227,39 +186,19 @@ function solidCabinetItem(cabinetId: string, name: string): CatalogItem {
   }
 }
 
-function fallbackDeviceItem(id: string, name?: string): CatalogItem {
-  return {
-    id,
-    version: INITIAL_CABINET_VERSION,
-    name: name || id,
-    kind: 'component',
-    category: 'component',
-    placeableIn: ['container'],
-    footprint: { width: 0.1, depth: 0.1, height: 0.1 },
-    thumb: '#95a5a6',
-    model3d: {
-      type: 'primitive',
-      primitive: 'box',
-      size: [0.1, 0.1, 0.1],
-      color: '#95a5a6'
-    }
-  }
-}
-
 export function builtinCabinetDocuments(): EditorDocumentJSON[] {
   const power = cabinetDocument('builtin-power', '配电柜（内置）', [
     componentNode('brk-1', 'comp-breaker', '主断路器', -0.25, 1.4),
     componentNode('brk-2', 'comp-breaker', '支路断路器1', -0.08, 1.4),
     componentNode('brk-3', 'comp-breaker', '支路断路器2', 0.08, 1.4),
     componentNode('brk-4', 'comp-breaker', '支路断路器3', 0.25, 1.4),
-    componentNode('meter-1', 'comp-meter', '总电表', -0.2, 0.9),
+    componentNode('ctc-1', 'comp-contactor', '接触器', -0.15, 0.9),
     componentNode('term-1', 'comp-terminal', '端子排', 0.1, 0.35)
   ])
   const control = cabinetDocument('builtin-control', '控制柜（内置）', [
-    componentNode('plc-1', 'comp-plc', 'PLC 主机', -0.15, 1.2),
-    componentNode('rly-1', 'comp-relay', '继电器1', 0.12, 1.35),
-    componentNode('rly-2', 'comp-relay', '继电器2', 0.24, 1.35),
-    componentNode('ctc-1', 'comp-contactor', '接触器', 0.05, 0.85),
+    componentNode('brk-c1', 'comp-breaker', '控制断路器', -0.2, 1.35),
+    componentNode('ctc-1', 'comp-contactor', '接触器1', 0.05, 1.2),
+    componentNode('ctc-2', 'comp-contactor', '接触器2', 0.2, 1.2),
     componentNode('term-2', 'comp-terminal', '端子排', -0.05, 0.3)
   ])
   return [power, control]
@@ -296,17 +235,16 @@ export function primeLayoutCache(docs: Record<string, EditorDocumentJSON | null 
 }
 
 /**
- * Demo Catalog：list = placeable；get = 按需拉柜 layout 并内联 document。
+ * Host Catalog：list 按 placeableIn 过滤；get 解析柜 layout / 柜内白名单。
+ * scene 种子含 COMPONENT_ITEMS，嵌套 document 展开时才能 get 到断路器等（list 仍滤掉）。
  */
 export class DemoCatalog implements CatalogProvider {
   private placeable: CatalogProvider
-  private kind: DocumentKind
 
   constructor(options: { kind: DocumentKind; placeables: CatalogItem[] }) {
-    this.kind = options.kind
     const seed =
       options.kind === 'scene'
-        ? [...FIXTURE_ITEMS, ...options.placeables]
+        ? [...FIXTURE_ITEMS, ...COMPONENT_ITEMS, ...options.placeables]
         : [...COMPONENT_ITEMS, ...options.placeables]
     this.placeable = createMemoryCatalog(seed)
   }
@@ -326,13 +264,7 @@ export class DemoCatalog implements CatalogProvider {
       return solidCabinetItem(cabinetId, cabinetId)
     }
 
-    const fromList = await this.placeable.get(id, version)
-    if (fromList) return fromList
-
-    if (id.startsWith('device-') || id.startsWith('comp-')) {
-      return fallbackDeviceItem(id)
-    }
-    return undefined
+    return this.placeable.get(id, version)
   }
 }
 

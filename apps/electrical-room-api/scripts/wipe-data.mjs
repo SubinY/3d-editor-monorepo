@@ -14,16 +14,7 @@ async function wipeDir(dir) {
   }
 }
 
-const dirs = [
-  'documents/scenes',
-  'documents/containers',
-  'catalog',
-  'publishes',
-  'models',
-  'models/_preview',
-  'model-factory-drafts',
-  'model-factory-tmp'
-]
+const dirs = ['documents/scenes', 'documents/containers']
 
 for (const rel of dirs) {
   await wipeDir(path.join(root, rel))
@@ -35,9 +26,9 @@ for (const e of await fs.readdir(docsRoot, { withFileTypes: true })) {
 }
 
 await fs.writeFile(
-  path.join(root, 'settings.json'),
-  `${JSON.stringify({ homeSceneId: null }, null, 2)}\n`,
+  path.join(root, 'comm.json'),
+  `${JSON.stringify({ version: 1, sources: [] }, null, 2)}\n`,
   'utf8'
 )
-await fs.writeFile(path.join(root, 'models', '.gitkeep'), '', 'utf8')
+
 console.log('data wiped:', root)

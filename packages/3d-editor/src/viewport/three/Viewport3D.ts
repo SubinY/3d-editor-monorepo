@@ -77,8 +77,23 @@ export type EnterIndoorViewOptions = CreateIndoorDefaultViewOptions & {
 const MAX_RESOLVE_DEPTH = 2
 
 interface MaterialBackup {
+  color?: THREE.Color
+  map?: THREE.Texture | null
+  hasMap: boolean
   emissive?: THREE.Color
   emissiveIntensity?: number
+}
+
+function backupColorMaterial(mat: THREE.Material): MaterialBackup | null {
+  const m = mat as THREE.MeshStandardMaterial
+  if (!m || !('color' in m) || !m.color) return null
+  return {
+    color: m.color.clone(),
+    hasMap: 'map' in m,
+    map: 'map' in m ? (m.map ?? null) : undefined,
+    emissive: m.emissive?.clone(),
+    emissiveIntensity: m.emissiveIntensity
+  }
 }
 
 /**
@@ -924,7 +939,6 @@ export class Viewport3D {
   private applyVisualState(nodePath: string, state: VisualState): void {
     const object = this.pathObjects.get(nodePath)
     if (!object) return
-    const intensity = state.intensity ?? 1
     const highlightColor = state.color ?? null
 
     // 嵌套 path（如 父id/子id）的根物体：父级高亮不得进入其子树
@@ -940,33 +954,36 @@ export class Viewport3D {
       if (nestedRoots.some(root => isObjectUnder(mesh, root))) return
 
       const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material]
-      materials.forEach((mat, index) => {
-        const std = mat as THREE.MeshStandardMaterial
-        if (!std || !('emissive' in std)) return
-        // 首次修改前克隆，避免污染共享材质
-        if (!mesh.userData.__ownMaterial) {
-          const cloned = materials.map(m => m.clone())
-          mesh.material = Array.isArray(mesh.material) ? cloned : cloned[0]
-          mesh.userData.__ownMaterial = true
-          mesh.userData.__origEmissive = cloned.map(m => ({
-            emissive: (m as THREE.MeshStandardMaterial).emissive?.clone(),
-            emissiveIntensity: (m as THREE.MeshStandardMaterial).emissiveIntensity
-          }))
-        }
-        const current = (Array.isArray(mesh.material) ? mesh.material : [mesh.material])[
-          index
-        ] as THREE.MeshStandardMaterial
-        const backups = mesh.userData.__origEmissive as MaterialBackup[] | undefined
+      if (!mesh.userData.__ownMaterial) {
+        const cloned = materials.map(m => m.clone())
+        mesh.material = Array.isArray(mesh.material) ? cloned : cloned[0]
+        mesh.userData.__ownMaterial = true
+        mesh.userData.__origVisual = cloned.map(backupColorMaterial)
+      }
 
+      const currentList = Array.isArray(mesh.material) ? mesh.material : [mesh.material]
+      const backups = mesh.userData.__origVisual as Array<MaterialBackup | null> | undefined
+      currentList.forEach((mat, index) => {
+        const current = mat as THREE.MeshStandardMaterial
+        const backup = backups?.[index]
+        if (!backup || !current?.color) return
         if (!highlightColor) {
-          const backup = backups?.[index]
-          if (backup?.emissive) current.emissive.copy(backup.emissive)
-          else current.emissive.setHex(0x000000)
-          current.emissiveIntensity = backup?.emissiveIntensity ?? 1
+          current.color.copy(backup.color!)
+          if (backup.hasMap) current.map = backup.map ?? null
+          if (current.emissive) {
+            if (backup.emissive) current.emissive.copy(backup.emissive)
+            else current.emissive.setHex(0x000000)
+            current.emissiveIntensity = backup.emissiveIntensity ?? 1
+          }
         } else {
-          current.emissive.set(highlightColor)
-          current.emissiveIntensity = 0.6 * intensity + 0.2
+          current.color.set(highlightColor)
+          if (backup.hasMap) current.map = null
+          if (current.emissive) {
+            current.emissive.setHex(0x000000)
+            current.emissiveIntensity = 1
+          }
         }
+        current.needsUpdate = true
       })
     })
   }

@@ -10,13 +10,6 @@ export const DEVICE_STATUS_META: Record<DeviceStatus, { label: string; color: st
   offline: { label: '离线', color: '#8c8c8c' }
 }
 
-export const STATUS_SEVERITY: Record<DeviceStatus, number> = {
-  normal: 0,
-  warning: 1,
-  offline: 2,
-  fault: 3
-}
-
 export const DEVICE_STATUS_OPTIONS: Array<{ value: DeviceStatus; label: string }> = (
   Object.keys(DEVICE_STATUS_META) as DeviceStatus[]
 ).map(value => ({
@@ -35,8 +28,4 @@ export function toVisualState(status: DeviceStatus, intensity = 1): VisualState 
     color: DEVICE_STATUS_META[status].color,
     intensity
   }
-}
-
-export function clearVisualState(): VisualState {
-  return { color: null }
 }

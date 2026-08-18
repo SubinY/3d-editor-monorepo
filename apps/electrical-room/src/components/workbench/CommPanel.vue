@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { Delete, Edit, MoreFilled, Plus } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import {
@@ -13,6 +13,7 @@ import {
   COMM_PROTOCOL_LABEL,
   COMM_PROTOCOLS,
   createCommId,
+  emptyCommBundle,
   type CommBundle,
   type CommHttpSource,
   type CommMqttSource,
@@ -22,11 +23,15 @@ import {
   type CommWsSource
 } from '@/business/comm-types'
 
-const bundle = ref<CommBundle>(loadCommBundle())
+const bundle = ref<CommBundle>(emptyCommBundle())
 
-function refresh() {
-  bundle.value = loadCommBundle()
+async function refresh() {
+  bundle.value = await loadCommBundle()
 }
+
+onMounted(() => {
+  void refresh()
+})
 
 const hasSources = computed(() => bundle.value.sources.length > 0)
 
@@ -44,7 +49,6 @@ const sourceForm = reactive({
   method: 'POST' as 'GET' | 'POST',
   intervalMs: 2000,
   headersJson: '',
-  bodyJson: '',
   // ws / mqtt
   scheme: 'ws' as 'ws' | 'wss',
   host: '',
@@ -63,7 +67,6 @@ function resetSourceForm(protocol: CommProtocol = 'http') {
   sourceForm.method = 'POST'
   sourceForm.intervalMs = 2000
   sourceForm.headersJson = ''
-  sourceForm.bodyJson = ''
   sourceForm.scheme = 'ws'
   sourceForm.host = ''
   sourceForm.protocols = ''
@@ -87,7 +90,6 @@ function openEditSource(source: CommSource) {
     sourceForm.method = source.method
     sourceForm.intervalMs = source.intervalMs
     sourceForm.headersJson = source.headersJson ?? ''
-    sourceForm.bodyJson = source.bodyJson ?? ''
   } else if (source.protocol === 'ws') {
     sourceForm.scheme = source.scheme
     sourceForm.host = source.host
@@ -103,7 +105,7 @@ function openEditSource(source: CommSource) {
   sourceDialogVisible.value = true
 }
 
-function formatJsonField(field: 'headersJson' | 'bodyJson') {
+function formatJsonField(field: 'headersJson') {
   const raw = sourceForm[field].trim()
   if (!raw) return
   try {
@@ -136,7 +138,6 @@ function buildSourceFromForm(): CommSource | null {
       method: sourceForm.method,
       intervalMs: Number(sourceForm.intervalMs) || 2000,
       headersJson: sourceForm.headersJson.trim() || undefined,
-      bodyJson: sourceForm.bodyJson.trim() || undefined,
       points
     }
     return src
@@ -178,18 +179,26 @@ function buildSourceFromForm(): CommSource | null {
   return src
 }
 
-function confirmSource() {
+async function confirmSource() {
   const src = buildSourceFromForm()
   if (!src) return
-  upsertCommSource(src)
-  refresh()
-  sourceDialogVisible.value = false
-  ElMessage.success(sourceEditingId.value ? '已更新数据源' : '已添加数据源')
+  try {
+    await upsertCommSource(src)
+    await refresh()
+    sourceDialogVisible.value = false
+    ElMessage.success(sourceEditingId.value ? '已更新数据源' : '已添加数据源')
+  } catch (e) {
+    ElMessage.error(e instanceof Error ? e.message : '保存数据源失败')
+  }
 }
 
-function onDeleteSource(source: CommSource) {
-  removeCommSource(source.id)
-  refresh()
+async function onDeleteSource(source: CommSource) {
+  try {
+    await removeCommSource(source.id)
+    await refresh()
+  } catch (e) {
+    ElMessage.error(e instanceof Error ? e.message : '删除数据源失败')
+  }
 }
 
 const pointDialogVisible = ref(false)
@@ -203,7 +212,7 @@ function openAddPoint(source: CommSource) {
   pointDialogVisible.value = true
 }
 
-function confirmPoint() {
+async function confirmPoint() {
   const name = pointForm.name.trim()
   const key = pointForm.key.trim()
   if (!name || !key) {
@@ -215,14 +224,22 @@ function confirmPoint() {
     name,
     key
   }
-  upsertCommPoint(pointSourceId.value, point)
-  refresh()
-  pointDialogVisible.value = false
+  try {
+    await upsertCommPoint(pointSourceId.value, point)
+    await refresh()
+    pointDialogVisible.value = false
+  } catch (e) {
+    ElMessage.error(e instanceof Error ? e.message : '保存点位失败')
+  }
 }
 
-function onDeletePoint(sourceId: string, pointId: string) {
-  removeCommPoint(sourceId, pointId)
-  refresh()
+async function onDeletePoint(sourceId: string, pointId: string) {
+  try {
+    await removeCommPoint(sourceId, pointId)
+    await refresh()
+  } catch (e) {
+    ElMessage.error(e instanceof Error ? e.message : '删除点位失败')
+  }
 }
 </script>
 
@@ -231,7 +248,7 @@ function onDeletePoint(sourceId: string, pointId: string) {
     <template v-if="!hasSources">
       <div class="empty-state">
         <p class="empty-title">尚未配置数据源</p>
-        <p class="hint">连接配置保存在本地，不写入场景 Document。</p>
+        <p class="hint">可供绑定的源和点位，不自动连网；不写入场景 Document。</p>
         <el-button type="primary" :icon="Plus" @click="openAddSource()">添加数据源</el-button>
       </div>
     </template>
@@ -378,17 +395,6 @@ function onDeletePoint(sourceId: string, pointId: string) {
               placeholder='可选，合法 JSON，如 {"Authorization":"Bearer xxx"}'
             />
             <el-button link size="small" class="fmt-btn" @click="formatJsonField('headersJson')">
-              格式化
-            </el-button>
-          </el-form-item>
-          <el-form-item label="请求体">
-            <el-input
-              v-model="sourceForm.bodyJson"
-              type="textarea"
-              :rows="3"
-              placeholder='可选，合法 JSON（当前轮询仍按 Twin need 发 body）'
-            />
-            <el-button link size="small" class="fmt-btn" @click="formatJsonField('bodyJson')">
               格式化
             </el-button>
           </el-form-item>

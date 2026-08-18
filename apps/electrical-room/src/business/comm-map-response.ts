@@ -5,8 +5,10 @@ function isRecord(v: unknown): v is Record<string, unknown> {
 }
 
 /**
- * 行业常见形态：`[{ dataId, value }, ...]` → TwinSamplesPayload。
- * - dataId 匹配 need.key 或 need.twinId
+ * 行业常见形态 → TwinSamplesPayload。
+ * 接受：`{ dataId, value }`、`[{ dataId, value }, ...]`、`{ data: [...] }`。
+ * - dataId 匹配 need.key：扇出到所有同 key 订阅（多节点绑同一点位）
+ * - 否则匹配 need.twinId
  * - 否则在仅一个 twin 订阅时，把 dataId 当作 key
  * - 已是 `{ samples: [...] }` 则原样透传
  */
@@ -19,7 +21,9 @@ export const mapDataIdRows: MapResponseFn = (raw, ctx) => {
     ? raw
     : isRecord(raw) && Array.isArray(raw.data)
       ? raw.data
-      : null
+      : isRecord(raw) && typeof raw.dataId === 'string'
+        ? [raw]
+        : null
   if (!rows) return raw
 
   const need = ctx.need
@@ -30,14 +34,18 @@ export const mapDataIdRows: MapResponseFn = (raw, ctx) => {
     const value = item.value
     if (typeof dataId !== 'string') continue
 
-    const byKey = need.find(n => n.key === dataId)
-    if (byKey) {
-      samples.push({ twinId: byKey.twinId, key: byKey.key, value })
+    const byKey = need.filter(n => n.key === dataId)
+    if (byKey.length > 0) {
+      for (const n of byKey) {
+        samples.push({ twinId: n.twinId, key: n.key, value })
+      }
       continue
     }
-    const byTwin = need.find(n => n.twinId === dataId)
-    if (byTwin) {
-      samples.push({ twinId: byTwin.twinId, key: byTwin.key, value })
+    const byTwin = need.filter(n => n.twinId === dataId)
+    if (byTwin.length > 0) {
+      for (const n of byTwin) {
+        samples.push({ twinId: n.twinId, key: n.key, value })
+      }
       continue
     }
 

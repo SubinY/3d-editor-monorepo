@@ -20,16 +20,11 @@ export const router = createRouter({
           component: () => import('@/views/manage/CabinetsManage.vue')
         },
         {
-          path: 'model-lab',
-          name: 'manage-model-lab',
-          component: () => import('@/views/manage/ModelLab.vue')
+          path: 'sources',
+          name: 'manage-sources',
+          component: () => import('@/views/manage/SourcesManage.vue')
         }
       ]
-    },
-    {
-      path: '/home',
-      name: 'dashboard-home',
-      component: () => import('@/views/DashboardHome.vue')
     },
     {
       path: '/edit/:kind(scene|container)/:id',
@@ -40,11 +35,6 @@ export const router = createRouter({
       path: '/preview/:id?',
       name: 'preview',
       component: () => import('@/views/Preview.vue')
-    },
-    {
-      path: '/ux-demo',
-      name: 'ux-demo',
-      component: () => import('@/views/UxDemoView.vue')
     },
     { path: '/:pathMatch(.*)*', redirect: '/manage/rooms' }
   ]

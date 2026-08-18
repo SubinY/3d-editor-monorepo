@@ -1,7 +1,6 @@
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import semver from 'semver'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 export const DATA_ROOT = path.resolve(__dirname, '../data')
@@ -9,9 +8,12 @@ export const DATA_ROOT = path.resolve(__dirname, '../data')
 const DOCS_DIR = path.join(DATA_ROOT, 'documents')
 const SCENES_DIR = path.join(DOCS_DIR, 'scenes')
 const CONTAINERS_DIR = path.join(DOCS_DIR, 'containers')
-const CATALOG_DIR = path.join(DATA_ROOT, 'catalog')
-const PUBLISHES_DIR = path.join(DATA_ROOT, 'publishes')
-const SETTINGS_PATH = path.join(DATA_ROOT, 'settings.json')
+const COMM_PATH = path.join(DATA_ROOT, 'comm.json')
+
+export interface CommBundleRecord {
+  version: 1
+  sources: unknown[]
+}
 
 export type DocumentNamespace = 'scene' | 'container'
 
@@ -22,27 +24,9 @@ export interface DocumentRecord {
   name?: string
 }
 
-export interface AppSettings {
-  homeSceneId: string | null
-}
-
-export interface PublishBundleRecord {
-  document: Record<string, unknown>
-  assetPack: Record<string, unknown>
-  publishedAt: number
-  name: string
-}
-
 async function ensureDirs(): Promise<void> {
   await fs.mkdir(SCENES_DIR, { recursive: true })
   await fs.mkdir(CONTAINERS_DIR, { recursive: true })
-  await fs.mkdir(CATALOG_DIR, { recursive: true })
-  await fs.mkdir(PUBLISHES_DIR, { recursive: true })
-  try {
-    await fs.access(SETTINGS_PATH)
-  } catch {
-    await writeJson(SETTINGS_PATH, { homeSceneId: null } satisfies AppSettings)
-  }
 }
 
 async function readJson<T>(filePath: string): Promise<T | undefined> {
@@ -65,26 +49,6 @@ function namespaceDir(ns: DocumentNamespace): string {
 
 function namespacedDocPath(ns: DocumentNamespace, id: string): string {
   return path.join(namespaceDir(ns), `${id}.json`)
-}
-
-function catalogFileName(id: string, version: string): string {
-  return `${id}__${version}.json`
-}
-
-function catalogPath(id: string, version: string): string {
-  return path.join(CATALOG_DIR, catalogFileName(id, version))
-}
-
-function publishPath(sceneId: string): string {
-  return path.join(PUBLISHES_DIR, `${sceneId}.json`)
-}
-
-function parseCatalogFileName(name: string): { id: string; version: string } | undefined {
-  if (!name.endsWith('.json')) return undefined
-  const base = name.slice(0, -5)
-  const idx = base.lastIndexOf('__')
-  if (idx <= 0) return undefined
-  return { id: base.slice(0, idx), version: base.slice(idx + 2) }
 }
 
 export async function initStore(): Promise<void> {
@@ -157,159 +121,18 @@ export async function deleteNamespacedDocument(
   }
 }
 
-export async function listCatalogItems(query?: {
-  placeableIn?: string
-  latestOnly?: boolean
-}): Promise<Array<Record<string, unknown>>> {
+export async function getCommBundle(): Promise<CommBundleRecord> {
   await ensureDirs()
-  const files = await fs.readdir(CATALOG_DIR)
-  const items: Array<Record<string, unknown>> = []
-  for (const file of files) {
-    const parsed = parseCatalogFileName(file)
-    if (!parsed) continue
-    const item = await readJson<Record<string, unknown>>(path.join(CATALOG_DIR, file))
-    if (!item) continue
-    if (query?.placeableIn) {
-      const placeable = item.placeableIn
-      if (!Array.isArray(placeable) || !placeable.includes(query.placeableIn)) continue
-    }
-    items.push(item)
+  const rec = await readJson<CommBundleRecord>(COMM_PATH)
+  if (!rec || rec.version !== 1 || !Array.isArray(rec.sources)) {
+    return { version: 1, sources: [] }
   }
-
-  if (!query?.latestOnly) return items
-
-  const latest = new Map<string, Record<string, unknown>>()
-  for (const item of items) {
-    const id = String(item.id)
-    const version = String(item.version)
-    const prev = latest.get(id)
-    if (!prev || semver.gt(version, String(prev.version))) {
-      latest.set(id, item)
-    }
-  }
-  return Array.from(latest.values())
+  return rec
 }
 
-export async function getCatalogItem(
-  id: string,
-  version?: string
-): Promise<Record<string, unknown> | undefined> {
+export async function saveCommBundle(bundle: CommBundleRecord): Promise<CommBundleRecord> {
   await ensureDirs()
-  if (version) {
-    return readJson(catalogPath(id, version))
-  }
-  const versions = await listCatalogVersions(id)
-  if (!versions.length) return undefined
-  const latest = versions.sort(semver.rcompare)[0]
-  return readJson(catalogPath(id, latest))
-}
-
-export async function listCatalogVersions(id: string): Promise<string[]> {
-  await ensureDirs()
-  const files = await fs.readdir(CATALOG_DIR)
-  const versions: string[] = []
-  for (const file of files) {
-    const parsed = parseCatalogFileName(file)
-    if (parsed?.id === id && semver.valid(parsed.version)) {
-      versions.push(parsed.version)
-    }
-  }
-  return versions.sort(semver.rcompare)
-}
-
-export async function putCatalogItem(item: Record<string, unknown>): Promise<Record<string, unknown>> {
-  await ensureDirs()
-  const id = String(item.id)
-  const version = String(item.version)
-  if (!semver.valid(version)) {
-    throw Object.assign(new Error(`invalid semver: ${version}`), { status: 400 })
-  }
-  await writeJson(catalogPath(id, version), item)
-  return item
-}
-
-export async function postCatalogItem(item: Record<string, unknown>): Promise<Record<string, unknown>> {
-  await ensureDirs()
-  const id = String(item.id)
-  const version = String(item.version)
-  if (!semver.valid(version)) {
-    throw Object.assign(new Error(`invalid semver: ${version}`), { status: 400 })
-  }
-  const versions = await listCatalogVersions(id)
-  if (versions.length) {
-    const latest = versions[0]
-    if (!semver.gt(version, latest)) {
-      throw Object.assign(
-        new Error(`version ${version} must be greater than latest ${latest}`),
-        { status: 409 }
-      )
-    }
-  }
-  const existing = await getCatalogItem(id, version)
-  if (existing) {
-    throw Object.assign(new Error(`version ${version} already exists`), { status: 409 })
-  }
-  await writeJson(catalogPath(id, version), item)
-  return item
-}
-
-export async function deleteCatalogItem(id: string, version?: string): Promise<number> {
-  await ensureDirs()
-  const files = await fs.readdir(CATALOG_DIR)
-  let removed = 0
-  for (const file of files) {
-    const parsed = parseCatalogFileName(file)
-    if (!parsed || parsed.id !== id) continue
-    if (version && parsed.version !== version) continue
-    await fs.unlink(path.join(CATALOG_DIR, file))
-    removed++
-  }
-  return removed
-}
-
-export async function savePublish(
-  sceneId: string,
-  bundle: PublishBundleRecord
-): Promise<PublishBundleRecord> {
-  await ensureDirs()
-  await writeJson(publishPath(sceneId), bundle)
-  return bundle
-}
-
-export async function getPublish(sceneId: string): Promise<PublishBundleRecord | undefined> {
-  await ensureDirs()
-  return readJson(publishPath(sceneId))
-}
-
-export async function deletePublish(sceneId: string): Promise<boolean> {
-  await ensureDirs()
-  try {
-    await fs.unlink(publishPath(sceneId))
-    return true
-  } catch {
-    return false
-  }
-}
-
-export async function listPublishes(): Promise<PublishBundleRecord[]> {
-  await ensureDirs()
-  const files = await fs.readdir(PUBLISHES_DIR)
-  const items: PublishBundleRecord[] = []
-  for (const file of files) {
-    if (!file.endsWith('.json')) continue
-    const rec = await readJson<PublishBundleRecord>(path.join(PUBLISHES_DIR, file))
-    if (rec) items.push(rec)
-  }
-  return items.sort((a, b) => b.publishedAt - a.publishedAt)
-}
-
-export async function getSettings(): Promise<AppSettings> {
-  await ensureDirs()
-  return (await readJson<AppSettings>(SETTINGS_PATH)) ?? { homeSceneId: null }
-}
-
-export async function saveSettings(settings: AppSettings): Promise<AppSettings> {
-  await ensureDirs()
-  await writeJson(SETTINGS_PATH, settings)
-  return settings
+  const next: CommBundleRecord = { version: 1, sources: bundle.sources }
+  await writeJson(COMM_PATH, next)
+  return next
 }

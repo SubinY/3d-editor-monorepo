@@ -8,8 +8,10 @@ import { failEnvelope, okEnvelope } from './api-envelope.js'
 import { asyncRoute } from './http.js'
 import {
   deleteNamespacedDocument,
+  getCommBundle,
   getNamespacedDocument,
   listNamespacedDocuments,
+  saveCommBundle,
   saveNamespacedDocument,
   type DocumentNamespace
 } from './store.js'
@@ -160,6 +162,30 @@ export function registerEditorRoutes(app: Express): void {
     asyncRoute(async (req, res) => {
       const data = await buildContainerBootstrap(req.params.id)
       res.json(okEnvelope(data))
+    })
+  )
+
+  app.get(
+    '/api/comm',
+    asyncRoute(async (_req, res) => {
+      res.json(okEnvelope(await getCommBundle()))
+    })
+  )
+
+  app.put(
+    '/api/comm',
+    asyncRoute(async (req, res) => {
+      const body = req.body
+      if (!body || typeof body !== 'object') {
+        res.status(200).json(failEnvelope(400, 'body required'))
+        return
+      }
+      const rec = body as { version?: unknown; sources?: unknown }
+      if (rec.version !== 1 || !Array.isArray(rec.sources)) {
+        res.status(200).json(failEnvelope(400, 'body.version must be 1 and body.sources must be an array'))
+        return
+      }
+      res.json(okEnvelope(await saveCommBundle({ version: 1, sources: rec.sources })))
     })
   )
 }

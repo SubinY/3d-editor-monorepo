@@ -1,5 +1,5 @@
 import type { ProceduralModelResolver } from '@mh/3d-editor'
-import { commonProceduralResolvers } from '@mh/3d-editor-assets/common'
+import { enclosure, panel } from '@mh/3d-editor-assets/common'
 import { createBreakerModel } from './create-breaker-model'
 
 type Factory = (
@@ -17,5 +17,5 @@ const hostFactoryResolver: ProceduralModelResolver = (ref, ctx) => {
 
 /** Host 注入 createEditor({ procedural: { resolvers } }) */
 export function createProceduralResolvers(): ProceduralModelResolver[] {
-  return [...commonProceduralResolvers, hostFactoryResolver]
+  return [panel.resolve, enclosure.resolve, hostFactoryResolver]
 }

@@ -1,4 +1,4 @@
-/** 通信配置 DTO（Host 侧；今 localStorage，后可原样 API 落盘） */
+/** 站点通信清单 DTO（Host 经 GET/PUT /api/comm 落盘，不进 Document） */
 
 export type CommProtocol = 'mqtt' | 'ws' | 'http'
 
@@ -20,7 +20,6 @@ export interface CommHttpSource extends CommSourceBase {
   method: 'GET' | 'POST'
   intervalMs: number
   headersJson?: string
-  bodyJson?: string
 }
 
 export interface CommWsSource extends CommSourceBase {
