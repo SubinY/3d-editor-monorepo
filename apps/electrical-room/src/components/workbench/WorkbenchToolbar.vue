@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Back, FullScreen, RefreshLeft, RefreshRight, Upload } from '@element-plus/icons-vue'
+import { Back, Bottom, FullScreen, RefreshLeft, RefreshRight, Upload } from '@element-plus/icons-vue'
 import type { EditorTool } from './types'
 
 defineProps<{
@@ -8,6 +8,7 @@ defineProps<{
   tool: EditorTool
   canUndo: boolean
   canRedo: boolean
+  canSnap: boolean
   editingVersion?: string
 }>()
 
@@ -17,6 +18,7 @@ const emit = defineEmits<{
   undo: []
   redo: []
   'fit-view': []
+  'snap-surface': []
   'set-tool': [tool: EditorTool]
   save: []
   publish: []
@@ -43,6 +45,12 @@ const emit = defineEmits<{
         <el-button :icon="RefreshLeft" :disabled="!canUndo" title="撤销" @click="emit('undo')" />
         <el-button :icon="RefreshRight" :disabled="!canRedo" title="重做" @click="emit('redo')" />
         <el-button :icon="FullScreen" title="视图适配" @click="emit('fit-view')" />
+        <el-button
+          :icon="Bottom"
+          :disabled="!canSnap"
+          :title="isScene ? '贴地面' : '贴柜面'"
+          @click="emit('snap-surface')"
+        />
       </el-button-group>
     </div>
 

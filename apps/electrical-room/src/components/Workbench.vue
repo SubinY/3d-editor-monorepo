@@ -439,6 +439,47 @@ function fitView() {
   session?.viewport2d?.fitBounds()
 }
 
+/** 与内核 place-defaults.defaultContainerBackZ 同式（未包根导出，Host 本地复用） */
+function containerBackZ(
+  bounds: { width: number; depth: number; height?: number },
+  footprintDepth: number
+): number {
+  const depth = bounds.depth
+  const height = bounds.height ?? 2
+  const t = Math.min(0.04, Math.min(bounds.width, depth, height) * 0.08)
+  const itemDepth = footprintDepth > 0 ? footprintDepth : 0.1
+  return -depth / 2 + t + itemDepth / 2
+}
+
+/** 选中节点一键贴地（scene Y=0）或贴柜背（container Z） */
+function snapSurface() {
+  const d = doc.value
+  if (!d || !selectedNode.id) return
+  const node = d.getNode(selectedNode.id)
+  if (!node) return
+
+  const pos: [number, number, number] = [
+    node.transform.position[0],
+    node.transform.position[1],
+    node.transform.position[2]
+  ]
+  if (isScene.value) {
+    pos[1] = 0
+  } else {
+    const item = d.getCachedItem(node)
+    pos[2] = containerBackZ(d.bounds, item?.footprint.depth ?? 0.1)
+  }
+
+  const result = d.commands.transformNode(selectedNode.id, { position: pos })
+  if (result && !result.ok && result.denied) {
+    showToast(deniedMessage(result.denied), 'error')
+    refreshSelected()
+    return
+  }
+  refreshSelected()
+  showToast(isScene.value ? '已贴地面' : '已贴柜面')
+}
+
 function setSnapEnabled(enabled: boolean) {
   session?.setSnapEnabled(enabled)
   snapEnabled.value = session?.getInteraction().snapEnabled ?? enabled
@@ -633,11 +674,13 @@ async function confirmPanelEdit(content: panel.PanelContentJSON) {
       :tool="tool"
       :can-undo="canUndo"
       :can-redo="canRedo"
+      :can-snap="!!selectedId"
       :editing-version="editingVersion"
       @back="emit('back')"
       @undo="undo"
       @redo="redo"
       @fit-view="fitView"
+      @snap-surface="snapSurface"
       @set-tool="setTool"
       @save="save"
       @publish="publish"
