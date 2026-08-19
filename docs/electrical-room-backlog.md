@@ -9,12 +9,13 @@
 ### 模型导入（glTF / 程序化工厂函数）
 
 - 用途：接触器、端子排等换真模型；资产入库工作流。
-- 现状：无入库 UI；柜内非断路器仍为 primitive 盒子。
+- **已接回（Host P1）**：资源面板「导入模型」→ `AssetIngestModal` → 「我的素材」草稿盘；API `/api/assets/upload` + `/api/asset-drafts`。默认白名单仍静态。
 
 ### AI 生成 procedural 工厂函数
 
-- 原入口：`ModelLab` + Kimi + `/api/ai/model-factory/*`（曾在 `electrical-room-api` 的 `model-factory.ts` / `ark.ts` / `side-routes.ts`）。
-- 用途：看图生成 `createModel` TS，作为导入的生成端；**不**自动进立面默认盘。
+- 入口：同一 `AssetIngestModal`「看图生成」Tab（不复活 Manage ModelLab）。
+- API：`/api/ai/model-factory/generate|preview-build|compile`；编译产物进「我的素材」，**不**进默认盘。
+- 依赖：`electrical-room-api` 的 `KIMI_API_KEY`（或 `MOONSHOT_API_KEY`）。
 
 ## P2
 

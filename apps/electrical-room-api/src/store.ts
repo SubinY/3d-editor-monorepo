@@ -10,6 +10,8 @@ const SCENES_DIR = path.join(DOCS_DIR, 'scenes')
 const CONTAINERS_DIR = path.join(DOCS_DIR, 'containers')
 const PUBLISHES_DIR = path.join(DATA_ROOT, 'publishes')
 const COMM_PATH = path.join(DATA_ROOT, 'comm.json')
+const ASSET_DRAFTS_DIR = path.join(DATA_ROOT, 'asset-drafts')
+const UPLOADS_DIR = path.join(DATA_ROOT, 'uploads')
 
 export interface CommBundleRecord {
   version: 1
@@ -46,6 +48,8 @@ async function ensureDirs(): Promise<void> {
   await fs.mkdir(SCENES_DIR, { recursive: true })
   await fs.mkdir(CONTAINERS_DIR, { recursive: true })
   await fs.mkdir(PUBLISHES_DIR, { recursive: true })
+  await fs.mkdir(ASSET_DRAFTS_DIR, { recursive: true })
+  await fs.mkdir(UPLOADS_DIR, { recursive: true })
 }
 
 async function readJson<T>(filePath: string): Promise<T | undefined> {
@@ -274,4 +278,100 @@ export async function deletePublish(sceneId: string, version?: number): Promise<
   } catch {
     return false
   }
+}
+
+/** Host「我的素材」草稿 CatalogItem（不进默认白名单） */
+export type AssetDraftItem = Record<string, unknown> & {
+  id: string
+  version: string
+  name: string
+}
+
+function assetDraftPath(id: string, version: string): string {
+  const safeId = id.replace(/[^\w.-]+/g, '_')
+  const safeVer = version.replace(/[^\w.-]+/g, '_')
+  return path.join(ASSET_DRAFTS_DIR, `${safeId}@${safeVer}.json`)
+}
+
+export function uploadsDir(): string {
+  return UPLOADS_DIR
+}
+
+export async function listAssetDrafts(): Promise<AssetDraftItem[]> {
+  await ensureDirs()
+  let files: string[]
+  try {
+    files = await fs.readdir(ASSET_DRAFTS_DIR)
+  } catch {
+    return []
+  }
+  const items: AssetDraftItem[] = []
+  for (const file of files) {
+    if (!file.endsWith('.json')) continue
+    const rec = await readJson<AssetDraftItem>(path.join(ASSET_DRAFTS_DIR, file))
+    if (!rec?.id || !rec.version) continue
+    items.push(rec)
+  }
+  return items.sort((a, b) => String(a.name).localeCompare(String(b.name)))
+}
+
+export async function getAssetDraft(
+  id: string,
+  version?: string
+): Promise<AssetDraftItem | undefined> {
+  await ensureDirs()
+  if (version) {
+    return readJson<AssetDraftItem>(assetDraftPath(id, version))
+  }
+  const all = await listAssetDrafts()
+  const matches = all.filter(item => item.id === id)
+  return matches[matches.length - 1]
+}
+
+export async function saveAssetDraft(item: AssetDraftItem): Promise<AssetDraftItem> {
+  await ensureDirs()
+  if (!item.id || !item.version) {
+    throw Object.assign(new Error('id and version required'), { status: 400 })
+  }
+  await writeJson(assetDraftPath(item.id, item.version), item)
+  return item
+}
+
+export async function deleteAssetDraft(id: string, version?: string): Promise<boolean> {
+  await ensureDirs()
+  try {
+    if (version) {
+      await fs.unlink(assetDraftPath(id, version))
+      return true
+    }
+    const all = await listAssetDrafts()
+    let deleted = false
+    for (const item of all) {
+      if (item.id !== id) continue
+      await fs.unlink(assetDraftPath(item.id, item.version))
+      deleted = true
+    }
+    return deleted
+  } catch {
+    return false
+  }
+}
+
+export async function saveUploadFile(input: {
+  filename: string
+  data: Buffer
+}): Promise<{ url: string; filename: string }> {
+  await ensureDirs()
+  const base = path.basename(input.filename).replace(/[^\w.\-]+/g, '_')
+  if (!base) {
+    throw Object.assign(new Error('filename required'), { status: 400 })
+  }
+  const lower = base.toLowerCase()
+  if (!lower.endsWith('.glb') && !lower.endsWith('.gltf')) {
+    throw Object.assign(new Error('only .glb / .gltf allowed'), { status: 400 })
+  }
+  const stamp = Date.now().toString(36)
+  const stored = `${stamp}-${base}`
+  await fs.writeFile(path.join(UPLOADS_DIR, stored), input.data)
+  return { url: `/uploads/${stored}`, filename: stored }
 }

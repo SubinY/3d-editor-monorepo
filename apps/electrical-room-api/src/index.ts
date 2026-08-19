@@ -1,5 +1,6 @@
 import express from 'express'
 import cors from 'cors'
+import { registerAssetRoutes } from './asset-routes.js'
 import { registerEditorRoutes } from './editor-routes.js'
 import { loadDotEnv } from './env.js'
 import { unhandledErrorMiddleware } from './http.js'
@@ -15,7 +16,7 @@ async function main() {
   await initStore()
   const app = express()
   app.use(cors())
-  app.use(express.json({ limit: '20mb' }))
+  app.use(express.json({ limit: '60mb' }))
 
   app.get('/api/health', (_req, res) => {
     res.json({ ok: true })
@@ -24,6 +25,7 @@ async function main() {
   registerEditorRoutes(app)
   registerPublishRoutes(app)
   registerTwinHttpRoutes(app)
+  await registerAssetRoutes(app)
 
   app.use(unhandledErrorMiddleware)
 

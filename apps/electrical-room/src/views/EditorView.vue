@@ -3,11 +3,12 @@ import { onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { buildPublishBundle, createEmptyDocumentJSON } from '@mh/3d-editor'
-import type { CatalogProvider, DocumentKind, EditorDocumentJSON } from '@mh/3d-editor'
+import type { DocumentKind, EditorDocumentJSON } from '@mh/3d-editor'
 import Workbench from '@/components/Workbench.vue'
 import {
   cabinetItemFromDocument,
   createDemoCatalog,
+  DemoCatalog,
   DEFAULT_CABINET_BOUNDS,
   DEFAULT_SCENE_BOUNDS,
   getEditingVersion,
@@ -15,6 +16,7 @@ import {
   primeLayoutCache
 } from '@/business/catalog'
 import * as api from '@/business/api'
+import type { CatalogItem } from '@mh/3d-editor'
 
 const route = useRoute()
 const router = useRouter()
@@ -23,13 +25,14 @@ const kind = route.params.kind as DocumentKind
 const id = route.params.id as string
 
 const initial = ref<EditorDocumentJSON | null>(null)
-const catalog = ref<CatalogProvider | null>(null)
+const catalog = ref<DemoCatalog | null>(null)
 const editingVersion = ref('1.0.0')
 const loading = ref(true)
 const publishing = ref(false)
 
 onMounted(async () => {
   try {
+    const drafts = await api.listAssetDrafts().catch(() => [] as CatalogItem[])
     if (kind === 'scene') {
       const [boot, containers] = await Promise.all([
         api.fetchSceneBootstrap(id),
@@ -44,7 +47,7 @@ onMounted(async () => {
           primeLayoutCache({ [rec.json.id]: rec.json })
         }
       }
-      catalog.value = createDemoCatalog('scene', placeable)
+      catalog.value = createDemoCatalog('scene', placeable, drafts)
       if (boot.document) {
         initial.value = boot.document
       } else {
@@ -61,7 +64,7 @@ onMounted(async () => {
       }
     } else if (kind === 'container') {
       const boot = await api.fetchContainerBootstrap(id)
-      catalog.value = createDemoCatalog('container', [])
+      catalog.value = createDemoCatalog('container', [], drafts)
       if (boot.document) {
         initial.value = boot.document
         editingVersion.value = getEditingVersion(boot.document)

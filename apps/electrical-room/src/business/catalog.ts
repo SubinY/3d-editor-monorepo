@@ -247,16 +247,45 @@ export function primeLayoutCache(docs: Record<string, EditorDocumentJSON | null 
 /**
  * Host Catalog：list 按 placeableIn 过滤；get 解析柜 layout / 柜内白名单。
  * scene 种子含 COMPONENT_ITEMS，嵌套 document 展开时才能 get 到断路器等（list 仍滤掉）。
+ * 草稿「我的素材」可运行时增删，不进默认白名单常量。
  */
 export class DemoCatalog implements CatalogProvider {
-  private placeable: CatalogProvider
+  private placeable: ReturnType<typeof createMemoryCatalog>
+  private drafts = new Map<string, CatalogItem>()
 
-  constructor(options: { kind: DocumentKind; placeables: CatalogItem[] }) {
+  constructor(options: { kind: DocumentKind; placeables: CatalogItem[]; drafts?: CatalogItem[] }) {
     const seed =
       options.kind === 'scene'
         ? [...FIXTURE_ITEMS, ...COMPONENT_ITEMS, ...options.placeables]
         : [...COMPONENT_ITEMS, ...options.placeables]
     this.placeable = createMemoryCatalog(seed)
+    for (const item of options.drafts ?? []) this.setDraft(item)
+  }
+
+  private draftKey(id: string, version: string): string {
+    return `${id}@${version}`
+  }
+
+  listDrafts(): CatalogItem[] {
+    return Array.from(this.drafts.values())
+  }
+
+  setDraft(item: CatalogItem): void {
+    this.drafts.set(this.draftKey(item.id, item.version), item)
+    this.placeable.add(item)
+  }
+
+  removeDraft(id: string, version?: string): void {
+    if (version) {
+      this.drafts.delete(this.draftKey(id, version))
+      this.placeable.remove(id, version)
+      return
+    }
+    for (const key of Array.from(this.drafts.keys())) {
+      if (!key.startsWith(`${id}@`)) continue
+      this.drafts.delete(key)
+    }
+    this.placeable.remove(id)
   }
 
   async list(query?: CatalogQuery): Promise<CatalogItem[]> {
@@ -280,12 +309,13 @@ export class DemoCatalog implements CatalogProvider {
 
 export function createDemoCatalog(
   kind: DocumentKind,
-  placeables: CatalogItem[]
+  placeables: CatalogItem[],
+  drafts: CatalogItem[] = []
 ): DemoCatalog {
-  return new DemoCatalog({ kind, placeables })
+  return new DemoCatalog({ kind, placeables, drafts })
 }
 
-/** 预览：用 scene 文档引用的柜 layout 做 get 解析 */
+/** 预览：用 scene 文档引用的柜 layout 做 get 解析，并合并资产草稿 */
 export async function createPreviewCatalog(): Promise<DemoCatalog> {
   const placeables: CatalogItem[] = []
   try {
@@ -299,5 +329,11 @@ export async function createPreviewCatalog(): Promise<DemoCatalog> {
   } catch {
     /* empty */
   }
-  return createDemoCatalog('scene', placeables)
+  let drafts: CatalogItem[] = []
+  try {
+    drafts = await api.listAssetDrafts()
+  } catch {
+    /* empty */
+  }
+  return createDemoCatalog('scene', placeables, drafts)
 }

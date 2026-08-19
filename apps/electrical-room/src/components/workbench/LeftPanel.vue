@@ -1,13 +1,14 @@
 <script setup lang="ts">
-import { ref } from 'vue'
-import { Box, Share } from '@element-plus/icons-vue'
+import { computed, ref, watch } from 'vue'
+import { Box, FolderOpened, Share } from '@element-plus/icons-vue'
 import type { CatalogItem } from '@mh/3d-editor'
 import type { AssetGroup, LayerTreeItem } from './types'
 import ResourcePanel from './ResourcePanel.vue'
 import LayerTreePanel from './LayerTreePanel.vue'
 
-defineProps<{
-  groups: AssetGroup[]
+const props = defineProps<{
+  systemGroups: AssetGroup[]
+  mineItems: CatalogItem[]
   nodes: LayerTreeItem[]
   selectedId: string
 }>()
@@ -17,25 +18,58 @@ const emit = defineEmits<{
   'drag-end': []
   'select-layer': [id: string]
   'toggle-visible': [id: string, visible: boolean]
+  import: []
+  'edit-draft': [item: CatalogItem]
+  'delete-draft': [item: CatalogItem]
 }>()
 
-const activeTab = ref('resources')
+const activeTab = ref('system')
+
+const mineGroups = computed<AssetGroup[]>(() => [
+  { key: 'mine', label: '已导入', items: props.mineItems }
+])
+
+watch(
+  () => props.mineItems.length,
+  (len, prev) => {
+    if (prev === 0 && len > 0) activeTab.value = 'mine'
+  }
+)
 </script>
 
 <template>
   <aside class="left-panel">
     <el-tabs v-model="activeTab" class="left-tabs" stretch>
-      <el-tab-pane name="resources">
+      <el-tab-pane name="system">
         <template #label>
           <span class="tab-label">
             <el-icon><Box /></el-icon>
-            资源
+            系统资源
           </span>
         </template>
         <ResourcePanel
-          :groups="groups"
+          mode="system"
+          :groups="systemGroups"
           @drag-start="(e, item) => emit('drag-start', e, item)"
           @drag-end="emit('drag-end')"
+        />
+      </el-tab-pane>
+
+      <el-tab-pane name="mine">
+        <template #label>
+          <span class="tab-label">
+            <el-icon><FolderOpened /></el-icon>
+            我的素材
+          </span>
+        </template>
+        <ResourcePanel
+          mode="mine"
+          :groups="mineGroups"
+          @drag-start="(e, item) => emit('drag-start', e, item)"
+          @drag-end="emit('drag-end')"
+          @import="emit('import')"
+          @edit-draft="emit('edit-draft', $event)"
+          @delete-draft="emit('delete-draft', $event)"
         />
       </el-tab-pane>
 
@@ -43,7 +77,7 @@ const activeTab = ref('resources')
         <template #label>
           <span class="tab-label">
             <el-icon><Share /></el-icon>
-            图层结构
+            图层
           </span>
         </template>
         <LayerTreePanel
@@ -88,8 +122,9 @@ const activeTab = ref('resources')
 
 .left-tabs :deep(.el-tabs__item) {
   color: #7a8fa6;
-  padding: 0 12px;
+  padding: 0 8px;
   height: 44px;
+  font-size: 12px;
 }
 
 .left-tabs :deep(.el-tabs__item.is-active) {
@@ -114,7 +149,7 @@ const activeTab = ref('resources')
 .tab-label {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  font-size: 13px;
+  gap: 4px;
+  font-size: 12px;
 }
 </style>

@@ -1,10 +1,9 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, shallowRef } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { CATALOG_ITEM_MIME, cloneEnvironment, createEditor } from '@mh/3d-editor'
 import type {
   CatalogItem,
-  CatalogProvider,
   DocumentKind,
   EditorDocument,
   EditorDocumentJSON,
@@ -23,6 +22,7 @@ import ContextToolbar from './workbench/ContextToolbar.vue'
 import ViewModeBar from './workbench/ViewModeBar.vue'
 import BottomBar from './workbench/BottomBar.vue'
 import PanelEditorModal from './workbench/panel-editor/PanelEditorModal.vue'
+import AssetIngestModal from './workbench/AssetIngestModal.vue'
 import PickCandidatesMenu from './workbench/PickCandidatesMenu.vue'
 import type { LiveCameraPose } from './workbench/environment-panel/types'
 import type { AssetGroup, EditorTool, LayerTreeItem, ViewMode } from './workbench/types'
@@ -34,11 +34,12 @@ import {
 } from '@mh/3d-editor-twin'
 import { createProceduralResolvers } from '@/models/registry'
 import { panel } from '@mh/3d-editor-assets/common'
-import { parseCabinetIdFromCatalogLabel } from '@/business/catalog'
+import { DemoCatalog, parseCabinetIdFromCatalogLabel } from '@/business/catalog'
+import * as api from '@/business/api'
 
 const props = defineProps<{
   kind: DocumentKind
-  catalog: CatalogProvider
+  catalog: DemoCatalog
   initial: EditorDocumentJSON
   /** container 当前编辑版本，仅展示 */
   editingVersion?: string
@@ -68,7 +69,8 @@ const transformMode = ref<TransformMode>('translate')
 const canUndo = ref(false)
 const canRedo = ref(false)
 
-const groups = ref<AssetGroup[]>([])
+const systemGroups = ref<AssetGroup[]>([])
+const mineItems = ref<CatalogItem[]>([])
 const layerNodes = ref<LayerTreeItem[]>([])
 const selectedId = ref('')
 
@@ -90,6 +92,8 @@ let unsubCameraPose: (() => void) | undefined
 let cameraPosePersistTimer: number | undefined
 const panelEditorOpen = ref(false)
 const panelDraft = ref<panel.PanelContentJSON | null>(null)
+const ingestOpen = ref(false)
+const ingestEditItem = ref<CatalogItem | null>(null)
 const workbenchEl = ref<HTMLElement>()
 const pickMenu = ref<{
   items: Array<{ id: string; label: string }>
@@ -325,42 +329,80 @@ onMounted(async () => {
     }, 160)
   })
 
+  await refreshAssetGroups()
+
+  window.addEventListener('keydown', onKeyDown)
+})
+
+async function refreshAssetGroups() {
   const items = await props.catalog.list({ placeableIn: props.kind })
+  const draftIds = new Set(props.catalog.listDrafts().map(d => `${d.id}@${d.version}`))
+  mineItems.value = items.filter(item => draftIds.has(`${item.id}@${item.version}`))
+  const rest = items.filter(item => !draftIds.has(`${item.id}@${item.version}`))
+
   if (isScene.value) {
-    groups.value = [
+    systemGroups.value = [
       {
         key: 'fixture',
         label: '墙体构件',
-        items: items.filter(item => item.category === 'fixture' && item.kind !== 'panel')
+        items: rest.filter(item => item.category === 'fixture' && item.kind !== 'panel')
       },
       {
         key: 'panel',
         label: '信息面板',
-        items: items.filter(item => item.kind === 'panel')
+        items: rest.filter(item => item.kind === 'panel')
       },
       {
         key: 'effect',
         label: '场景特效',
-        items: items.filter(item => item.category === 'effect')
+        items: rest.filter(item => item.category === 'effect')
       },
       {
         key: 'equipment',
         label: '电柜',
-        items: items.filter(item => item.category === 'equipment')
+        items: rest.filter(item => item.category === 'equipment')
       }
     ]
   } else {
-    groups.value = [
+    systemGroups.value = [
       {
         key: 'component',
         label: '元器件',
-        items: items.filter(item => item.category === 'component')
+        items: rest.filter(item => item.category === 'component')
       }
     ]
   }
+}
 
-  window.addEventListener('keydown', onKeyDown)
-})
+function openIngest(item?: CatalogItem) {
+  ingestEditItem.value = item ?? null
+  ingestOpen.value = true
+}
+
+async function onIngestSaved(item: CatalogItem) {
+  props.catalog.setDraft(item)
+  await refreshAssetGroups()
+}
+
+async function onDeleteDraft(item: CatalogItem) {
+  try {
+    await ElMessageBox.confirm(
+      `从「我的素材」删除「${item.name}」？已放置节点不会自动删除。`,
+      '删除草稿',
+      { type: 'warning', confirmButtonText: '删除', cancelButtonText: '取消' }
+    )
+  } catch {
+    return
+  }
+  try {
+    await api.deleteAssetDraft(item.id, item.version)
+    props.catalog.removeDraft(item.id, item.version)
+    await refreshAssetGroups()
+    ElMessage.success('已删除')
+  } catch (e) {
+    ElMessage.error(e instanceof Error ? e.message : '删除失败')
+  }
+}
 
 onBeforeUnmount(() => {
   window.removeEventListener('keydown', onKeyDown)
@@ -700,13 +742,17 @@ async function confirmPanelEdit(content: panel.PanelContentJSON) {
 
     <div class="body">
       <LeftPanel
-        :groups="groups"
+        :system-groups="systemGroups"
+        :mine-items="mineItems"
         :nodes="layerNodes"
         :selected-id="selectedId"
         @drag-start="onAssetDragStart"
         @drag-end="onAssetDragEnd"
         @select-layer="selectLayer"
         @toggle-visible="toggleNodeVisible"
+        @import="openIngest()"
+        @edit-draft="openIngest"
+        @delete-draft="onDeleteDraft"
       />
 
       <ViewportArea :view-mode="viewMode">
@@ -780,6 +826,13 @@ async function confirmPanelEdit(content: panel.PanelContentJSON) {
       v-model:show="panelEditorOpen"
       :model-value="panelDraft"
       @confirm="confirmPanelEdit"
+    />
+
+    <AssetIngestModal
+      v-model:show="ingestOpen"
+      :kind="kind"
+      :edit-item="ingestEditItem"
+      @saved="onIngestSaved"
     />
   </div>
 </template>

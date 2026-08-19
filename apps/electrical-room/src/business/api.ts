@@ -1,4 +1,4 @@
-import type { EditorDocumentJSON, PublishBundle } from '@mh/3d-editor'
+import type { CatalogItem, EditorDocumentJSON, PublishBundle } from '@mh/3d-editor'
 import type { CommBundle } from './comm-types'
 
 const BASE = '/api'
@@ -223,4 +223,81 @@ export function publishedMonitorUrl(sceneId: string, version: number): string {
   if (typeof window === 'undefined') return `#${hashPath}`
   const base = `${window.location.origin}${window.location.pathname}`
   return `${base}#${hashPath}`
+}
+
+// —— P1 资产草稿 / 上传 / AI ——
+
+export async function listAssetDrafts(): Promise<CatalogItem[]> {
+  const data = await request<{ items: CatalogItem[] }>('/asset-drafts')
+  return data.items ?? []
+}
+
+export async function saveAssetDraft(item: CatalogItem): Promise<CatalogItem> {
+  return request('/asset-drafts', {
+    method: 'POST',
+    body: JSON.stringify(item)
+  })
+}
+
+export async function deleteAssetDraft(id: string, version?: string): Promise<void> {
+  const q = version ? `?version=${encodeURIComponent(version)}` : ''
+  await request(`/asset-drafts/${encodeURIComponent(id)}${q}`, { method: 'DELETE' })
+}
+
+export async function uploadGlbAsset(file: File): Promise<{ url: string; filename: string }> {
+  const buf = await file.arrayBuffer()
+  const bytes = new Uint8Array(buf)
+  let binary = ''
+  const chunk = 0x8000
+  for (let i = 0; i < bytes.length; i += chunk) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + chunk))
+  }
+  const dataBase64 = btoa(binary)
+  return request('/assets/upload', {
+    method: 'POST',
+    body: JSON.stringify({
+      filename: file.name,
+      dataBase64
+    })
+  })
+}
+
+export interface ModelFactoryGenerateResult {
+  draftId: string
+  sourceCode: string
+  footprintHint: { width: number; depth: number; height: number }
+  name: string
+  inventory?: unknown
+  objectClass?: string
+  partCount?: number
+}
+
+export async function generateModelFactory(input: {
+  imageBase64: string
+  mimeType: string
+  name?: string
+  footprint: { width: number; depth: number; height: number }
+}): Promise<ModelFactoryGenerateResult> {
+  return request('/ai/model-factory/generate', {
+    method: 'POST',
+    body: JSON.stringify(input)
+  })
+}
+
+export async function previewBuildModelFactory(draftId: string): Promise<{ url: string }> {
+  return request('/ai/model-factory/preview-build', {
+    method: 'POST',
+    body: JSON.stringify({ draftId })
+  })
+}
+
+export async function compileModelFactory(input: {
+  draftId: string
+  id: string
+  version: string
+}): Promise<{ url: string; catalogItem: CatalogItem }> {
+  return request('/ai/model-factory/compile', {
+    method: 'POST',
+    body: JSON.stringify(input)
+  })
 }
