@@ -367,8 +367,8 @@ export async function saveUploadFile(input: {
     throw Object.assign(new Error('filename required'), { status: 400 })
   }
   const lower = base.toLowerCase()
-  if (!lower.endsWith('.glb') && !lower.endsWith('.gltf')) {
-    throw Object.assign(new Error('only .glb / .gltf allowed'), { status: 400 })
+  if (!lower.endsWith('.glb') && !lower.endsWith('.gltf') && !lower.endsWith('.jpg') && !lower.endsWith('.jpeg') && !lower.endsWith('.png')) {
+    throw Object.assign(new Error('only .glb / .gltf / .jpg / .jpeg / .png allowed'), { status: 400 })
   }
   const stamp = Date.now().toString(36)
   const stored = `${stamp}-${base}`

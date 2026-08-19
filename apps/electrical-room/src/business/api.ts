@@ -244,6 +244,16 @@ export async function deleteAssetDraft(id: string, version?: string): Promise<vo
   await request(`/asset-drafts/${encodeURIComponent(id)}${q}`, { method: 'DELETE' })
 }
 
+export async function uploadAssetFile(
+  filename: string,
+  dataBase64: string
+): Promise<{ url: string; filename: string }> {
+  return request('/assets/upload', {
+    method: 'POST',
+    body: JSON.stringify({ filename, dataBase64 })
+  })
+}
+
 export async function uploadGlbAsset(file: File): Promise<{ url: string; filename: string }> {
   const buf = await file.arrayBuffer()
   const bytes = new Uint8Array(buf)
@@ -252,14 +262,22 @@ export async function uploadGlbAsset(file: File): Promise<{ url: string; filenam
   for (let i = 0; i < bytes.length; i += chunk) {
     binary += String.fromCharCode(...bytes.subarray(i, i + chunk))
   }
-  const dataBase64 = btoa(binary)
-  return request('/assets/upload', {
-    method: 'POST',
-    body: JSON.stringify({
-      filename: file.name,
-      dataBase64
-    })
-  })
+  return uploadAssetFile(file.name, btoa(binary))
+}
+
+/** dataURL (image/jpeg|png) → 落盘 url；失败返回 null */
+export async function uploadDataUrlAsset(
+  dataUrl: string,
+  filename: string
+): Promise<string | null> {
+  const m = /^data:([^;]+);base64,(.+)$/.exec(dataUrl)
+  if (!m) return null
+  try {
+    const out = await uploadAssetFile(filename, m[2]!)
+    return out.url
+  } catch {
+    return null
+  }
 }
 
 export interface ModelFactoryGenerateResult {

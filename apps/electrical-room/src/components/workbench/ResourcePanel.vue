@@ -3,6 +3,7 @@ import { ref, watch } from 'vue'
 import { Plus, Delete, Edit } from '@element-plus/icons-vue'
 import type { CatalogItem } from '@mh/3d-editor'
 import type { AssetGroup } from './types'
+import { isImageThumb, resolveAssetIconSvg } from './asset-icons'
 
 const props = defineProps<{
   mode: 'system' | 'mine'
@@ -26,18 +27,6 @@ watch(
   },
   { immediate: true }
 )
-
-function thumbStyle(item: CatalogItem): Record<string, string> {
-  const thumb = item.thumb
-  if (thumb && (thumb.startsWith('http') || thumb.startsWith('/') || thumb.startsWith('data:'))) {
-    return {
-      backgroundImage: `url(${thumb})`,
-      backgroundSize: 'cover',
-      backgroundPosition: 'center'
-    }
-  }
-  return { background: thumb ?? '#3f7fbf' }
-}
 </script>
 
 <template>
@@ -57,7 +46,20 @@ function thumbStyle(item: CatalogItem): Record<string, string> {
             @dragstart="emit('drag-start', $event, item)"
             @dragend="emit('drag-end')"
           >
-            <div class="icon-box" :style="thumbStyle(item)">
+            <div class="icon-box">
+              <img
+                v-if="isImageThumb(item.thumb)"
+                class="thumb-img"
+                :src="item.thumb"
+                alt=""
+                draggable="false"
+              />
+              <span
+                v-else
+                class="svg-icon"
+                aria-hidden="true"
+                v-html="resolveAssetIconSvg(item)"
+              />
               <div v-if="mode === 'mine'" class="item-actions" @mousedown.stop @click.stop>
                 <button type="button" title="再编辑" @click="emit('edit-draft', item)">
                   <el-icon><Edit /></el-icon>
@@ -160,6 +162,28 @@ function thumbStyle(item: CatalogItem): Record<string, string> {
   display: grid;
   place-items: center;
   overflow: hidden;
+}
+
+.thumb-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  pointer-events: none;
+}
+
+.svg-icon {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  color: #7ec8ff;
+  pointer-events: none;
+}
+
+.svg-icon :deep(svg) {
+  width: 100%;
+  height: 100%;
 }
 
 .item-actions {

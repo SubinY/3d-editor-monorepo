@@ -262,6 +262,18 @@ function close() {
   emit('update:show', false)
 }
 
+async function resolveThumb(): Promise<string> {
+  const fallback = '#5dade2'
+  try {
+    const dataUrl = previewRef.value?.captureThumb?.(128)
+    if (!dataUrl) return fallback
+    const url = await api.uploadDataUrlAsset(dataUrl, `thumb-${draftId.value}.jpg`)
+    return url ?? fallback
+  } catch {
+    return fallback
+  }
+}
+
 async function save() {
   if (!canSave.value || !previewSpec.value) return
   saving.value = true
@@ -270,6 +282,7 @@ async function save() {
     if (placeScene.value) placeableIn.push('scene')
     if (placeContainer.value) placeableIn.push('container')
 
+    const thumb = await resolveThumb()
     let item: CatalogItem
 
     if (previewSpec.value.type === 'gltf') {
@@ -285,7 +298,7 @@ async function save() {
           depth: footprint.depth,
           height: footprint.height
         },
-        thumb: '#5dade2',
+        thumb,
         model3d: { type: 'gltf', url: previewSpec.value.url },
         metadata: { source: 'local-glb' }
       }
@@ -316,7 +329,7 @@ async function save() {
           depth: footprint.depth,
           height: footprint.height
         },
-        thumb: '#5dade2',
+        thumb,
         model3d: { type: 'procedural', id: modelId, url: modelUrl },
         metadata: { source: 'ai-factory', factoryDraftId: aiFactoryDraftId.value || undefined }
       }

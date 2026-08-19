@@ -130,7 +130,7 @@ watch(
     scene = new THREE.Scene()
     scene.background = new THREE.Color(0x0e1621)
     camera = new THREE.PerspectiveCamera(45, 1, 0.01, 200)
-    renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false })
+    renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false, preserveDrawingBuffer: true })
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
     el.appendChild(renderer.domElement)
     controls = new OrbitControls(camera, renderer.domElement)
@@ -168,7 +168,31 @@ onBeforeUnmount(() => {
   controls = undefined
 })
 
-defineExpose({ measureCurrent: () => (root ? measureFootprint(root) : null) })
+function captureThumb(size = 128): string | null {
+  if (!renderer || !scene || !camera || !root) return null
+  renderer.render(scene, camera)
+  const src = renderer.domElement
+  const out = document.createElement('canvas')
+  out.width = size
+  out.height = size
+  const ctx = out.getContext('2d')
+  if (!ctx) return null
+  const sw = src.width
+  const sh = src.height
+  if (sw <= 0 || sh <= 0) return null
+  const side = Math.min(sw, sh)
+  const sx = (sw - side) / 2
+  const sy = (sh - side) / 2
+  ctx.fillStyle = '#0e1621'
+  ctx.fillRect(0, 0, size, size)
+  ctx.drawImage(src, sx, sy, side, side, 0, 0, size, size)
+  return out.toDataURL('image/jpeg', 0.85)
+}
+
+defineExpose({
+  measureCurrent: () => (root ? measureFootprint(root) : null),
+  captureThumb
+})
 </script>
 
 <template>
