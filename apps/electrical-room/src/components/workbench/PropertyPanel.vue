@@ -1,6 +1,8 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import { cloneEnvironment } from '@mh/3d-editor'
 import type { EnvironmentJSON, WallJSON } from '@mh/3d-editor'
+import { parseCabinetIdFromCatalogLabel } from '@/business/catalog'
 
 export interface SelectedNodeForm {
   id: string
@@ -41,8 +43,13 @@ const emit = defineEmits<{
   'update:transform': []
   'update:enclosure': [env: EnvironmentJSON]
   'edit-panel': []
+  'edit-cabinet': []
   remove: []
 }>()
+
+const isCabinet = computed(
+  () => props.isScene && !!parseCabinetIdFromCatalogLabel(props.selectedNode.catalog)
+)
 
 function wallLength(wall: WallJSON): string {
   return Math.hypot(wall.b[0] - wall.a[0], wall.b[1] - wall.a[1]).toFixed(2)
@@ -161,6 +168,16 @@ function setEnclosure(kind: EnclosureKind) {
           </div>
         </el-form>
         <div class="kv">资产：{{ selectedNode.catalog }}</div>
+        <el-button
+          v-if="isCabinet"
+          type="primary"
+          plain
+          class="full"
+          @click="emit('edit-cabinet')"
+        >
+          编辑柜体
+        </el-button>
+        <span></span>
         <el-button
           v-if="isPanel"
           type="primary"

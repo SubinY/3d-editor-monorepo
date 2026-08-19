@@ -137,7 +137,25 @@ async function onPublish(json: EditorDocumentJSON) {
 }
 
 function onBack() {
+  const fromScene = typeof route.query.fromScene === 'string' ? route.query.fromScene : ''
+  if (kind === 'container' && fromScene) {
+    router.push(`/edit/scene/${fromScene}`)
+    return
+  }
   router.push(kind === 'scene' ? '/manage/rooms' : '/manage/cabinets')
+}
+
+async function onEditCabinet(payload: { cabinetId: string; json: EditorDocumentJSON }) {
+  try {
+    await api.saveDocument(payload.json, payload.json.name)
+    initial.value = payload.json
+    await router.push({
+      path: `/edit/container/${payload.cabinetId}`,
+      query: { fromScene: id }
+    })
+  } catch (e) {
+    ElMessage.error(e instanceof Error ? e.message : '进入柜体编辑失败')
+  }
 }
 </script>
 
@@ -152,6 +170,7 @@ function onBack() {
     :publishing="publishing"
     @save="onSave"
     @publish="onPublish"
+    @edit-cabinet="onEditCabinet"
     @back="onBack"
   />
 </template>

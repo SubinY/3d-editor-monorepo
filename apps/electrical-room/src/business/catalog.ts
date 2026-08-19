@@ -95,6 +95,16 @@ export function cabinetCatalogId(documentId: string): string {
   return `cabinet-${documentId}`
 }
 
+/** `cabinet-{id}@version` / `cabinet-{id}` → 业务柜 id */
+export function parseCabinetIdFromCatalogLabel(catalog: string): string | null {
+  if (!catalog || catalog === '-') return null
+  const at = catalog.indexOf('@')
+  const catalogId = at >= 0 ? catalog.slice(0, at) : catalog
+  if (!catalogId.startsWith('cabinet-')) return null
+  const id = catalogId.slice('cabinet-'.length)
+  return id || null
+}
+
 export function getEditingVersion(json: EditorDocumentJSON): string {
   const v = json.metadata?.editingVersion
   return typeof v === 'string' && v ? v : INITIAL_CABINET_VERSION

@@ -34,6 +34,7 @@ import {
 } from '@mh/3d-editor-twin'
 import { createProceduralResolvers } from '@/models/registry'
 import { panel } from '@mh/3d-editor-assets/common'
+import { parseCabinetIdFromCatalogLabel } from '@/business/catalog'
 
 const props = defineProps<{
   kind: DocumentKind
@@ -47,6 +48,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   save: [json: EditorDocumentJSON]
   publish: [json: EditorDocumentJSON]
+  'edit-cabinet': [payload: { cabinetId: string; json: EditorDocumentJSON }]
   back: []
 }>()
 
@@ -653,6 +655,14 @@ function openPanelEditor() {
   panelEditorOpen.value = true
 }
 
+function editCabinet() {
+  const cabinetId = parseCabinetIdFromCatalogLabel(selectedNode.catalog)
+  const d = doc.value
+  if (!cabinetId || !d || !isScene.value) return
+  d.name = docName.value || d.name
+  emit('edit-cabinet', { cabinetId, json: d.toJSON() })
+}
+
 async function confirmPanelEdit(content: panel.PanelContentJSON) {
   if (!selectedNode.id || !doc.value) return
   const node = doc.value.getNode(selectedNode.id)
@@ -736,6 +746,7 @@ async function confirmPanelEdit(content: panel.PanelContentJSON) {
         @update:twin="applyNodeTwin"
         @update:enclosure="applyEnvironment"
         @edit-panel="openPanelEditor"
+        @edit-cabinet="editCabinet"
         @remove="removeSelected"
         @apply-environment="applyEnvironment"
         @update:perf-stats-visible="setPerfStatsVisible"

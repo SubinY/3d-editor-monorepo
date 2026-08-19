@@ -30,6 +30,7 @@ const emit = defineEmits<{
   'update:twin': [value: TwinProps]
   'update:enclosure': [env: EnvironmentJSON]
   'edit-panel': []
+  'edit-cabinet': []
   remove: []
   'apply-environment': [env: EnvironmentJSON]
   'update:perfStatsVisible': [value: boolean]
@@ -69,6 +70,7 @@ watch(
           @update:transform="emit('update:transform')"
           @update:enclosure="emit('update:enclosure', $event)"
           @edit-panel="emit('edit-panel')"
+          @edit-cabinet="emit('edit-cabinet')"
           @remove="emit('remove')"
         />
       </el-tab-pane>
