@@ -10,6 +10,7 @@ defineProps<{
   canRedo: boolean
   canSnap: boolean
   editingVersion?: string
+  publishing?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -21,6 +22,7 @@ const emit = defineEmits<{
   'snap-surface': []
   'set-tool': [tool: EditorTool]
   save: []
+  publish: []
 }>()
 </script>
 
@@ -70,6 +72,13 @@ const emit = defineEmits<{
     <div v-else class="center" />
 
     <div class="right">
+      <el-button
+        v-if="isScene"
+        :loading="publishing"
+        @click="emit('publish')"
+      >
+        发布
+      </el-button>
       <el-button type="primary" @click="emit('save')">保存</el-button>
     </div>
   </header>

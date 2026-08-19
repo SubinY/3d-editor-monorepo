@@ -14,7 +14,7 @@ async function wipeDir(dir) {
   }
 }
 
-const dirs = ['documents/scenes', 'documents/containers']
+const dirs = ['documents/scenes', 'documents/containers', 'publishes']
 
 for (const rel of dirs) {
   await wipeDir(path.join(root, rel))

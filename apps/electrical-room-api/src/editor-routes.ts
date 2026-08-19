@@ -1,6 +1,6 @@
 /**
  * 日常编辑主面：layout + bootstrap（ApiEnvelope）。
- * Catalog / publish / AI 见 side-routes。
+ * 发布冻结包见 publish-routes。
  */
 import type { Express, Response } from 'express'
 import { buildContainerBootstrap, buildSceneBootstrap } from './bootstrap.js'

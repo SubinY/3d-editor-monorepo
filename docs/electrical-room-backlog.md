@@ -21,7 +21,9 @@
 ### 发布冻结包 + 监控首页
 
 - 原入口：`buildPublishBundle`、`/api/publishes`、`DashboardHome`、设为首页。
-- 何时接回：需要离线监控、不回活库 layout 时。
+- **已接回（本分支）**：多版本发布落盘；前端 `/#/published/:sceneId/:version` 用 PackCatalog 播监控；列表页展示最新版本并可切换历史版本。
+- 仍待接回：设为首页 / DashboardHome KPI 壳。
+- 何时接回首页：需要离线监控壳、站点级首页配置时。
 
 ### 双开门 / 户外柜壳
 

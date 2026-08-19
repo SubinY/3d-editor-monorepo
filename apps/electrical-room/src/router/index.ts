@@ -36,6 +36,11 @@ export const router = createRouter({
       name: 'preview',
       component: () => import('@/views/Preview.vue')
     },
+    {
+      path: '/published/:sceneId/:version',
+      name: 'published',
+      component: () => import('@/views/PublishedView.vue')
+    },
     { path: '/:pathMatch(.*)*', redirect: '/manage/rooms' }
   ]
 })

@@ -8,6 +8,7 @@ export const DATA_ROOT = path.resolve(__dirname, '../data')
 const DOCS_DIR = path.join(DATA_ROOT, 'documents')
 const SCENES_DIR = path.join(DOCS_DIR, 'scenes')
 const CONTAINERS_DIR = path.join(DOCS_DIR, 'containers')
+const PUBLISHES_DIR = path.join(DATA_ROOT, 'publishes')
 const COMM_PATH = path.join(DATA_ROOT, 'comm.json')
 
 export interface CommBundleRecord {
@@ -24,9 +25,27 @@ export interface DocumentRecord {
   name?: string
 }
 
+/** 与内核 PublishBundle 对齐的落盘形状；version 为场景内自增发布号 */
+export interface PublishBundleRecord {
+  document: Record<string, unknown>
+  assetPack: Record<string, unknown>
+  publishedAt: number
+  name: string
+  sceneId: string
+  version: number
+}
+
+export interface PublishVersionMeta {
+  sceneId: string
+  version: number
+  publishedAt: number
+  name: string
+}
+
 async function ensureDirs(): Promise<void> {
   await fs.mkdir(SCENES_DIR, { recursive: true })
   await fs.mkdir(CONTAINERS_DIR, { recursive: true })
+  await fs.mkdir(PUBLISHES_DIR, { recursive: true })
 }
 
 async function readJson<T>(filePath: string): Promise<T | undefined> {
@@ -135,4 +154,124 @@ export async function saveCommBundle(bundle: CommBundleRecord): Promise<CommBund
   const next: CommBundleRecord = { version: 1, sources: bundle.sources }
   await writeJson(COMM_PATH, next)
   return next
+}
+
+function publishSceneDir(sceneId: string): string {
+  return path.join(PUBLISHES_DIR, sceneId)
+}
+
+function publishVersionPath(sceneId: string, version: number): string {
+  return path.join(publishSceneDir(sceneId), `${version}.json`)
+}
+
+async function listVersionNumbers(sceneId: string): Promise<number[]> {
+  await ensureDirs()
+  let files: string[]
+  try {
+    files = await fs.readdir(publishSceneDir(sceneId))
+  } catch {
+    return []
+  }
+  const versions: number[] = []
+  for (const file of files) {
+    if (!file.endsWith('.json')) continue
+    const n = Number(file.slice(0, -5))
+    if (Number.isInteger(n) && n > 0) versions.push(n)
+  }
+  return versions.sort((a, b) => a - b)
+}
+
+export async function savePublish(
+  sceneId: string,
+  input: {
+    document: Record<string, unknown>
+    assetPack: Record<string, unknown>
+    name: string
+  }
+): Promise<PublishBundleRecord> {
+  await ensureDirs()
+  const existing = await listVersionNumbers(sceneId)
+  const version = (existing[existing.length - 1] ?? 0) + 1
+  const bundle: PublishBundleRecord = {
+    document: input.document,
+    assetPack: input.assetPack,
+    publishedAt: Date.now(),
+    name: input.name,
+    sceneId,
+    version
+  }
+  await writeJson(publishVersionPath(sceneId, version), bundle)
+  return bundle
+}
+
+export async function getPublish(
+  sceneId: string,
+  version: number
+): Promise<PublishBundleRecord | undefined> {
+  await ensureDirs()
+  if (!Number.isInteger(version) || version <= 0) return undefined
+  return readJson<PublishBundleRecord>(publishVersionPath(sceneId, version))
+}
+
+export async function getLatestPublish(
+  sceneId: string
+): Promise<PublishBundleRecord | undefined> {
+  const versions = await listVersionNumbers(sceneId)
+  const latest = versions[versions.length - 1]
+  if (latest == null) return undefined
+  return getPublish(sceneId, latest)
+}
+
+export async function listPublishVersions(sceneId: string): Promise<PublishVersionMeta[]> {
+  const versions = await listVersionNumbers(sceneId)
+  const items: PublishVersionMeta[] = []
+  for (const version of versions) {
+    const rec = await getPublish(sceneId, version)
+    if (!rec) continue
+    items.push({
+      sceneId,
+      version: rec.version,
+      publishedAt: rec.publishedAt,
+      name: rec.name
+    })
+  }
+  return items.sort((a, b) => b.version - a.version)
+}
+
+/** 各场景最新发布元信息（列表页用） */
+export async function listLatestPublishMeta(): Promise<PublishVersionMeta[]> {
+  await ensureDirs()
+  let entries: import('node:fs').Dirent[]
+  try {
+    entries = await fs.readdir(PUBLISHES_DIR, { withFileTypes: true })
+  } catch {
+    return []
+  }
+  const items: PublishVersionMeta[] = []
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue
+    const latest = await getLatestPublish(entry.name)
+    if (!latest) continue
+    items.push({
+      sceneId: entry.name,
+      version: latest.version,
+      publishedAt: latest.publishedAt,
+      name: latest.name
+    })
+  }
+  return items
+}
+
+export async function deletePublish(sceneId: string, version?: number): Promise<boolean> {
+  await ensureDirs()
+  try {
+    if (version != null) {
+      await fs.unlink(publishVersionPath(sceneId, version))
+      return true
+    }
+    await fs.rm(publishSceneDir(sceneId), { recursive: true, force: true })
+    return true
+  } catch {
+    return false
+  }
 }

@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
-import { createEmptyDocumentJSON } from '@mh/3d-editor'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { buildPublishBundle, createEmptyDocumentJSON } from '@mh/3d-editor'
 import type { CatalogProvider, DocumentKind, EditorDocumentJSON } from '@mh/3d-editor'
 import Workbench from '@/components/Workbench.vue'
 import {
@@ -26,6 +26,7 @@ const initial = ref<EditorDocumentJSON | null>(null)
 const catalog = ref<CatalogProvider | null>(null)
 const editingVersion = ref('1.0.0')
 const loading = ref(true)
+const publishing = ref(false)
 
 onMounted(async () => {
   try {
@@ -100,6 +101,41 @@ async function onSave(json: EditorDocumentJSON) {
   }
 }
 
+async function onPublish(json: EditorDocumentJSON) {
+  if (!catalog.value || json.kind !== 'scene') return
+  if (publishing.value) return
+  publishing.value = true
+  try {
+    await api.saveDocument(json, json.name)
+    initial.value = json
+    const bundle = await buildPublishBundle(json, catalog.value)
+    const saved = await api.publishScene(json.id, bundle)
+    const url = api.publishedMonitorUrl(saved.sceneId, saved.version)
+    const path = api.publishedMonitorPath(saved.sceneId, saved.version)
+    try {
+      await navigator.clipboard.writeText(url)
+      ElMessage.success(`已发布 v${saved.version}，监控地址已复制`)
+    } catch {
+      ElMessage.success(`已发布 v${saved.version}`)
+    }
+    await ElMessageBox.confirm(
+      `${url}\n\n这是冻结发布包的 3D 监控页（v${saved.version}）。`,
+      '发布成功',
+      {
+        confirmButtonText: '打开监控页',
+        cancelButtonText: '关闭',
+        distinguishCancelAndClose: true
+      }
+    )
+      .then(() => router.push(path))
+      .catch(() => undefined)
+  } catch (e) {
+    ElMessage.error(e instanceof Error ? e.message : '发布失败')
+  } finally {
+    publishing.value = false
+  }
+}
+
 function onBack() {
   router.push(kind === 'scene' ? '/manage/rooms' : '/manage/cabinets')
 }
@@ -113,7 +149,9 @@ function onBack() {
     :catalog="catalog"
     :initial="initial"
     :editing-version="kind === 'container' ? editingVersion : undefined"
+    :publishing="publishing"
     @save="onSave"
+    @publish="onPublish"
     @back="onBack"
   />
 </template>

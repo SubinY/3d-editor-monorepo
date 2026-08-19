@@ -41,10 +41,12 @@ const props = defineProps<{
   initial: EditorDocumentJSON
   /** container 当前编辑版本，仅展示 */
   editingVersion?: string
+  publishing?: boolean
 }>()
 
 const emit = defineEmits<{
   save: [json: EditorDocumentJSON]
+  publish: [json: EditorDocumentJSON]
   back: []
 }>()
 
@@ -511,6 +513,13 @@ function save() {
   emit('save', d.toJSON())
 }
 
+function publish() {
+  const d = doc.value
+  if (!d) return
+  d.name = docName.value || d.name
+  emit('publish', d.toJSON())
+}
+
 function onAssetDragStart(event: DragEvent, item: CatalogItem) {
   if (!event.dataTransfer) return
   event.dataTransfer.setData(CATALOG_ITEM_MIME, JSON.stringify(item))
@@ -668,6 +677,7 @@ async function confirmPanelEdit(content: panel.PanelContentJSON) {
       :can-redo="canRedo"
       :can-snap="!!selectedId"
       :editing-version="editingVersion"
+      :publishing="publishing"
       @back="emit('back')"
       @undo="undo"
       @redo="redo"
@@ -675,6 +685,7 @@ async function confirmPanelEdit(content: panel.PanelContentJSON) {
       @snap-surface="snapSurface"
       @set-tool="setTool"
       @save="save"
+      @publish="publish"
     />
 
     <div class="body">

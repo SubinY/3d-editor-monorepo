@@ -7,30 +7,49 @@ import type { EditorDocumentJSON } from '@mh/3d-editor'
 import { DEFAULT_SCENE_BOUNDS } from '@/business/catalog'
 import { createDemoSceneJSON } from '@/business/demo-scene'
 import * as api from '@/business/api'
-import type { DocumentRecord } from '@/business/api'
+import type { DocumentRecord, PublishVersionMeta } from '@/business/api'
 
 const router = useRouter()
 const loading = ref(true)
 const rows = ref<DocumentRecord[]>([])
+const latestPublish = ref<Record<string, PublishVersionMeta>>({})
 const creating = ref(false)
 const form = reactive({ name: '', location: '', ...DEFAULT_SCENE_BOUNDS })
 
+const versionsOpen = ref(false)
+const versionsLoading = ref(false)
+const versionsSceneId = ref('')
+const versionsSceneName = ref('')
+const versionRows = ref<PublishVersionMeta[]>([])
+
 const tableRows = computed(() =>
-  rows.value.map(entry => ({
-    id: entry.json.id,
-    name: entry.json.name,
-    location: String(entry.json.metadata?.location ?? '—'),
-    size: boundsLabel(entry.json),
-    walls: entry.json.structure?.walls?.length ?? 0,
-    devices: entry.json.nodes.length,
-    updatedAt: entry.updatedAt
-  }))
+  rows.value.map(entry => {
+    const pub = latestPublish.value[entry.json.id]
+    return {
+      id: entry.json.id,
+      name: entry.json.name,
+      location: String(entry.json.metadata?.location ?? '—'),
+      size: boundsLabel(entry.json),
+      walls: entry.json.structure?.walls?.length ?? 0,
+      devices: entry.json.nodes.length,
+      updatedAt: entry.updatedAt,
+      publishVersion: pub?.version,
+      publishedAt: pub?.publishedAt
+    }
+  })
 )
 
 async function refresh() {
   loading.value = true
   try {
-    rows.value = await api.listScenes()
+    const [scenes, publishes] = await Promise.all([
+      api.listScenes(),
+      api.listLatestPublishes().catch(() => [] as PublishVersionMeta[])
+    ])
+    rows.value = scenes
+    const map: Record<string, PublishVersionMeta> = {}
+    for (const p of publishes) map[p.sceneId] = p
+    latestPublish.value = map
   } catch (e) {
     ElMessage.error(e instanceof Error ? e.message : '加载失败')
   } finally {
@@ -91,6 +110,26 @@ async function remove(id: string, name: string) {
   ElMessage.success('已删除')
   await refresh()
 }
+
+async function openVersions(row: { id: string; name: string }) {
+  versionsSceneId.value = row.id
+  versionsSceneName.value = row.name
+  versionsOpen.value = true
+  versionsLoading.value = true
+  versionRows.value = []
+  try {
+    versionRows.value = await api.listPublishVersions(row.id)
+  } catch (e) {
+    ElMessage.error(e instanceof Error ? e.message : '加载版本失败')
+  } finally {
+    versionsLoading.value = false
+  }
+}
+
+function openPublished(sceneId: string, version: number) {
+  versionsOpen.value = false
+  router.push(api.publishedMonitorPath(sceneId, version))
+}
 </script>
 
 <template>
@@ -120,12 +159,27 @@ async function remove(id: string, name: string) {
       <el-table-column label="墙/设备" width="100">
         <template #default="{ row }">{{ row.walls }} / {{ row.devices }}</template>
       </el-table-column>
+      <el-table-column label="已发布" width="110">
+        <template #default="{ row }">
+          <el-button
+            v-if="row.publishVersion"
+            link
+            type="success"
+            @click="openVersions(row)"
+          >
+            v{{ row.publishVersion }}
+          </el-button>
+          <span v-else class="muted">未发布</span>
+        </template>
+      </el-table-column>
       <el-table-column label="更新时间" min-width="160">
         <template #default="{ row }">{{ timeLabel(row.updatedAt) }}</template>
       </el-table-column>
       <el-table-column label="操作" width="220" fixed="right">
         <template #default="{ row }">
-          <el-button link type="primary" @click="router.push(`/edit/scene/${row.id}`)">设计</el-button>
+          <el-button link type="primary" @click="router.push(`/edit/scene/${row.id}`)">
+            设计
+          </el-button>
           <el-button link @click="router.push(`/preview/${row.id}`)">预览</el-button>
           <el-button link type="danger" @click="remove(row.id, row.name)">删除</el-button>
         </template>
@@ -176,6 +230,42 @@ async function remove(id: string, name: string) {
         <el-button type="primary" @click="submitCreate">创建并进入编辑器</el-button>
       </template>
     </el-dialog>
+
+    <el-dialog
+      v-model="versionsOpen"
+      :title="`发布版本 · ${versionsSceneName}`"
+      width="520px"
+      align-center
+    >
+      <el-table
+        v-loading="versionsLoading"
+        :data="versionRows"
+        class="table"
+        empty-text="暂无发布版本"
+        max-height="360"
+      >
+        <el-table-column label="版本" width="90">
+          <template #default="{ row }">
+            <el-button link type="primary" @click="openPublished(row.sceneId, row.version)">
+              v{{ row.version }}
+            </el-button>
+          </template>
+        </el-table-column>
+        <el-table-column label="名称" min-width="140" show-overflow-tooltip>
+          <template #default="{ row }">{{ row.name }}</template>
+        </el-table-column>
+        <el-table-column label="发布时间" min-width="160">
+          <template #default="{ row }">{{ timeLabel(row.publishedAt) }}</template>
+        </el-table-column>
+        <el-table-column label="操作" width="100">
+          <template #default="{ row }">
+            <el-button link type="primary" @click="openPublished(row.sceneId, row.version)">
+              打开
+            </el-button>
+          </template>
+        </el-table-column>
+      </el-table>
+    </el-dialog>
   </div>
 </template>
 
@@ -207,6 +297,10 @@ h1 {
 .actions {
   display: flex;
   gap: 8px;
+}
+.muted {
+  color: #6d8199;
+  font-size: 13px;
 }
 .table {
   width: 100%;

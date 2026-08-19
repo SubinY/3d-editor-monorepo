@@ -3,6 +3,7 @@ import cors from 'cors'
 import { registerEditorRoutes } from './editor-routes.js'
 import { loadDotEnv } from './env.js'
 import { unhandledErrorMiddleware } from './http.js'
+import { registerPublishRoutes } from './publish-routes.js'
 import { initStore } from './store.js'
 import { attachTwinWebSocket, registerTwinHttpRoutes } from './twin-routes.js'
 
@@ -21,6 +22,7 @@ async function main() {
   })
 
   registerEditorRoutes(app)
+  registerPublishRoutes(app)
   registerTwinHttpRoutes(app)
 
   app.use(unhandledErrorMiddleware)

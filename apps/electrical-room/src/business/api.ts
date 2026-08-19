@@ -1,4 +1,4 @@
-import type { EditorDocumentJSON } from '@mh/3d-editor'
+import type { EditorDocumentJSON, PublishBundle } from '@mh/3d-editor'
 import type { CommBundle } from './comm-types'
 
 const BASE = '/api'
@@ -156,4 +156,71 @@ export async function putCommBundle(bundle: CommBundle): Promise<CommBundle> {
     method: 'PUT',
     body: JSON.stringify(bundle)
   })
+}
+
+/** 冻结发布包；每次发布自增 version */
+export interface PublishedBundle extends PublishBundle {
+  sceneId: string
+  version: number
+  publishedAt: number
+  name: string
+}
+
+export interface PublishVersionMeta {
+  sceneId: string
+  version: number
+  publishedAt: number
+  name: string
+}
+
+export async function publishScene(
+  sceneId: string,
+  bundle: PublishBundle
+): Promise<PublishedBundle> {
+  return request(`/editor/scenes/${encodeURIComponent(sceneId)}/publish`, {
+    method: 'POST',
+    body: JSON.stringify(bundle)
+  })
+}
+
+/** 各场景最新发布摘要 */
+export async function listLatestPublishes(): Promise<PublishVersionMeta[]> {
+  const data = await request<{ items: PublishVersionMeta[] }>('/publishes')
+  return data.items ?? []
+}
+
+export async function listPublishVersions(sceneId: string): Promise<PublishVersionMeta[]> {
+  const data = await request<{ items: PublishVersionMeta[] }>(
+    `/publishes/${encodeURIComponent(sceneId)}/versions`
+  )
+  return data.items ?? []
+}
+
+/** 读取已发布包（GET 无 envelope） */
+export async function getPublish(
+  sceneId: string,
+  version?: number
+): Promise<PublishedBundle | undefined> {
+  try {
+    const suffix =
+      version != null
+        ? `/${encodeURIComponent(sceneId)}/${version}`
+        : `/${encodeURIComponent(sceneId)}`
+    return await request(`/publishes${suffix}`)
+  } catch {
+    return undefined
+  }
+}
+
+/** 前端 3D 监控页路由 path（hash 路由） */
+export function publishedMonitorPath(sceneId: string, version: number): string {
+  return `/published/${encodeURIComponent(sceneId)}/${version}`
+}
+
+/** 可分享的前端监控页完整 URL */
+export function publishedMonitorUrl(sceneId: string, version: number): string {
+  const hashPath = publishedMonitorPath(sceneId, version)
+  if (typeof window === 'undefined') return `#${hashPath}`
+  const base = `${window.location.origin}${window.location.pathname}`
+  return `${base}#${hashPath}`
 }
