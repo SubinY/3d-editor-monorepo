@@ -648,7 +648,7 @@ function cloneNode(
 ): EditorNodeJSON {
   const clone: EditorNodeJSON = JSON.parse(JSON.stringify(src))
   delete (clone as { children?: unknown }).children
-  clone.id = crypto.randomUUID()
+  clone.id = createId('node')
   if (opts.name !== undefined) clone.name = opts.name
   if (opts.offset) {
     const p = clone.transform.position

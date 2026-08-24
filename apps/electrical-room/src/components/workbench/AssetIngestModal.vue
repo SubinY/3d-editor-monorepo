@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
-import type { CatalogItem, DocumentKind } from '@mh/3d-editor'
+import { createId, type CatalogItem, type DocumentKind } from '@mh/3d-editor'
 import * as api from '@/business/api'
 import AssetPreviewViewport from './AssetPreviewViewport.vue'
 import type { PreviewSpec } from './AssetPreviewViewport.vue'
@@ -26,7 +26,7 @@ const footprint = reactive({ width: 0.1, depth: 0.1, height: 0.14 })
 const placeScene = ref(false)
 const placeContainer = ref(true)
 const category = ref<'component' | 'equipment'>('component')
-const draftId = ref(`draft-${crypto.randomUUID().slice(0, 8)}`)
+const draftId = ref(createId('draft'))
 const version = ref('1.0.0')
 const sourceLabel = ref('本地')
 
@@ -92,7 +92,7 @@ function resetForOpen() {
 
   sourceTab.value = 'local'
   name.value = ''
-  draftId.value = `draft-${crypto.randomUUID().slice(0, 8)}`
+  draftId.value = createId('draft')
   version.value = '1.0.0'
   sourceLabel.value = '本地'
   localFileName.value = ''

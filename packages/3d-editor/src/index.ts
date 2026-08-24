@@ -14,6 +14,7 @@ export {
   cloneEnvironment
 } from './document/defaults'
 export { createEmptyDocumentJSON } from './document/serialize'
+export { createId, randomUUID } from './utils/id'
 export { isDocumentItem } from './catalog/types'
 export { MH_ASSET_HANDLE_KEY, getAssetHandle } from './catalog/asset-handle'
 export { runProceduralResolvers } from './catalog/run-procedural-resolvers'
