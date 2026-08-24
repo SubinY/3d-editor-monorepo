@@ -33,6 +33,9 @@ export interface CameraPoseSnapshot {
 
 export type CameraPoseHandler = (pose: CameraPoseSnapshot) => void
 
+/** 渲染循环回调；nowMs = performance.now() */
+export type FrameHandler = (nowMs: number) => void
+
 export interface ThreeRuntimeOptions {
   container: HTMLElement
   /** false 时不创建 gizmo（只读预览） */
@@ -61,6 +64,7 @@ export class ThreeRuntime {
   private transformBefore?: TransformSnapshot
   private transformEndHandlers = new Set<TransformEndHandler>()
   private cameraPoseHandlers = new Set<CameraPoseHandler>()
+  private frameHandlers = new Set<FrameHandler>()
   private suppressPoseEvents = false
   private raycaster = new THREE.Raycaster()
   private pointer = new THREE.Vector2()
@@ -202,6 +206,12 @@ export class ThreeRuntime {
   onCameraPoseChange(handler: CameraPoseHandler): () => void {
     this.cameraPoseHandlers.add(handler)
     return () => this.cameraPoseHandlers.delete(handler)
+  }
+
+  /** 每帧渲染前回调（视觉脉冲等）；返回取消订阅 */
+  onFrame(handler: FrameHandler): () => void {
+    this.frameHandlers.add(handler)
+    return () => this.frameHandlers.delete(handler)
   }
 
   attachTransform(object: THREE.Object3D | null): void {
@@ -409,6 +419,7 @@ export class ThreeRuntime {
     this.renderer.domElement.remove()
     this.transformEndHandlers.clear()
     this.cameraPoseHandlers.clear()
+    this.frameHandlers.clear()
   }
 
   private applyOrbitPolicy(mode: CameraViewType): void {
@@ -440,6 +451,10 @@ export class ThreeRuntime {
 
   private startLoop(): void {
     const step = () => {
+      const nowMs = performance.now()
+      if (this.frameHandlers.size > 0) {
+        this.frameHandlers.forEach(handler => handler(nowMs))
+      }
       this.orbit.update()
       const t0 = performance.now()
       this.renderer.render(this.scene, this._camera)

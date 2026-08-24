@@ -16,7 +16,7 @@ export interface TwinRuleWhen {
 
 /**
  * 规则命中后写入的槽位字典。
- * v1 播放器只执行 `highlight`（效果令牌字符串）；其它 key 忽略。
+ * 播放器执行 `highlight`（效果令牌）；可选 `animation`: `'constant' | 'blink'` 控制是否脉冲。
  */
 export interface TwinRuleThen {
   slots: Record<string, unknown>
@@ -61,7 +61,10 @@ export interface DataSource {
 
 /** 视口鸭子类型：只需刷色 API */
 export interface TwinViewport {
-  setNodeVisualState(nodePath: string, state: { color?: string | null; intensity?: number }): void
+  setNodeVisualState(
+    nodePath: string,
+    state: { color?: string | null; intensity?: number; pulse?: boolean; pulseHz?: number }
+  ): void
   clearVisualStates(): void
 }
 

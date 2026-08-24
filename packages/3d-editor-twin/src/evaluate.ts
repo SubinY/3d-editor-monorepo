@@ -75,18 +75,23 @@ export function defaultRankHighlight(effect: string): number {
   return DEFAULT_HIGHLIGHT_RANK[effect] ?? 0
 }
 
+/** 命中规则的 highlight 令牌 + 完整 then.slots（供 Host 读 animation 等） */
+export interface HighlightHit {
+  effect: string
+  slots: Record<string, unknown>
+}
+
 /**
- * 求值规则 → highlight 令牌。
+ * 求值规则 → 最高 rank 命中。
  * 仅当 point 已在 twin.points 中声明才生效；多命中取 rank 最高。
- * 无命中返回 null。
  */
-export function evaluateHighlight(
+export function evaluateHighlightHit(
   twin: TwinProps,
   values: PointValueMap,
   rankHighlight: (effect: string) => number = defaultRankHighlight
-): string | null {
+): HighlightHit | null {
   const boundKeys = new Set(twin.points.map(p => p.key))
-  let best: string | null = null
+  let best: HighlightHit | null = null
   let bestRank = -1
   for (const rule of twin.rules ?? []) {
     if (rule.enabled === false) continue
@@ -98,9 +103,22 @@ export function evaluateHighlight(
     if (typeof effect !== 'string' || !effect) continue
     const rank = rankHighlight(effect)
     if (!best || rank > bestRank) {
-      best = effect
+      best = { effect, slots: { ...rule.then.slots } }
       bestRank = rank
     }
   }
   return best
+}
+
+/**
+ * 求值规则 → highlight 令牌。
+ * 仅当 point 已在 twin.points 中声明才生效；多命中取 rank 最高。
+ * 无命中返回 null。
+ */
+export function evaluateHighlight(
+  twin: TwinProps,
+  values: PointValueMap,
+  rankHighlight: (effect: string) => number = defaultRankHighlight
+): string | null {
+  return evaluateHighlightHit(twin, values, rankHighlight)?.effect ?? null
 }

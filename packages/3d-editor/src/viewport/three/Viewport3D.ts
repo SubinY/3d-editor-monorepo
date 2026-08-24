@@ -75,6 +75,8 @@ export type EnterIndoorViewOptions = CreateIndoorDefaultViewOptions & {
 
 /** 嵌套解析深度上限（D2：scene → container → 元件） */
 const MAX_RESOLVE_DEPTH = 2
+/** 故障脉冲默认频率 */
+const DEFAULT_PULSE_HZ = 1.2
 
 interface MaterialBackup {
   color?: THREE.Color
@@ -124,6 +126,8 @@ export class Viewport3D {
   private unsubscribers: Array<() => void> = []
   private disposed = false
   private visualStates = new Map<string, VisualState>()
+  /** 临时色，避免每帧 new Color */
+  private readonly pulseHighlight = new THREE.Color()
   private selection: SelectionService
   private hoverHighlight: HoverHighlight
   private environment: EnvironmentService
@@ -261,6 +265,7 @@ export class Viewport3D {
     dom.addEventListener('pointerleave', this.selection.handlePointerLeave)
     window.addEventListener('resize', this.handleHoverResize)
     this.handleHoverResize()
+    this.unsubscribers.push(this.runtime.onFrame(this.tickVisualPulse))
   }
 
   // -- 环境 / 相机 -------------------------------------------------------------
@@ -925,7 +930,11 @@ export class Viewport3D {
    * 路径寻址：顶层节点为 nodeId；嵌套元件为 `${sceneNodeId}/${childNodeId}`。
    */
   setNodeVisualState(nodePath: string, state: VisualState): void {
-    this.visualStates.set(nodePath, state)
+    if (state.color == null && !state.pulse) {
+      this.visualStates.delete(nodePath)
+    } else {
+      this.visualStates.set(nodePath, state)
+    }
     this.applyVisualState(nodePath, state)
   }
 
@@ -936,10 +945,27 @@ export class Viewport3D {
     this.visualStates.clear()
   }
 
+  /** 对 pulse 节点按 sine 调制 intensity；无脉冲时零成本 */
+  private tickVisualPulse = (nowMs: number): void => {
+    if (this.disposed || this.visualStates.size === 0) return
+    for (const [path, state] of this.visualStates) {
+      if (!state.pulse || state.color == null) continue
+      const hz = state.pulseHz ?? DEFAULT_PULSE_HZ
+      const wave = 0.5 + 0.5 * Math.sin(nowMs * 0.001 * hz * Math.PI * 2)
+      const base = state.intensity ?? 1
+      const intensity = base * (0.28 + 0.72 * wave)
+      this.applyVisualState(path, { color: state.color, intensity })
+    }
+  }
+
   private applyVisualState(nodePath: string, state: VisualState): void {
     const object = this.pathObjects.get(nodePath)
     if (!object) return
     const highlightColor = state.color ?? null
+    const intensity =
+      highlightColor == null
+        ? 1
+        : Math.min(1, Math.max(0, state.intensity ?? 1))
 
     // 嵌套 path（如 父id/子id）的根物体：父级高亮不得进入其子树
     const nestedRoots: THREE.Object3D[] = []
@@ -976,11 +1002,13 @@ export class Viewport3D {
             current.emissiveIntensity = backup.emissiveIntensity ?? 1
           }
         } else {
-          current.color.set(highlightColor)
+          this.pulseHighlight.set(highlightColor)
+          // albedo：原色 → 告警色，按 intensity 混合
+          current.color.copy(backup.color!).lerp(this.pulseHighlight, Math.max(0.35, intensity))
           if (backup.hasMap) current.map = null
           if (current.emissive) {
-            current.emissive.setHex(0x000000)
-            current.emissiveIntensity = 1
+            current.emissive.copy(this.pulseHighlight)
+            current.emissiveIntensity = 0.15 + 0.85 * intensity
           }
         }
         current.needsUpdate = true

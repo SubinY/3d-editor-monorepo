@@ -12,9 +12,16 @@ export const DEVICE_STATUS_META: Record<
   offline: { label: '离线', color: '#64748B', runLabel: '离线' }
 }
 
-/** Host 状态 → 内核 VisualState（不落库） */
+/** Host 状态 → 内核 VisualState（不落库）；fault 脉冲闪烁 */
 export function toVisualState(status: DeviceStatus, intensity = 1): VisualState {
   if (status === 'normal') return { color: null }
+  if (status === 'fault') {
+    return {
+      color: DEVICE_STATUS_META.fault.color,
+      intensity,
+      pulse: true
+    }
+  }
   return {
     color: DEVICE_STATUS_META[status].color,
     intensity

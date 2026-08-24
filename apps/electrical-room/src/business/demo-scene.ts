@@ -53,7 +53,7 @@ export async function createDemoSceneJSON(): Promise<EditorDocumentJSON> {
                 createTwinRule({
                   name: '过温故障',
                   when: { point: 'temp', op: 'gt', value: 60 },
-                  then: { slots: { highlight: 'fault' } }
+                  then: { slots: { highlight: 'fault', animation: 'blink' } }
                 })
               ]
             }
@@ -66,7 +66,7 @@ export async function createDemoSceneJSON(): Promise<EditorDocumentJSON> {
                   createTwinRule({
                     name: '告警码',
                     when: { point: 'alarm', op: 'eq', value: 1 },
-                    then: { slots: { highlight: 'warning' } }
+                    then: { slots: { highlight: 'warning', animation: 'constant' } }
                   })
                 ]
               }

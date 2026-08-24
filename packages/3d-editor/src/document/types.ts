@@ -185,6 +185,10 @@ export interface EditorDocumentJSON {
 export interface VisualState {
   /** 本体高亮色；省略或 null = 还原材质（含贴图） */
   color?: string | null
-  /** 0–1，仅在有 color 时生效，默认 1 */
+  /** 0–1，仅在有 color 时生效，默认 1；驱动 emissive 强弱 */
   intensity?: number
+  /** 在渲染循环内按 sine 脉冲 intensity（故障闪烁）；需同时有 color */
+  pulse?: boolean
+  /** 脉冲频率 Hz；默认 1.2 */
+  pulseHz?: number
 }

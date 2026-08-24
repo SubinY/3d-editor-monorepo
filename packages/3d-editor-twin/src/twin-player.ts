@@ -1,4 +1,4 @@
-import { evaluateHighlight, PointValueStore, defaultRankHighlight } from './evaluate'
+import { evaluateHighlightHit, PointValueStore, defaultRankHighlight } from './evaluate'
 import { readTwin, resolveTwinId } from './twin-props'
 import type {
   DataSource,
@@ -10,7 +10,12 @@ import type {
   TwinViewport
 } from './types'
 
-export type VisualStateLike = { color?: string | null; intensity?: number }
+export type VisualStateLike = {
+  color?: string | null
+  intensity?: number
+  pulse?: boolean
+  pulseHz?: number
+}
 
 /** 解析一层嵌套 document nodes（如柜内元件）；未实现则只扫顶层 */
 export type ResolveNested = (
@@ -188,7 +193,8 @@ export class TwinPlayer {
 
     for (const target of this.targets) {
       const values = this.store.getAllForTwin(target.twinId)
-      const effect = evaluateHighlight(target.twin, values, rank)
+      const hit = evaluateHighlightHit(target.twin, values, rank)
+      const effect = hit?.effect ?? null
       const info = {
         path: target.path,
         label: target.label,
@@ -198,7 +204,11 @@ export class TwinPlayer {
       results.push(info)
       this.opts.onHighlight?.(info)
       if (!effect || effect === 'normal') continue
-      this.opts.viewport.setNodeVisualState(target.path, this.opts.mapHighlight(effect))
+      const state = { ...this.opts.mapHighlight(effect) }
+      const animation = hit?.slots.animation
+      if (animation === 'blink') state.pulse = true
+      else if (animation === 'constant') state.pulse = false
+      this.opts.viewport.setNodeVisualState(target.path, state)
       nextPainted.add(target.path)
     }
     this.painted = nextPainted

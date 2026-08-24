@@ -36,9 +36,10 @@ export {
   compareCondition,
   DEFAULT_HIGHLIGHT_RANK,
   defaultRankHighlight,
-  evaluateHighlight
+  evaluateHighlight,
+  evaluateHighlightHit
 } from './evaluate'
-export type { PointValueMap } from './evaluate'
+export type { HighlightHit, PointValueMap } from './evaluate'
 
 export {
   createCompositeDataSource,

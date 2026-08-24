@@ -12,7 +12,7 @@ import {
   type CommSource
 } from '@/business/comm-types'
 import { CONDITION_OP_LABELS, pointLabel } from '@/business/point-dictionary'
-import { DEVICE_STATUS_OPTIONS, type DeviceStatus } from '@/business/device-status'
+import { DEVICE_STATUS_OPTIONS, HIGHLIGHT_ANIMATION_OPTIONS, isHighlightAnimation, type DeviceStatus, type HighlightAnimation } from '@/business/device-status'
 
 const props = defineProps<{
   nodeId: string
@@ -162,6 +162,7 @@ const eventForm = reactive({
   op: 'gt' as ConditionOp,
   value: 80 as number | string,
   highlight: 'fault' as DeviceStatus,
+  animation: 'blink' as HighlightAnimation,
   enabled: true
 })
 
@@ -179,6 +180,7 @@ function openAddEvent() {
   eventForm.op = 'gt'
   eventForm.value = 80
   eventForm.highlight = 'fault'
+  eventForm.animation = 'blink'
   eventForm.enabled = true
   eventDialogVisible.value = true
 }
@@ -192,6 +194,9 @@ function openEditEvent(rule: TwinRule) {
   eventForm.highlight = (typeof rule.then.slots.highlight === 'string'
     ? rule.then.slots.highlight
     : 'fault') as DeviceStatus
+  eventForm.animation = isHighlightAnimation(rule.then.slots.animation)
+    ? rule.then.slots.animation
+    : 'constant'
   eventForm.enabled = rule.enabled !== false
   eventDialogVisible.value = true
 }
@@ -206,7 +211,12 @@ function confirmEvent() {
       op: eventForm.op,
       value: Number.isFinite(Number(eventForm.value)) ? Number(eventForm.value) : eventForm.value
     },
-    then: { slots: { highlight: eventForm.highlight } },
+    then: {
+      slots: {
+        highlight: eventForm.highlight,
+        animation: eventForm.animation
+      }
+    },
     enabled: eventForm.enabled
   })
   const rules = local.rules ?? (local.rules = [])
@@ -242,7 +252,11 @@ function ruleSummary(rule: TwinRule): string {
     typeof hlRaw === 'string'
       ? (DEVICE_STATUS_OPTIONS.find(o => o.value === hlRaw)?.label ?? hlRaw)
       : '?'
-  return `${label} ${op} ${rule.when.value} → ${hl}`
+  const animRaw = rule.then.slots.animation
+  const anim = isHighlightAnimation(animRaw)
+    ? (HIGHLIGHT_ANIMATION_OPTIONS.find(o => o.value === animRaw)?.label ?? animRaw)
+    : '常量'
+  return `${label} ${op} ${rule.when.value} → ${hl}（${anim}）`
 }
 
 const navItems = [
@@ -314,7 +328,7 @@ const navItems = [
             新增
           </el-button>
         </div>
-        <p class="hint">条件满足后写入 slots.highlight 效果令牌（色板由 Host 映射）。</p>
+        <p class="hint">条件满足后写入 slots.highlight / slots.animation（色板与脉冲由 Host 映射）。</p>
         <div v-if="!(local.rules && local.rules.length)" class="empty">尚未配置事件</div>
         <ul v-else class="list">
           <li v-for="rule in local.rules" :key="rule.id" class="list-item">
@@ -427,6 +441,16 @@ const navItems = [
           <el-select v-model="eventForm.highlight" style="width: 100%">
             <el-option
               v-for="opt in DEVICE_STATUS_OPTIONS"
+              :key="opt.value"
+              :label="opt.label"
+              :value="opt.value"
+            />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="动画效果">
+          <el-select v-model="eventForm.animation" style="width: 100%">
+            <el-option
+              v-for="opt in HIGHLIGHT_ANIMATION_OPTIONS"
               :key="opt.value"
               :label="opt.label"
               :value="opt.value"
