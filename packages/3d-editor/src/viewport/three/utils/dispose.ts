@@ -35,6 +35,11 @@ function disposeAssetHandle(object: THREE.Object3D): void {
  */
 export function disposeObject3D(root: THREE.Object3D): void {
   root.traverse(child => {
+    if (child.userData.gltfShared) {
+      disposeAssetHandle(child)
+      disposeShadowMap(child)
+      return
+    }
     disposeAssetHandle(child)
     disposeShadowMap(child)
 

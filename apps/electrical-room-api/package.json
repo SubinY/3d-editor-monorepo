@@ -8,9 +8,14 @@
     "start": "tsx src/index.ts"
   },
   "dependencies": {
+    "@gltf-transform/core": "^4.4.2",
+    "@gltf-transform/extensions": "^4.4.2",
+    "@gltf-transform/functions": "^4.4.2",
     "cors": "^2.8.5",
     "esbuild": "^0.28.1",
     "express": "^4.21.2",
+    "meshoptimizer": "^1.2.0",
+    "sharp": "^0.35.4",
     "ws": "^8.18.0"
   },
   "devDependencies": {

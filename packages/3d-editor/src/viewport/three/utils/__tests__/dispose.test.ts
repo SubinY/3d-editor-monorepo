@@ -65,4 +65,21 @@ describe('disposeObject3D', () => {
     expect(geoDispose).toHaveBeenCalledOnce()
     expect(mapDispose).toHaveBeenCalledOnce()
   })
+
+  it('gltfShared 克隆不释放共享 geometry / 材质', () => {
+    const geo = new THREE.BoxGeometry(1, 1, 1)
+    const geoDispose = vi.spyOn(geo, 'dispose')
+    const mat = new THREE.MeshStandardMaterial()
+    const matDispose = vi.spyOn(mat, 'dispose')
+    const mesh = new THREE.Mesh(geo, mat)
+    mesh.userData.gltfShared = true
+    const root = new THREE.Group()
+    root.userData.gltfShared = true
+    root.add(mesh)
+
+    disposeObject3D(root)
+
+    expect(geoDispose).not.toHaveBeenCalled()
+    expect(matDispose).not.toHaveBeenCalled()
+  })
 })

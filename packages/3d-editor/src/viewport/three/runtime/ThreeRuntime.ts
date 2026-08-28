@@ -4,6 +4,7 @@ import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import { TransformControls } from 'three/examples/jsm/controls/TransformControls.js'
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
+import { clone as cloneGltfGraph } from 'three/examples/jsm/utils/SkeletonUtils.js'
 import { DEFAULT_TRANSLATION_SNAP } from '../../../core/interaction'
 import {
   cameraPoseAlongAxis,
@@ -11,6 +12,7 @@ import {
   type AxisHit
 } from '../helpers/world-view-gizmo'
 import { PerfStatsOverlay } from '../helpers/perf-stats-overlay'
+import { disposeObject3D } from '../utils/dispose'
 
 export interface TransformSnapshot {
   position: [number, number, number]
@@ -90,6 +92,8 @@ export class ThreeRuntime {
   private quat = new THREE.Quaternion()
   private quatInverse = new THREE.Quaternion()
   private yAxis = new THREE.Vector3(0, 1, 0)
+  private gltfSources = new Map<string, { scene: THREE.Object3D; refs: number }>()
+  private gltfLoading = new Map<string, Promise<THREE.Object3D>>()
 
   constructor(options: ThreeRuntimeOptions) {
     this.container = options.container
@@ -391,8 +395,59 @@ export class ThreeRuntime {
   }
 
   async loadGLTF(url: string): Promise<{ scene: THREE.Group | THREE.Object3D }> {
-    const gltf = await new GLTFLoader().loadAsync(url)
-    return { scene: gltf.scene }
+    const entry = await this.getGltfSource(url)
+    entry.refs++
+    const scene = cloneGltfGraph(entry.scene)
+    scene.traverse(child => {
+      child.userData.gltfShared = true
+    })
+    scene.userData.gltfShared = true
+    scene.userData.gltfCacheUrl = url
+    return { scene }
+  }
+
+  /** 节点移除时释放一次引用；引用归零才 dispose 共享几何 */
+  releaseGltfFrom(root: THREE.Object3D): void {
+    const urls: string[] = []
+    const collect = (obj: THREE.Object3D) => {
+      if (typeof obj.userData.gltfCacheUrl === 'string') {
+        urls.push(obj.userData.gltfCacheUrl)
+      }
+    }
+    collect(root)
+    root.traverse(child => {
+      if (child !== root) collect(child)
+    })
+    urls.forEach(u => this.releaseGLTF(u))
+  }
+
+  private releaseGLTF(url: string): void {
+    const entry = this.gltfSources.get(url)
+    if (!entry) return
+    entry.refs = Math.max(0, entry.refs - 1)
+    if (entry.refs > 0) return
+    disposeObject3D(entry.scene)
+    this.gltfSources.delete(url)
+  }
+
+  private async getGltfSource(url: string): Promise<{ scene: THREE.Object3D; refs: number }> {
+    const hit = this.gltfSources.get(url)
+    if (hit) return hit
+    let pending = this.gltfLoading.get(url)
+    if (!pending) {
+      pending = new GLTFLoader().loadAsync(url).then(gltf => gltf.scene)
+      this.gltfLoading.set(url, pending)
+    }
+    try {
+      const scene = await pending
+      const existing = this.gltfSources.get(url)
+      if (existing) return existing
+      const entry = { scene, refs: 0 }
+      this.gltfSources.set(url, entry)
+      return entry
+    } finally {
+      this.gltfLoading.delete(url)
+    }
   }
 
   dispose(): void {
@@ -415,6 +470,9 @@ export class ThreeRuntime {
     }
     this.stopLoop()
     this.orbit.dispose()
+    this.gltfSources.forEach(entry => disposeObject3D(entry.scene))
+    this.gltfSources.clear()
+    this.gltfLoading.clear()
     this.renderer.dispose()
     this.renderer.domElement.remove()
     this.transformEndHandlers.clear()

@@ -13,6 +13,7 @@ export type PreviewSpec =
 
 const props = defineProps<{
   spec: PreviewSpec
+  displayFootprint?: FootprintSpec
 }>()
 
 const emit = defineEmits<{
@@ -25,6 +26,7 @@ let scene: THREE.Scene | undefined
 let camera: THREE.PerspectiveCamera | undefined
 let controls: OrbitControls | undefined
 let root: THREE.Object3D | undefined
+let nativeSize: FootprintSpec | undefined
 let frameId = 0
 let loadToken = 0
 
@@ -46,6 +48,7 @@ function clearRoot() {
   scene.remove(root)
   disposeObject(root)
   root = undefined
+  nativeSize = undefined
 }
 
 function frameObject(obj: THREE.Object3D) {
@@ -73,6 +76,19 @@ function measureFootprint(obj: THREE.Object3D): FootprintSpec {
   }
 }
 
+function applyDisplayScale() {
+  if (!root || !nativeSize) return
+  const target = props.displayFootprint
+  if (!target) {
+    root.scale.set(1, 1, 1)
+    return
+  }
+  const sx = target.width / Math.max(nativeSize.width, 0.01)
+  const sy = (target.height ?? nativeSize.height ?? 0.01) / Math.max(nativeSize.height ?? 0.01, 0.01)
+  const sz = target.depth / Math.max(nativeSize.depth, 0.01)
+  root.scale.set(sx, sy, sz)
+}
+
 async function loadSpec(spec: PreviewSpec) {
   if (!scene || !spec) {
     clearRoot()
@@ -95,9 +111,12 @@ async function loadSpec(spec: PreviewSpec) {
     return
   }
   root = obj
+  obj.scale.set(1, 1, 1)
   scene.add(obj)
+  nativeSize = measureFootprint(obj)
+  applyDisplayScale()
   frameObject(obj)
-  emit('loaded', measureFootprint(obj))
+  emit('loaded', nativeSize)
 }
 
 function tick() {
@@ -121,6 +140,15 @@ watch(
   spec => {
     void loadSpec(spec)
   }
+)
+
+watch(
+  () => props.displayFootprint,
+  () => {
+    applyDisplayScale()
+    if (root) frameObject(root)
+  },
+  { deep: true }
 )
 
 watch(
@@ -189,9 +217,14 @@ function captureThumb(size = 128): string | null {
   return out.toDataURL('image/jpeg', 0.85)
 }
 
+function resetViewpoint() {
+  if (root) frameObject(root)
+}
+
 defineExpose({
   measureCurrent: () => (root ? measureFootprint(root) : null),
-  captureThumb
+  captureThumb,
+  resetViewpoint
 })
 </script>
 

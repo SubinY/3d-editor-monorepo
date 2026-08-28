@@ -33,6 +33,14 @@ const sourceLabel = ref('本地')
 const localFileName = ref('')
 const localFileSize = ref('')
 const glbUrl = ref('')
+const lockRatio = ref(true)
+const nativeFootprint = ref<{ width: number; depth: number; height: number } | null>(null)
+const uploadStats = ref<{ trianglesBefore: number; trianglesAfter: number; textureMax: number } | null>(
+  null
+)
+const uploadWarning = ref('')
+const thumbDataUrl = ref('')
+const uploading = ref(false)
 
 const aiImageName = ref('')
 const aiPrompt = ref('')
@@ -48,7 +56,7 @@ const previewSpec = ref<PreviewSpec>(null)
 const previewReady = ref(false)
 
 const canSave = computed(() => {
-  if (saving.value || generating.value) return false
+  if (saving.value || generating.value || uploading.value) return false
   if (!name.value.trim()) return false
   if (!previewReady.value || !previewSpec.value) return false
   if (!placeScene.value && !placeContainer.value) return false
@@ -56,6 +64,12 @@ const canSave = computed(() => {
 })
 
 function resetForOpen() {
+  lockRatio.value = true
+  uploadStats.value = null
+  uploadWarning.value = ''
+  thumbDataUrl.value = ''
+  uploading.value = false
+  nativeFootprint.value = null
   const edit = props.editItem
   if (edit) {
     draftId.value = edit.id
@@ -69,6 +83,14 @@ function resetForOpen() {
     category.value =
       edit.category === 'equipment' || edit.kind === 'equipment' ? 'equipment' : 'component'
     const m = edit.model3d
+    nativeFootprint.value = {
+      width: edit.footprint.width,
+      depth: edit.footprint.depth,
+      height: edit.footprint.height ?? 0.14
+    }
+    if (typeof edit.thumb === 'string' && edit.thumb.startsWith('/')) {
+      thumbDataUrl.value = edit.thumb
+    }
     if (m?.type === 'gltf') {
       sourceTab.value = 'local'
       sourceLabel.value = '本地'
@@ -98,6 +120,12 @@ function resetForOpen() {
   localFileName.value = ''
   localFileSize.value = ''
   glbUrl.value = ''
+  lockRatio.value = true
+  nativeFootprint.value = null
+  uploadStats.value = null
+  uploadWarning.value = ''
+  thumbDataUrl.value = ''
+  uploading.value = false
   aiImageName.value = ''
   aiPrompt.value = ''
   aiImageBase64.value = ''
@@ -158,6 +186,37 @@ function formatSize(n: number): string {
   return `${(n / (1024 * 1024)).toFixed(1)} MB`
 }
 
+function formatCount(n: number): string {
+  if (n >= 10_000) return `${(n / 10_000).toFixed(1)} 万`
+  return String(n)
+}
+
+function round3(n: number): number {
+  return Math.max(0.01, Math.round(n * 1000) / 1000)
+}
+
+function applyBbox(bbox: { width: number; depth: number; height: number }) {
+  nativeFootprint.value = { ...bbox }
+  footprint.width = bbox.width
+  footprint.depth = bbox.depth
+  footprint.height = bbox.height
+}
+
+function setDim(axis: 'width' | 'depth' | 'height', val: number | undefined) {
+  if (val == null || !Number.isFinite(val) || val <= 0) return
+  const native = nativeFootprint.value
+  if (!lockRatio.value || !native) {
+    footprint[axis] = round3(val)
+    return
+  }
+  const base = native[axis] || 0.01
+  const r = val / base
+  footprint.width = round3(native.width * r)
+  footprint.depth = round3(native.depth * r)
+  footprint.height = round3(native.height * r)
+  footprint[axis] = round3(val)
+}
+
 async function onPickGlb(file: File | undefined) {
   if (!file) return
   const lower = file.name.toLowerCase()
@@ -165,17 +224,32 @@ async function onPickGlb(file: File | undefined) {
     ElMessage.error('请选择 .glb / .gltf 文件')
     return
   }
+  uploading.value = true
+  previewReady.value = false
   try {
     localFileName.value = file.name
     localFileSize.value = formatSize(file.size)
     if (!name.value.trim()) name.value = file.name.replace(/\.(glb|gltf)$/i, '')
     const uploaded = await api.uploadGlbAsset(file)
     glbUrl.value = uploaded.url
+    uploadStats.value =
+      uploaded.trianglesAfter != null
+        ? {
+            trianglesBefore: uploaded.trianglesBefore ?? 0,
+            trianglesAfter: uploaded.trianglesAfter,
+            textureMax: uploaded.textureMax ?? 0
+          }
+        : null
+    uploadWarning.value = uploaded.warning ?? ''
+    if (uploaded.bbox) applyBbox(uploaded.bbox)
+    if (uploaded.warning) ElMessage.warning(uploaded.warning)
     previewSpec.value = { type: 'gltf', url: uploaded.url }
     previewReady.value = true
   } catch (e) {
     previewReady.value = false
     ElMessage.error(e instanceof Error ? e.message : '上传失败')
+  } finally {
+    uploading.value = false
   }
 }
 
@@ -253,9 +327,22 @@ async function runGenerate() {
 }
 
 function onPreviewLoaded(measured: { width: number; depth: number; height?: number }) {
-  footprint.width = measured.width
-  footprint.depth = measured.depth
-  footprint.height = measured.height ?? footprint.height
+  if (nativeFootprint.value) return
+  applyBbox({
+    width: measured.width,
+    depth: measured.depth,
+    height: measured.height ?? footprint.height
+  })
+}
+
+function generateThumb() {
+  const dataUrl = previewRef.value?.captureThumb?.(256)
+  if (!dataUrl) {
+    ElMessage.warning('请先加载预览')
+    return
+  }
+  thumbDataUrl.value = dataUrl
+  ElMessage.success('已生成预览图')
 }
 
 function close() {
@@ -265,8 +352,9 @@ function close() {
 async function resolveThumb(): Promise<string> {
   const fallback = '#5dade2'
   try {
-    const dataUrl = previewRef.value?.captureThumb?.(128)
+    const dataUrl = thumbDataUrl.value || previewRef.value?.captureThumb?.(256)
     if (!dataUrl) return fallback
+    if (dataUrl.startsWith('/')) return dataUrl
     const url = await api.uploadDataUrlAsset(dataUrl, `thumb-${draftId.value}.jpg`)
     return url ?? fallback
   } catch {
@@ -286,6 +374,15 @@ async function save() {
     let item: CatalogItem
 
     if (previewSpec.value.type === 'gltf') {
+      const fitted = await api.fitGlbAsset({
+        url: previewSpec.value.url,
+        filename: localFileName.value || 'model.glb',
+        footprint: {
+          width: footprint.width,
+          depth: footprint.depth,
+          height: footprint.height
+        }
+      })
       item = {
         id: draftId.value,
         version: version.value,
@@ -299,7 +396,7 @@ async function save() {
           height: footprint.height
         },
         thumb,
-        model3d: { type: 'gltf', url: previewSpec.value.url },
+        model3d: { type: 'gltf', url: fitted.url },
         metadata: { source: 'local-glb' }
       }
     } else {
@@ -377,7 +474,14 @@ async function save() {
                 <input type="file" accept=".glb,.gltf,model/gltf-binary,model/gltf+json" hidden @change="onGlbInput" />
               </label>
             </div>
+            <p v-if="uploading" class="meta">正在优化模型（减面 / 压贴图）…</p>
             <p v-if="localFileName" class="meta">{{ localFileName }} · {{ localFileSize }}</p>
+            <p v-if="uploadStats" class="meta">
+              面数 {{ formatCount(uploadStats.trianglesBefore) }} →
+              {{ formatCount(uploadStats.trianglesAfter) }}
+              <template v-if="uploadStats.textureMax"> · 贴图 ≤{{ uploadStats.textureMax }}</template>
+            </p>
+            <p v-if="uploadWarning" class="warn">{{ uploadWarning }}</p>
           </div>
 
           <div v-else class="pane">
@@ -407,8 +511,21 @@ async function save() {
 
         <section class="preview">
           <span class="badge">未保存草稿</span>
-          <AssetPreviewViewport ref="previewRef" :spec="previewSpec" @loaded="onPreviewLoaded" />
-          <p v-if="!previewReady" class="preview-empty">选择来源并完成加载后在此预览</p>
+          <div class="preview-actions">
+            <el-button size="small" :disabled="!previewReady" @click="generateThumb">生成预览图</el-button>
+            <el-button size="small" :disabled="!previewReady" @click="previewRef?.resetViewpoint?.()">
+              还原视角
+            </el-button>
+          </div>
+          <AssetPreviewViewport
+            ref="previewRef"
+            :spec="previewSpec"
+            :display-footprint="previewReady ? footprint : undefined"
+            @loaded="onPreviewLoaded"
+          />
+          <p v-if="!previewReady" class="preview-empty">
+            {{ uploading ? '正在优化并加载预览…' : '选择来源并完成加载后在此预览' }}
+          </p>
         </section>
 
         <aside class="props">
@@ -416,37 +533,48 @@ async function save() {
             <span>名称</span>
             <el-input v-model="name" placeholder="必填" />
           </label>
+          <label class="field dim-row">
+            <span>尺寸 (m)</span>
+            <el-switch v-model="lockRatio" size="small" active-text="比例锁" />
+          </label>
           <label class="field">
             <span>宽 (m)</span>
             <el-input-number
-              v-model="footprint.width"
+              :model-value="footprint.width"
               :min="0.01"
               :step="0.01"
               :controls="false"
               class="dim-input"
+              @change="(v) => setDim('width', v)"
             />
           </label>
           <label class="field">
             <span>深 (m)</span>
             <el-input-number
-              v-model="footprint.depth"
+              :model-value="footprint.depth"
               :min="0.01"
               :step="0.01"
               :controls="false"
               class="dim-input"
+              @change="(v) => setDim('depth', v)"
             />
           </label>
           <label class="field">
             <span>高 (m)</span>
             <el-input-number
-              v-model="footprint.height"
+              :model-value="footprint.height"
               :min="0.01"
               :step="0.01"
               :controls="false"
               class="dim-input"
+              @change="(v) => setDim('height', v)"
             />
           </label>
-          <p class="note">改尺寸只影响落点碰撞盒，不拉伸预览模型</p>
+          <p class="note">锁定时改一维，另外两维按模型比例变化；保存时烘焙进模型</p>
+          <div v-if="thumbDataUrl" class="thumb-box">
+            <span>预览图</span>
+            <img :src="thumbDataUrl" alt="" />
+          </div>
           <div class="field">
             <span>可放置</span>
             <div class="checks">
@@ -614,6 +742,44 @@ async function save() {
   background: rgba(14, 22, 33, 0.85);
   color: #7ec8ff;
   border: 1px solid #2c3e52;
+}
+
+.preview-actions {
+  position: absolute;
+  z-index: 2;
+  top: 18px;
+  right: 18px;
+  display: flex;
+  gap: 8px;
+}
+
+.warn {
+  margin: 0;
+  font-size: 12px;
+  color: #e6a23c;
+}
+
+.dim-row {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.thumb-box {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12px;
+  color: #7a8fa6;
+}
+
+.thumb-box img {
+  width: 96px;
+  height: 96px;
+  object-fit: cover;
+  border-radius: 6px;
+  border: 1px solid #1d2c3e;
+  background: #0e1621;
 }
 
 .preview-empty {

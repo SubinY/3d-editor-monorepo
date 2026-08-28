@@ -16,7 +16,8 @@ async function main() {
   await initStore()
   const app = express()
   app.use(cors())
-  app.use(express.json({ limit: '60mb' }))
+  // GLB 走 base64 JSON，体积约 ×4/3；100MB 文件 ≈ 140MB JSON
+  app.use(express.json({ limit: '200mb' }))
 
   app.get('/api/health', (_req, res) => {
     res.json({ ok: true })

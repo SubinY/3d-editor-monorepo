@@ -375,3 +375,19 @@ export async function saveUploadFile(input: {
   await fs.writeFile(path.join(UPLOADS_DIR, stored), input.data)
   return { url: `/uploads/${stored}`, filename: stored }
 }
+
+export function resolveUploadFilename(url: string): string | null {
+  if (!url.startsWith('/uploads/')) return null
+  const name = path.basename(decodeURIComponent(url.slice('/uploads/'.length)))
+  if (!name || name.includes('..')) return null
+  return name
+}
+
+export async function readUploadFile(filename: string): Promise<Buffer | null> {
+  const safe = path.basename(filename)
+  try {
+    return await fs.readFile(path.join(UPLOADS_DIR, safe))
+  } catch {
+    return null
+  }
+}

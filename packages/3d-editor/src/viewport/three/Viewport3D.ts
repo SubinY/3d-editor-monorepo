@@ -527,7 +527,10 @@ export class Viewport3D {
         nodeExists: Boolean(this.doc.getNode(node.id))
       })
     ) {
-      if (content) disposeObject3D(content)
+      if (content) {
+        this.runtime.releaseGltfFrom(content)
+        disposeObject3D(content)
+      }
       return
     }
     if (content) root.add(content)
@@ -548,6 +551,12 @@ export class Viewport3D {
         this.applyVisualState(path, state)
       }
     })
+
+    // placeItem 会先 selection.set 再异步 build；GLTF 未就绪时 syncGizmo 挂空。
+    // 构建完成后若仍选中该节点，补挂 XYZ。
+    if (this.doc.selection.first() === node.id && node.visible !== false) {
+      this.selection.syncGizmo([node.id])
+    }
   }
 
   private async buildNodeContent(
@@ -798,6 +807,7 @@ export class Viewport3D {
     Array.from(this.pathObjects.keys())
       .filter(path => path === id || path.startsWith(`${id}/`))
       .forEach(path => this.pathObjects.delete(path))
+    this.runtime.releaseGltfFrom(root)
     disposeObject3D(root)
     this.runtime.markShadowNeedsUpdate()
   }

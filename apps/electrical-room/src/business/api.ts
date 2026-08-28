@@ -244,17 +244,27 @@ export async function deleteAssetDraft(id: string, version?: string): Promise<vo
   await request(`/asset-drafts/${encodeURIComponent(id)}${q}`, { method: 'DELETE' })
 }
 
+export interface UploadAssetResult {
+  url: string
+  filename: string
+  bbox?: { width: number; depth: number; height: number }
+  trianglesBefore?: number
+  trianglesAfter?: number
+  textureMax?: number
+  warning?: string
+}
+
 export async function uploadAssetFile(
   filename: string,
   dataBase64: string
-): Promise<{ url: string; filename: string }> {
+): Promise<UploadAssetResult> {
   return request('/assets/upload', {
     method: 'POST',
     body: JSON.stringify({ filename, dataBase64 })
   })
 }
 
-export async function uploadGlbAsset(file: File): Promise<{ url: string; filename: string }> {
+export async function uploadGlbAsset(file: File): Promise<UploadAssetResult> {
   const buf = await file.arrayBuffer()
   const bytes = new Uint8Array(buf)
   let binary = ''
@@ -263,6 +273,17 @@ export async function uploadGlbAsset(file: File): Promise<{ url: string; filenam
     binary += String.fromCharCode(...bytes.subarray(i, i + chunk))
   }
   return uploadAssetFile(file.name, btoa(binary))
+}
+
+export async function fitGlbAsset(input: {
+  url: string
+  filename?: string
+  footprint: { width: number; depth: number; height: number }
+}): Promise<UploadAssetResult> {
+  return request('/assets/fit', {
+    method: 'POST',
+    body: JSON.stringify(input)
+  })
 }
 
 /** dataURL (image/jpeg|png) → 落盘 url；失败返回 null */

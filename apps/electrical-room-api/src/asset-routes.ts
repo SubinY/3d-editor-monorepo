@@ -15,9 +15,17 @@ import {
   updateDraftSource
 } from './model-factory.js'
 import {
+  fitGlbBuffer,
+  isGlbFilename,
+  optimizeGlbBuffer,
+  type FootprintMeters
+} from './gltf-optimize.js'
+import {
   deleteAssetDraft,
   getAssetDraft,
   listAssetDrafts,
+  readUploadFile,
+  resolveUploadFilename,
   saveAssetDraft,
   saveUploadFile,
   uploadsDir,
@@ -136,16 +144,90 @@ export async function registerAssetRoutes(app: Express): Promise<void> {
         res.status(400).json({ error: 'empty file' })
         return
       }
-      if (data.length > 40 * 1024 * 1024) {
-        res.status(400).json({ error: 'file too large (max 40MB)' })
+      if (data.length > 100 * 1024 * 1024) {
+        res.status(400).json({ error: 'file too large (max 100MB)' })
         return
       }
       try {
+        if (isGlbFilename(filename)) {
+          try {
+            const optimized = await optimizeGlbBuffer(data, filename)
+            const outName = filename.toLowerCase().endsWith('.gltf')
+              ? filename.replace(/\.gltf$/i, '.glb')
+              : filename
+            const out = await saveUploadFile({ filename: outName, data: optimized.data })
+            res.status(201).json({
+              ...out,
+              bbox: optimized.bbox,
+              trianglesBefore: optimized.trianglesBefore,
+              trianglesAfter: optimized.trianglesAfter,
+              textureMax: optimized.textureMax,
+              warning: optimized.warning
+            })
+            return
+          } catch (optErr) {
+            logError('assets.optimize', optErr, req)
+            const out = await saveUploadFile({ filename, data })
+            res.status(201).json({ ...out, warning: '优化失败，已保存原文件' })
+            return
+          }
+        }
         const out = await saveUploadFile({ filename, data })
         res.status(201).json(out)
       } catch (err) {
         const e = err as Error & { status?: number }
         logError('assets.upload', err, req)
+        res.status(e.status ?? 500).json({ error: e.message })
+      }
+    })
+  )
+
+  app.post(
+    '/api/assets/fit',
+    asyncRoute(async (req, res) => {
+      const { url, filename, footprint } = req.body ?? {}
+      if (!url || typeof url !== 'string') {
+        res.status(400).json({ error: 'url required' })
+        return
+      }
+      const fp = footprint as FootprintMeters | undefined
+      if (
+        !fp ||
+        typeof fp.width !== 'number' ||
+        typeof fp.depth !== 'number' ||
+        typeof fp.height !== 'number' ||
+        fp.width <= 0 ||
+        fp.depth <= 0 ||
+        fp.height <= 0
+      ) {
+        res.status(400).json({ error: 'footprint width/depth/height required' })
+        return
+      }
+      const stored = resolveUploadFilename(url)
+      if (!stored) {
+        res.status(400).json({ error: 'url must be under /uploads' })
+        return
+      }
+      const data = await readUploadFile(stored)
+      if (!data) {
+        res.status(404).json({ error: 'upload not found' })
+        return
+      }
+      try {
+        const fitted = await fitGlbBuffer(data, {
+          width: fp.width,
+          depth: fp.depth,
+          height: fp.height
+        })
+        const base =
+          typeof filename === 'string' && filename.trim()
+            ? filename.replace(/\.(glb|gltf)$/i, '') + '.glb'
+            : stored.replace(/\.(glb|gltf)$/i, '') + '-fit.glb'
+        const out = await saveUploadFile({ filename: base, data: fitted.data })
+        res.status(201).json({ ...out, bbox: fitted.bbox })
+      } catch (err) {
+        const e = err as Error & { status?: number }
+        logError('assets.fit', err, req)
         res.status(e.status ?? 500).json({ error: e.message })
       }
     })
