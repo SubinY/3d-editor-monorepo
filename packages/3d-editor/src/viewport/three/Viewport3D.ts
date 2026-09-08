@@ -630,7 +630,7 @@ export class Viewport3D {
   ): Promise<THREE.Object3D | undefined> {
     const shell3d = item.shell3d
     if (shell3d?.type === 'gltf') {
-      return this.styleAsShell(await this.buildModel(shell3d, item))
+      return this.styleAsShell(await this.buildModel(shell3d, item), { seeThrough: false })
     }
     if (shell3d?.type === 'procedural') {
       return this.styleAsShell(await this.buildModel(shell3d, item))
@@ -646,7 +646,9 @@ export class Viewport3D {
     }
 
     if (shell3d) {
-      return this.styleAsShell(await this.buildModel(shell3d, item))
+      return this.styleAsShell(await this.buildModel(shell3d, item), {
+        seeThrough: shell3d.type === 'gltf' ? false : undefined
+      })
     }
     return undefined
   }
@@ -689,12 +691,20 @@ export class Viewport3D {
     return built ?? null
   }
 
-  /** 外壳半透明，保证内部元件可见、可高亮 */
-  private styleAsShell(shell: THREE.Object3D): THREE.Object3D {
+  /**
+   * 标记外壳。开口盒等编辑壳默认半透明以便看内部；
+   * GLB 实心壳（userData.solidShell / seeThrough:false）保持不透明，避免邻柜透叠。
+   */
+  private styleAsShell(
+    shell: THREE.Object3D,
+    options?: { seeThrough?: boolean }
+  ): THREE.Object3D {
+    const seeThrough = options?.seeThrough ?? shell.userData.solidShell !== true
     shell.userData.isShell = true
-    shell.renderOrder = 1
+    if (seeThrough) shell.renderOrder = 1
     shell.traverse(child => {
       child.userData.isShell = true
+      if (!seeThrough) return
       const mesh = child as THREE.Mesh
       if (!mesh.isMesh) return
       const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material]

@@ -25,7 +25,8 @@ type EnclosureKind = string
 const ENCLOSURE_OPTIONS: Array<{ value: EnclosureKind; label: string }> = [
   { value: 'none', label: '无' },
   { value: 'openBox', label: '开口盒' },
-  { value: 'openBoxDoor', label: '单开门' }
+  { value: 'openBoxDoor', label: '单开门' },
+  { value: 'screenBody', label: '屏体' }
 ]
 
 const props = defineProps<{
@@ -72,8 +73,9 @@ function setEnclosure(kind: EnclosureKind) {
           <el-form-item label="长 (X)">
             <el-input-number
               v-model="boundsForm.width"
-              :min="isScene ? 1 : 0.2"
-              :step="0.1"
+              :min="isScene ? 1 : 0.01"
+              :step="isScene ? 0.1 : 0.01"
+              :precision="isScene ? 1 : 3"
               controls-position="right"
               @change="emit('update:bounds')"
             />
@@ -81,8 +83,9 @@ function setEnclosure(kind: EnclosureKind) {
           <el-form-item label="宽 (Z)">
             <el-input-number
               v-model="boundsForm.depth"
-              :min="isScene ? 1 : 0.2"
-              :step="0.1"
+              :min="isScene ? 1 : 0.01"
+              :step="isScene ? 0.1 : 0.01"
+              :precision="isScene ? 1 : 3"
               controls-position="right"
               @change="emit('update:bounds')"
             />
@@ -90,8 +93,9 @@ function setEnclosure(kind: EnclosureKind) {
           <el-form-item :label="isScene ? '高 (墙/天花)' : '高 (Y)'">
             <el-input-number
               v-model="boundsForm.height"
-              :min="isScene ? 1 : 0.5"
-              :step="0.1"
+              :min="isScene ? 1 : 0.01"
+              :step="isScene ? 0.1 : 0.01"
+              :precision="isScene ? 1 : 3"
               controls-position="right"
               @change="emit('update:bounds')"
             />

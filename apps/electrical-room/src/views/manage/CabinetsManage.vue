@@ -134,27 +134,27 @@ async function remove(row: CabinetRow) {
           <el-form-item label="宽 (m)">
             <el-input-number
               v-model="form.width"
-              :min="0.2"
-              :step="0.1"
-              :precision="2"
+              :min="0.01"
+              :step="0.01"
+              :precision="3"
               controls-position="right"
             />
           </el-form-item>
           <el-form-item label="深 (m)">
             <el-input-number
               v-model="form.depth"
-              :min="0.2"
-              :step="0.1"
-              :precision="2"
+              :min="0.01"
+              :step="0.01"
+              :precision="3"
               controls-position="right"
             />
           </el-form-item>
           <el-form-item label="高 (m)">
             <el-input-number
               v-model="form.height"
-              :min="0.5"
-              :step="0.1"
-              :precision="2"
+              :min="0.01"
+              :step="0.01"
+              :precision="3"
               controls-position="right"
             />
           </el-form-item>

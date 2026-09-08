@@ -48,7 +48,7 @@ import type { CatalogItem, EditorDocumentJSON, EditorSession } from '@mh/3d-edit
 
 ### 空间壳 `helpers.enclosure`
 
-开放字符串。内核只内建 `none` / `openBox`；`openBoxDoor`、`openBoxDoubleDoor`、`outdoorCabinet` 等由 `@mh/3d-editor-assets` 的 `commonProceduralResolvers` 按同名 id 解析。container 新建默认 `openBox`。
+开放字符串。内核只内建 `none` / `openBox`；`openBoxDoor`、`openBoxDoubleDoor`、`outdoorCabinet`、`screenBody`（屏体 GLB）等由 `@mh/3d-editor-assets` 的 `commonProceduralResolvers` 按同名 id 解析。container 新建默认 `openBox`。
 
 ---
 

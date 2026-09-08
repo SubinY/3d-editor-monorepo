@@ -632,10 +632,11 @@ function duplicateSelected() {
 }
 
 function applyBounds() {
+  const pick = (n: number) => (Number.isFinite(n) && n > 0 ? n : undefined)
   doc.value?.commands.setBounds({
-    width: boundsForm.width || undefined,
-    depth: boundsForm.depth || undefined,
-    height: boundsForm.height || undefined
+    width: pick(boundsForm.width),
+    depth: pick(boundsForm.depth),
+    height: pick(boundsForm.height)
   })
   session?.viewport2d?.fitBounds()
 }
