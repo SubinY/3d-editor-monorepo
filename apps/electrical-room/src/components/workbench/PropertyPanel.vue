@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { cloneEnvironment } from '@mh/3d-editor'
-import type { EnvironmentJSON, WallJSON } from '@mh/3d-editor'
+import type { EnvironmentJSON, WallJSON, WorkspaceJSON } from '@mh/3d-editor'
+import { FLOOR_PRESETS, resolveFloorPreset } from '@mh/3d-editor-assets/common'
 import { parseCabinetIdFromCatalogLabel } from '@/business/catalog'
 
 export interface SelectedNodeForm {
@@ -34,6 +35,7 @@ const props = defineProps<{
   boundsForm: BoundsForm
   selectedNode: SelectedNodeForm
   selectedWall: WallJSON | null
+  selectedWorkspace: WorkspaceJSON | null
   environment: EnvironmentJSON | null
   isPanel?: boolean
 }>()
@@ -43,6 +45,14 @@ const emit = defineEmits<{
   'update:name': []
   'update:transform': []
   'update:enclosure': [env: EnvironmentJSON]
+  'update:workspace': [
+    patch: {
+      name?: string
+      height?: number
+      floor?: Partial<WorkspaceJSON['floor']>
+      ceiling?: Partial<WorkspaceJSON['ceiling']>
+    }
+  ]
   'edit-panel': []
   'edit-cabinet': []
   remove: []
@@ -51,6 +61,18 @@ const emit = defineEmits<{
 const isCabinet = computed(
   () => props.isScene && !!parseCabinetIdFromCatalogLabel(props.selectedNode.catalog)
 )
+
+const ws = computed(() => props.selectedWorkspace)
+
+const isSolidFloor = computed(() => {
+  const f = ws.value?.floor
+  return !!f && !f.mapUrl && (f.presetId ?? 'none') === 'none'
+})
+
+const isSolidCeiling = computed(() => {
+  const c = ws.value?.ceiling
+  return !!c && !c.mapUrl && (c.presetId ?? 'none') === 'none'
+})
 
 function wallLength(wall: WallJSON): string {
   return Math.hypot(wall.b[0] - wall.a[0], wall.b[1] - wall.a[1]).toFixed(2)
@@ -62,12 +84,45 @@ function setEnclosure(kind: EnclosureKind) {
   env.helpers.enclosure = kind
   emit('update:enclosure', env)
 }
+
+function patchWorkspace(
+  patch: {
+    name?: string
+    height?: number
+    floor?: Partial<WorkspaceJSON['floor']>
+    ceiling?: Partial<WorkspaceJSON['ceiling']>
+  }
+) {
+  emit('update:workspace', patch)
+}
+
+function setFloorPreset(id: string) {
+  const preset = resolveFloorPreset(id)
+  patchWorkspace({
+    floor: {
+      presetId: preset.id,
+      mapUrl: preset.mapUrl,
+      color: preset.mapUrl ? '#ffffff' : ws.value?.floor.color ?? '#1a3048'
+    }
+  })
+}
+
+function setCeilingPreset(id: string) {
+  const preset = resolveFloorPreset(id)
+  patchWorkspace({
+    ceiling: {
+      presetId: preset.id,
+      mapUrl: preset.mapUrl,
+      color: preset.mapUrl ? '#ffffff' : ws.value?.ceiling.color ?? '#2a3544'
+    }
+  })
+}
 </script>
 
 <template>
   <div class="property-panel">
     <section class="section">
-      <div class="section-title">{{ isScene ? '工作区尺寸' : '柜体尺寸' }}</div>
+      <div class="section-title">{{ isScene ? '场景包围盒' : '柜体尺寸' }}</div>
       <el-form label-position="top" size="small" class="bounds-form">
         <div class="row3">
           <el-form-item label="长 (X)">
@@ -90,7 +145,7 @@ function setEnclosure(kind: EnclosureKind) {
               @change="emit('update:bounds')"
             />
           </el-form-item>
-          <el-form-item :label="isScene ? '高 (墙/天花)' : '高 (Y)'">
+          <el-form-item :label="isScene ? '高 (参考)' : '高 (Y)'">
             <el-input-number
               v-model="boundsForm.height"
               :min="isScene ? 1 : 0.01"
@@ -103,7 +158,7 @@ function setEnclosure(kind: EnclosureKind) {
         </div>
       </el-form>
       <p v-if="isScene" class="hint">
-        长宽影响底图与网格；净高同步墙高与天花高度。房间轮廓仍由画墙决定。
+        包围盒影响网格与适配；墙高看场景「墙体默认」，地面/天花看各工作区。
       </p>
     </section>
 
@@ -201,9 +256,97 @@ function setEnclosure(kind: EnclosureKind) {
       <template v-else-if="selectedWall">
         <div class="kv">墙段长度：{{ wallLength(selectedWall) }} m</div>
         <div class="kv">
-          高 {{ selectedWall.height ?? 3 }} m · 厚 {{ selectedWall.thickness ?? 0.2 }} m
+          高 {{ selectedWall.height ?? environment?.wall?.defaultHeight ?? 2 }} m · 厚
+          {{ selectedWall.thickness ?? environment?.wall?.defaultThickness ?? 0.2 }} m
         </div>
         <el-button type="danger" plain class="full" @click="emit('remove')">删除墙段</el-button>
+      </template>
+
+      <template v-else-if="ws">
+        <el-form
+          class="workspace-form"
+          label-position="left"
+          label-width="88px"
+          size="small"
+        >
+          <div class="section-head">轮廓</div>
+          <el-form-item label="名称">
+            <el-input
+              :model-value="ws.name ?? ''"
+              @change="v => patchWorkspace({ name: String(v) })"
+            />
+          </el-form-item>
+          <el-form-item label="天花高度(m)">
+            <el-input-number
+              :model-value="ws.height ?? boundsForm.height ?? 3"
+              :min="0.5"
+              :max="20"
+              :step="0.1"
+              :precision="2"
+              controls-position="right"
+              @change="v => patchWorkspace({ height: Number(v) })"
+            />
+          </el-form-item>
+
+          <div class="section-head">地面</div>
+          <el-form-item label="显示">
+            <el-switch
+              :model-value="ws.floor.visible"
+              @change="v => patchWorkspace({ floor: { visible: Boolean(v) } })"
+            />
+          </el-form-item>
+          <el-form-item label="纹理">
+            <el-select
+              :model-value="ws.floor.presetId ?? 'none'"
+              :disabled="!ws.floor.visible"
+              @change="v => setFloorPreset(String(v))"
+            >
+              <el-option
+                v-for="preset in FLOOR_PRESETS"
+                :key="preset.id"
+                :label="preset.label"
+                :value="preset.id"
+              />
+            </el-select>
+          </el-form-item>
+          <el-form-item v-if="isSolidFloor" label="颜色">
+            <el-color-picker
+              :model-value="ws.floor.color"
+              :disabled="!ws.floor.visible"
+              @change="v => patchWorkspace({ floor: { color: v || '#1a3048' } })"
+            />
+          </el-form-item>
+
+          <div class="section-head">天花</div>
+          <el-form-item label="显示">
+            <el-switch
+              :model-value="ws.ceiling.visible"
+              @change="v => patchWorkspace({ ceiling: { visible: Boolean(v) } })"
+            />
+          </el-form-item>
+          <el-form-item label="纹理">
+            <el-select
+              :model-value="ws.ceiling.presetId ?? 'none'"
+              :disabled="!ws.ceiling.visible"
+              @change="v => setCeilingPreset(String(v))"
+            >
+              <el-option
+                v-for="preset in FLOOR_PRESETS"
+                :key="preset.id"
+                :label="preset.label"
+                :value="preset.id"
+              />
+            </el-select>
+          </el-form-item>
+          <el-form-item v-if="isSolidCeiling" label="颜色">
+            <el-color-picker
+              :model-value="ws.ceiling.color"
+              :disabled="!ws.ceiling.visible"
+              @change="v => patchWorkspace({ ceiling: { color: v || '#2a3544' } })"
+            />
+          </el-form-item>
+        </el-form>
+        <el-button type="danger" plain class="full" @click="emit('remove')">删除工作区</el-button>
       </template>
 
       <p v-else class="hint">在 2D/3D 画布中点击对象查看属性；空白处点击取消选中。</p>
@@ -212,9 +355,10 @@ function setEnclosure(kind: EnclosureKind) {
     <section class="section">
       <div class="section-title">操作提示</div>
       <p v-if="isScene" class="hint">
-        画墙：左键连续落点，右键或 Esc 结束当前链；封闭墙体会自动填充地板。<br />
+        画墙：左键连续落点，右键或 Esc 结束链。<br />
+        画工作区：≥3 点后右键/Esc/双击/点回起点闭合；地面与天花按工作区轮廓。<br />
         W 切换「选择 / 画墙」· Ctrl+Z / Ctrl+Shift+Z 撤销重做 · Delete 删除 · Esc
-        取消工具态/清选中<br />
+        结束工具态/清选中<br />
         门 / 窗 / 柱拖近墙体会自动贴墙；物件拖动时有对齐辅助线。<br />
         平移：中键或 Shift+左键；缩放：滚轮。选中后拖主体平移，拖外侧圆环旋转。
       </p>
@@ -249,38 +393,14 @@ function setEnclosure(kind: EnclosureKind) {
 
 .row3 {
   display: grid;
-  grid-template-columns: 1fr 1fr 1fr;
-  gap: 6px;
-}
-
-.row2 {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 6px;
-}
-
-.bounds-form :deep(.el-input-number),
-.row2 :deep(.el-input-number),
-.row3 :deep(.el-input-number) {
-  width: 100%;
-}
-
-.property-panel :deep(.el-select) {
-  width: 100%;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
 }
 
 .kv {
   font-size: 12px;
   color: #8ea4bd;
-  margin: 6px 0;
-  word-break: break-all;
-}
-
-.hint {
-  font-size: 12px;
-  color: #4d6076;
-  line-height: 1.7;
-  margin: 0;
+  margin-bottom: 8px;
 }
 
 .full {
@@ -288,12 +408,34 @@ function setEnclosure(kind: EnclosureKind) {
   margin-top: 8px;
 }
 
-.property-panel :deep(.el-form-item) {
-  margin-bottom: 10px;
+.hint {
+  font-size: 12px;
+  color: #4d6076;
+  line-height: 1.6;
+  margin: 8px 0 0;
 }
 
-.property-panel :deep(.el-form-item__label) {
+.bounds-form :deep(.el-form-item) {
+  margin-bottom: 8px;
+}
+
+.workspace-form .section-head {
+  font-size: 13px;
+  font-weight: 600;
+  color: #e8f1fa;
+  margin: 4px 0 12px;
+}
+
+.workspace-form :deep(.el-form-item) {
+  margin-bottom: 12px;
+}
+
+.workspace-form :deep(.el-form-item__label) {
   color: #8ea4bd;
-  margin-bottom: 2px !important;
+}
+
+.workspace-form :deep(.el-input-number),
+.workspace-form :deep(.el-select) {
+  width: 100%;
 }
 </style>

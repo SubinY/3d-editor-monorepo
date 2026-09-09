@@ -12,6 +12,7 @@ import {
 import { hitTestNodes, hitTestRotateHandle } from '../utils/hit-test'
 import type { WallDragMode, WallDragPatch } from '../utils/wall-snap'
 import { applyWallDrag, hitWallDragTarget } from '../utils/wall-snap'
+import { hitWorkspace } from '../utils/workspace-hit'
 import type { PlanePoint } from '../types'
 import type { PointerInteraction, Viewport2DContext } from './types'
 
@@ -134,6 +135,17 @@ export class SelectInteraction implements PointerInteraction {
       this.wallDragMoved = false
       this.host.requestRender()
       return true
+    }
+
+    if (!this.host.isElevation) {
+      const wsId = hitWorkspace(doc.getWorkspaces(), plane.u, plane.v)
+      if (wsId) {
+        const ws = doc.getWorkspace(wsId)
+        doc.selection.set(wsId)
+        if (ws) this.host.onWorkspaceSelect?.(ws)
+        this.host.requestRender()
+        return true
+      }
     }
 
     doc.selection.clear()

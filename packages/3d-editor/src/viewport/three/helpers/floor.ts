@@ -1,15 +1,23 @@
 import * as THREE from 'three'
-import type { BoundsJSON, EnvironmentFloorJSON } from '../../../document/types'
+import type { EnvironmentFloorJSON } from '../../../document/types'
 
 export interface FloorMaterialHandle {
   material: THREE.MeshStandardMaterial
   dispose: () => void
 }
 
+export interface FloorUvBounds {
+  width: number
+  depth: number
+  /** 中心偏移，默认原点 */
+  centerU?: number
+  centerV?: number
+}
+
 /** 单套地面材质；mapUrl 加载失败则退回纯色 */
 export async function createFloorMaterial(
   floor: EnvironmentFloorJSON,
-  bounds: BoundsJSON
+  uvBounds: FloorUvBounds
 ): Promise<FloorMaterialHandle> {
   const opacity = floor.opacity ?? 1
   const material = new THREE.MeshStandardMaterial({
@@ -19,7 +27,6 @@ export async function createFloorMaterial(
     side: THREE.FrontSide,
     transparent: opacity < 1,
     opacity,
-    // 大平面贴地/贴网格拉近看时更稳
     polygonOffset: true,
     polygonOffsetFactor: 1,
     polygonOffsetUnits: 1
@@ -33,8 +40,8 @@ export async function createFloorMaterial(
       texture.wrapT = THREE.RepeatWrapping
       const cell = Math.max(floor.mapRepeat ?? 4, 0.1)
       texture.repeat.set(
-        Math.max(bounds.width / cell, 1),
-        Math.max(bounds.depth / cell, 1)
+        Math.max(uvBounds.width / cell, 1),
+        Math.max(uvBounds.depth / cell, 1)
       )
       texture.colorSpace = THREE.SRGBColorSpace
       material.map = texture
@@ -53,47 +60,60 @@ export async function createFloorMaterial(
   }
 }
 
-export function createSiteFloorMesh(
-  bounds: BoundsJSON,
-  material: THREE.MeshStandardMaterial
-): THREE.Mesh {
-  const mesh = new THREE.Mesh(
-    new THREE.PlaneGeometry(bounds.width, bounds.depth),
-    material
-  )
-  mesh.rotation.x = -Math.PI / 2
-  mesh.position.y = 0
-  mesh.receiveShadow = true
-  mesh.userData.nonSelectable = true
-  return mesh
+export function outlineToUvBounds(outline: [number, number][]): FloorUvBounds {
+  let minU = Infinity
+  let maxU = -Infinity
+  let minV = Infinity
+  let maxV = -Infinity
+  for (const [u, v] of outline) {
+    minU = Math.min(minU, u)
+    maxU = Math.max(maxU, u)
+    minV = Math.min(minV, v)
+    maxV = Math.max(maxV, v)
+  }
+  const width = Math.max(maxU - minU, 0.01)
+  const depth = Math.max(maxV - minV, 0.01)
+  return {
+    width,
+    depth,
+    centerU: (minU + maxU) / 2,
+    centerV: (minV + maxV) / 2
+  }
 }
 
 /**
- * 闭合墙内地板。ShapeGeometry 默认 UV=形状坐标（米），与场地 PlaneGeometry 的 0–1 UV
- * 不一致，会导致同材质贴图尺度错乱；此处按场地 bounds 重写成与 site 相同的 0–1 UV。
+ * 工作区多边形地板。ShapeGeometry UV 按 outline AABB 归一化。
  */
-export function createRoomFloorMesh(
-  points: Array<{ u: number; v: number }>,
-  material: THREE.MeshStandardMaterial,
-  bounds: BoundsJSON
+export function createPolygonFloorMesh(
+  outline: [number, number][],
+  material: THREE.MeshStandardMaterial
 ): THREE.Mesh | null {
-  if (points.length < 3) return null
+  if (outline.length < 3) return null
   const shape = new THREE.Shape()
-  shape.moveTo(points[0].u, -points[0].v)
-  for (let i = 1; i < points.length; i++) {
-    shape.lineTo(points[i].u, -points[i].v)
+  shape.moveTo(outline[0][0], -outline[0][1])
+  for (let i = 1; i < outline.length; i++) {
+    shape.lineTo(outline[i][0], -outline[i][1])
   }
   shape.closePath()
   const geometry = new THREE.ShapeGeometry(shape)
+  const uvBounds = outlineToUvBounds(outline)
   const pos = geometry.getAttribute('position')
   const uv = geometry.getAttribute('uv')
-  const hw = bounds.width / 2
-  const hd = bounds.depth / 2
+  const hw = uvBounds.width / 2
+  const hd = uvBounds.depth / 2
+  const cu = uvBounds.centerU ?? 0
+  const cv = uvBounds.centerV ?? 0
   for (let i = 0; i < pos.count; i++) {
     const x = pos.getX(i)
     const y = pos.getY(i)
-    // shape 平面：x→世界 u，y→世界 -v；与 PlaneGeometry 旋转后采样一致
-    uv.setXY(i, (x + hw) / bounds.width, (y + hd) / bounds.depth)
+    // shape：x→世界 u，y→世界 -v
+    const worldU = x
+    const worldV = -y
+    uv.setXY(
+      i,
+      (worldU - cu + hw) / uvBounds.width,
+      (worldV - cv + hd) / uvBounds.depth
+    )
   }
   uv.needsUpdate = true
   const mesh = new THREE.Mesh(geometry, material)
@@ -107,42 +127,19 @@ export function createRoomFloorMesh(
 /** 天花复用地面加载；仰视需看见底面，用 DoubleSide */
 export async function createCeilingMaterial(
   ceiling: EnvironmentFloorJSON,
-  bounds: BoundsJSON
+  uvBounds: FloorUvBounds
 ): Promise<FloorMaterialHandle> {
-  const handle = await createFloorMaterial(ceiling, bounds)
+  const handle = await createFloorMaterial(ceiling, uvBounds)
   handle.material.side = THREE.DoubleSide
   return handle
 }
 
-/** bounds 矩形天花；与场地地板同一旋转，抬到净高（材质 DoubleSide，仰视可见） */
-export function createSiteCeilingMesh(
-  bounds: BoundsJSON,
+export function createPolygonCeilingMesh(
+  outline: [number, number][],
   material: THREE.MeshStandardMaterial,
-  height: number
-): THREE.Mesh {
-  const mesh = new THREE.Mesh(
-    new THREE.PlaneGeometry(bounds.width, bounds.depth),
-    material
-  )
-  // 与 createSiteFloorMesh 同为 -X，避免 +X 与 shape 约定不一致
-  mesh.rotation.x = -Math.PI / 2
-  mesh.position.y = height
-  mesh.receiveShadow = true
-  mesh.userData.nonSelectable = true
-  return mesh
-}
-
-/**
- * 闭合墙环天花：与 createRoomFloorMesh 同一套 shape→世界坐标（-X 旋转），
- * 仅 Y 抬到 height。旧实现用 +X 旋转会导致 V 轴镜像，封闭区域看起来「铺反/偏到墙外」。
- */
-export function createRoomCeilingMesh(
-  points: Array<{ u: number; v: number }>,
-  material: THREE.MeshStandardMaterial,
-  bounds: BoundsJSON,
   height: number
 ): THREE.Mesh | null {
-  const mesh = createRoomFloorMesh(points, material, bounds)
+  const mesh = createPolygonFloorMesh(outline, material)
   if (!mesh) return null
   mesh.position.y = height
   return mesh

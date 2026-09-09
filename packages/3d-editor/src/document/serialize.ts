@@ -18,7 +18,17 @@ export function createEmptyDocumentJSON(options: CreateDocumentOptions): EditorD
     name: options.name ?? options.kind,
     unit: 'm',
     bounds,
-    structure: options.walls?.length ? { walls: options.walls.map(wall => ({ ...wall })) } : undefined,
+    structure:
+      options.walls?.length || options.workspaces?.length
+        ? {
+            walls: options.walls?.length
+              ? options.walls.map(wall => ({ ...wall }))
+              : undefined,
+            workspaces: options.workspaces?.length
+              ? options.workspaces.map(ws => JSON.parse(JSON.stringify(ws)))
+              : undefined
+          }
+        : undefined,
     nodes: [],
     environment: options.environment
       ? cloneEnvironment(options.environment)

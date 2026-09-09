@@ -20,5 +20,6 @@ export interface AssetGroup {
   items: CatalogItem[]
 }
 
-export type EditorTool = 'select' | 'wall'
+export type EditorTool = 'select' | 'wall' | 'workspace'
 export type ViewMode = '2d' | '3d' | 'split'
+

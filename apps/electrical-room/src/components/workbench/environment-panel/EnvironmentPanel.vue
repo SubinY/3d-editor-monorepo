@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { nextTick, reactive, ref, watch } from 'vue'
 import { Box, Camera, PictureFilled, Sunny } from '@element-plus/icons-vue'
-import { cloneEnvironment, createDefaultCeiling, createDefaultWall } from '@mh/3d-editor'
+import { cloneEnvironment, createDefaultWall } from '@mh/3d-editor'
 import type { EnvironmentJSON } from '@mh/3d-editor'
 import BackgroundSection from './BackgroundSection.vue'
 import CameraSection from './CameraSection.vue'
@@ -29,7 +29,6 @@ const section = ref<EnvSectionId>('camera')
 const applying = ref(false)
 const form = reactive(cloneEnvironment(props.environment))
 if (!form.wall) form.wall = createDefaultWall()
-if (!form.ceiling) form.ceiling = createDefaultCeiling()
 
 watch(
   () => props.environment,
@@ -46,8 +45,6 @@ function syncForm(env: EnvironmentJSON) {
   form.lights = next.lights
   form.shadows = next.shadows
   form.helpers = next.helpers
-  form.floor = next.floor
-  form.ceiling = next.ceiling ?? createDefaultCeiling()
   form.wall = next.wall ?? createDefaultWall()
   form.defaultView = next.defaultView
 }

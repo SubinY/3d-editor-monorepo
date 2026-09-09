@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
 import { Setting, Monitor, DataLine } from '@element-plus/icons-vue'
-import type { EnvironmentJSON, WallJSON } from '@mh/3d-editor'
+import type { EnvironmentJSON, WallJSON, WorkspaceJSON } from '@mh/3d-editor'
 import type { ViewMode } from './types'
 import PropertyPanel from './PropertyPanel.vue'
 import DataPanel from './DataPanel.vue'
@@ -15,6 +15,7 @@ const props = defineProps<{
   boundsForm: BoundsForm
   selectedNode: SelectedNodeForm
   selectedWall: WallJSON | null
+  selectedWorkspace: WorkspaceJSON | null
   nodeTwin: TwinProps
   environment: EnvironmentJSON | null
   viewMode: ViewMode
@@ -29,6 +30,14 @@ const emit = defineEmits<{
   'update:transform': []
   'update:twin': [value: TwinProps]
   'update:enclosure': [env: EnvironmentJSON]
+  'update:workspace': [
+    patch: {
+      name?: string
+      height?: number
+      floor?: Partial<WorkspaceJSON['floor']>
+      ceiling?: Partial<WorkspaceJSON['ceiling']>
+    }
+  ]
   'edit-panel': []
   'edit-cabinet': []
   remove: []
@@ -63,12 +72,14 @@ watch(
           :bounds-form="boundsForm"
           :selected-node="selectedNode"
           :selected-wall="selectedWall"
+          :selected-workspace="selectedWorkspace"
           :environment="environment"
           :is-panel="isPanel"
           @update:bounds="emit('update:bounds')"
           @update:name="emit('update:name')"
           @update:transform="emit('update:transform')"
           @update:enclosure="emit('update:enclosure', $event)"
+          @update:workspace="emit('update:workspace', $event)"
           @edit-panel="emit('edit-panel')"
           @edit-cabinet="emit('edit-cabinet')"
           @remove="emit('remove')"

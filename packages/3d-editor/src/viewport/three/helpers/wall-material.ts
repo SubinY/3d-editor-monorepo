@@ -1,14 +1,14 @@
 import * as THREE from 'three'
-import type { EnvironmentWallJSON } from '../../../document/types'
+import type { ResolvedWallAppearance } from '../../../document/resolve-wall-appearance'
 
 export interface WallMaterialHandle {
   material: THREE.MeshStandardMaterial
   dispose: () => void
 }
 
-/** 场景墙共用材质；mapUrl 加载失败则退回纯色 */
+/** 按合并后的墙外观建材质；mapUrl 加载失败则退回纯色 */
 export async function createWallMaterial(
-  wall: EnvironmentWallJSON
+  wall: Pick<ResolvedWallAppearance, 'color' | 'opacity' | 'mapUrl'>
 ): Promise<WallMaterialHandle> {
   const opacity = wall.opacity ?? 0.92
   const transparent = opacity < 1
@@ -18,7 +18,6 @@ export async function createWallMaterial(
     metalness: 0.05,
     transparent,
     opacity,
-    // 半透明墙在拐角/贴地时易与邻墙、地板抢深度；略推远并保持写深度
     depthWrite: true,
     polygonOffset: transparent,
     polygonOffsetFactor: transparent ? 1 : 0,
@@ -31,7 +30,6 @@ export async function createWallMaterial(
       texture = await new THREE.TextureLoader().loadAsync(wall.mapUrl)
       texture.wrapS = THREE.RepeatWrapping
       texture.wrapT = THREE.RepeatWrapping
-      // 单面 UV 0–1；各墙 mesh 再建时按长/高写入 UV 缩放
       texture.repeat.set(1, 1)
       texture.colorSpace = THREE.SRGBColorSpace
       material.map = texture

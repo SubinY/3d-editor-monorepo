@@ -7,8 +7,10 @@ import type {
   EnvironmentJSON,
   EnvironmentWallJSON,
   LightJSON,
-  TransformJSON
+  TransformJSON,
+  WorkspaceJSON
 } from './types'
+import { createId } from '../utils/id'
 
 export function createDefaultTransform(): TransformJSON {
   return {
@@ -26,7 +28,7 @@ export function cloneTransform(t: TransformJSON): TransformJSON {
   }
 }
 
-/** 按拓扑写出完整默认 environment */
+/** 按拓扑写出完整默认 environment（无场景级 floor/ceiling） */
 export function createDefaultEnvironment(kind: DocumentKind, bounds: BoundsJSON): EnvironmentJSON {
   const { width, depth, height } = bounds
   const h = height ?? (kind === 'container' ? 2 : Math.max(width, depth) * 0.5)
@@ -80,10 +82,6 @@ export function createDefaultEnvironment(kind: DocumentKind, bounds: BoundsJSON)
           }
         })()
 
-  const floor: EnvironmentFloorJSON = createDefaultFloor(kind)
-  const ceiling: EnvironmentCeilingJSON = createDefaultCeiling(kind)
-  const wall: EnvironmentWallJSON = createDefaultWall()
-
   return {
     background: { type: 'color', value: '#0c1420' },
     lights,
@@ -92,37 +90,25 @@ export function createDefaultEnvironment(kind: DocumentKind, bounds: BoundsJSON)
       grid: true,
       enclosure: kind === 'container' ? 'openBox' : 'none'
     },
-    floor,
-    ceiling,
-    wall,
+    wall: createDefaultWall(),
     defaultView
   }
 }
 
-/** 缺省地面（createEmpty / createDefaultEnvironment） */
-export function createDefaultFloor(kind: DocumentKind = 'scene'): EnvironmentFloorJSON {
-  return kind === 'container'
-    ? {
-        visible: false,
-        coverage: 'bounds',
-        color: '#1a3048',
-        opacity: 1,
-        presetId: 'none'
-      }
-    : {
-        visible: true,
-        coverage: 'bounds',
-        color: '#1a3048',
-        opacity: 1,
-        presetId: 'none'
-      }
+/** 工作区缺省地面 */
+export function createDefaultFloor(_kind: DocumentKind = 'scene'): EnvironmentFloorJSON {
+  return {
+    visible: true,
+    color: '#1a3048',
+    opacity: 1,
+    presetId: 'none'
+  }
 }
 
-/** 缺省天花：默认隐藏，避免突然闷顶 */
+/** 工作区缺省天花：默认隐藏 */
 export function createDefaultCeiling(_kind: DocumentKind = 'scene'): EnvironmentCeilingJSON {
   return {
     visible: false,
-    coverage: 'bounds',
     color: '#2a3544',
     opacity: 1,
     presetId: 'none'
@@ -135,10 +121,31 @@ export function createDefaultWall(): EnvironmentWallJSON {
     color: '#233242',
     opacity: 1,
     presetId: 'none',
-    cornerOverlap: false
+    cornerOverlap: false,
+    defaultHeight: 2,
+    defaultThickness: 0.2
   }
 }
 
 export function cloneEnvironment(env: EnvironmentJSON): EnvironmentJSON {
   return JSON.parse(JSON.stringify(env)) as EnvironmentJSON
+}
+
+export function cloneWorkspace(ws: WorkspaceJSON): WorkspaceJSON {
+  return JSON.parse(JSON.stringify(ws)) as WorkspaceJSON
+}
+
+/** 新建工作区草稿（outline ≥3） */
+export function createDefaultWorkspace(
+  outline: [number, number][],
+  options?: { name?: string; height?: number; id?: string }
+): WorkspaceJSON {
+  return {
+    id: options?.id ?? createId('ws'),
+    name: options?.name,
+    outline: outline.map(p => [...p] as [number, number]),
+    height: options?.height,
+    floor: createDefaultFloor('scene'),
+    ceiling: createDefaultCeiling('scene')
+  }
 }

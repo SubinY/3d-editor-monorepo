@@ -8,6 +8,7 @@ import { PlaceService } from './services/place'
 import { SelectInteraction } from './services/select-interaction'
 import type { Viewport2DContext } from './services/types'
 import { WallInteraction } from './services/wall-interaction'
+import { WorkspaceInteraction } from './services/workspace-interaction'
 import type { Theme2D, Tool2D, Viewport2DOptions } from './types'
 import { DEFAULT_THEME } from './types'
 import {
@@ -31,12 +32,14 @@ export class Viewport2D {
   private onDenied?: (reason: string) => void
   private onPlaceResult?: (result: PlaceResult) => void
   private onWallSelect?: Viewport2DOptions['onWallSelect']
+  private onWorkspaceSelect?: Viewport2DOptions['onWorkspaceSelect']
   private onPickCandidates?: Viewport2DOptions['onPickCandidates']
   private snapEnabled: boolean
 
   private camera: Camera2D
   private select: SelectInteraction
   private wall: WallInteraction
+  private workspace: WorkspaceInteraction
   private place: PlaceService
 
   private tool: Tool2D = 'select'
@@ -56,6 +59,7 @@ export class Viewport2D {
     this.onDenied = options.onDenied
     this.onPlaceResult = options.onPlaceResult
     this.onWallSelect = options.onWallSelect
+    this.onWorkspaceSelect = options.onWorkspaceSelect
     this.onPickCandidates = options.onPickCandidates
     this.snapEnabled = options.snapEnabled ?? true
     this.showNodeNames = options.showNodeNames ?? false
@@ -74,6 +78,7 @@ export class Viewport2D {
     const deps = this.createContext()
     this.select = new SelectInteraction(deps)
     this.wall = new WallInteraction(deps)
+    this.workspace = new WorkspaceInteraction(deps)
     this.place = new PlaceService(deps, this.onPlaceResult)
 
     this.resize()
@@ -128,6 +133,9 @@ export class Viewport2D {
       get onWallSelect() {
         return self.onWallSelect
       },
+      get onWorkspaceSelect() {
+        return self.onWorkspaceSelect
+      },
       get onPickCandidates() {
         return self.onPickCandidates
       },
@@ -163,10 +171,16 @@ export class Viewport2D {
 
   setTool(tool: Tool2D): void {
     if (this.readonly) return
-    if (tool === 'wall' && this.isElevation) return
+    if ((tool === 'wall' || tool === 'workspace') && this.isElevation) return
     this.tool = tool
     this.endWallChain()
-    this.canvas.style.cursor = tool === 'wall' ? 'crosshair' : 'default'
+    this.endWorkspaceChain()
+    this.canvas.style.cursor =
+      tool === 'wall' || tool === 'workspace'
+        ? 'crosshair'
+        : tool === 'pan'
+          ? 'grab'
+          : 'default'
     this.requestRender()
   }
 
@@ -176,6 +190,15 @@ export class Viewport2D {
 
   endWallChain(): void {
     this.wall.endChain()
+  }
+
+  endWorkspaceChain(): void {
+    this.workspace.endChain()
+  }
+
+  /** Esc / 右键：≥3 点闭合提交，否则取消当前绘制 */
+  finishOrCancelWorkspace(): void {
+    this.workspace.finishOrCancel()
   }
 
   clientToWorld(clientX: number, clientY: number): { x: number; z: number } {
@@ -342,12 +365,22 @@ export class Viewport2D {
       /* ignore */
     }
 
-    if (this.camera.tryBeginPan(event, this.tool === 'select')) return
+    const panMode =
+      this.tool === 'pan' ? 'pan' : this.tool === 'select' ? 'select' : 'off'
+    if (this.camera.tryBeginPan(event, panMode)) {
+      if (this.tool === 'pan') this.canvas.style.cursor = 'grabbing'
+      return
+    }
+    if (this.tool === 'pan') return
     if (this.readonly) return
 
     const plane = this.camera.clientToPlane(this.canvas, event.clientX, event.clientY)
     if (this.tool === 'wall') {
       this.wall.onPointerDown(event, plane)
+      return
+    }
+    if (this.tool === 'workspace') {
+      this.workspace.onPointerDown(event, plane)
       return
     }
     this.select.onPointerDown(event, plane)
@@ -365,6 +398,7 @@ export class Viewport2D {
       this.requestRender()
       return
     }
+    if (this.tool === 'pan') return
     if (this.readonly) return
 
     const plane = this.camera.clientToPlane(this.canvas, event.clientX, event.clientY)
@@ -372,14 +406,26 @@ export class Viewport2D {
       this.wall.onPointerMove(event, plane)
       return
     }
+    if (this.tool === 'workspace') {
+      this.workspace.onPointerMove(event, plane)
+      return
+    }
     this.select.onPointerMove(event, plane)
   }
 
   private onPointerUp = (event: PointerEvent): void => {
-    if (this.camera.endPan()) return
+    if (this.camera.endPan()) {
+      if (this.tool === 'pan') this.canvas.style.cursor = 'grab'
+      return
+    }
+    if (this.tool === 'pan') return
     if (this.readonly) return
     if (this.tool === 'wall') {
       this.wall.onPointerUp(event)
+      return
+    }
+    if (this.tool === 'workspace') {
+      this.workspace.onPointerUp(event)
       return
     }
     this.select.onPointerUp(event)
@@ -397,6 +443,12 @@ export class Viewport2D {
 
   private onKeyDown = (event: KeyboardEvent): void => {
     if (event.key === 'Escape' && this.tool === 'wall') this.endWallChain()
+    if (event.key === 'Escape' && this.tool === 'workspace') {
+      this.finishOrCancelWorkspace()
+    }
+    if (event.key === 'Enter' && this.tool === 'workspace') {
+      this.workspace.tryCommitFromKeyboard()
+    }
   }
 
   private onWheel = (event: WheelEvent): void => {
@@ -434,6 +486,7 @@ export class Viewport2D {
         isElevation: this.isElevation,
         select: this.select,
         wall: this.wall,
+        workspace: this.workspace,
         dropGhost: this.place.dropGhost,
         footprintSize: item => this.footprintSize(item),
         itemFor: node => this.itemFor(node),

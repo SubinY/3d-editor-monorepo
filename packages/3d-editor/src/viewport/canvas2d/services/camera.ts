@@ -48,10 +48,15 @@ export class Camera2D {
       : canvasHeight / 2 - centerV * this.scale
   }
 
-  tryBeginPan(event: PointerEvent, selectMode: boolean): boolean {
-    const panButton =
-      event.button === 1 || (selectMode && (event.button === 2 || event.shiftKey))
-    if (!panButton) return false
+  /**
+   * @param mode select：中键 / 右键 / Shift+拖 平移；pan：左键也可平移；off：仅中键
+   */
+  tryBeginPan(event: PointerEvent, mode: 'off' | 'select' | 'pan'): boolean {
+    const middle = event.button === 1
+    const aux =
+      mode === 'select' && (event.button === 2 || event.shiftKey)
+    const left = mode === 'pan' && event.button === 0
+    if (!middle && !aux && !left) return false
     this.panning = true
     this.panLast = { x: event.clientX, y: event.clientY }
     return true

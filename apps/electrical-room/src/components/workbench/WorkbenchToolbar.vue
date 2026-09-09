@@ -67,6 +67,13 @@ const emit = defineEmits<{
         <button type="button" :class="{ on: tool === 'wall' }" @click="emit('set-tool', 'wall')">
           画墙
         </button>
+        <button
+          type="button"
+          :class="{ on: tool === 'workspace' }"
+          @click="emit('set-tool', 'workspace')"
+        >
+          画工作区
+        </button>
       </div>
     </div>
     <div v-else class="center" />

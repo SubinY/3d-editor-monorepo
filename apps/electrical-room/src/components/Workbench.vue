@@ -12,7 +12,8 @@ import type {
   EnvironmentJSON,
   PickCandidatesEvent,
   TransformMode,
-  WallJSON
+  WallJSON,
+  WorkspaceJSON
 } from '@mh/3d-editor'
 import WorkbenchToolbar from './workbench/WorkbenchToolbar.vue'
 import LeftPanel from './workbench/LeftPanel.vue'
@@ -85,6 +86,7 @@ const selectedNode = reactive({
 })
 const nodeTwin = reactive<TwinProps>(emptyTwin())
 const selectedWall = shallowRef<WallJSON | null>(null)
+const selectedWorkspace = shallowRef<WorkspaceJSON | null>(null)
 const boundsForm = reactive({ width: 0, depth: 0, height: 0 })
 const environment = shallowRef<EnvironmentJSON | null>(null)
 const liveCameraPose = shallowRef<LiveCameraPose | null>(null)
@@ -196,6 +198,7 @@ function refreshSelected() {
   const d = doc.value
   const id = d?.selection.first()
   selectedWall.value = null
+  selectedWorkspace.value = null
   selectedId.value = id ?? ''
   if (!d || !id) {
     selectedNode.id = ''
@@ -224,7 +227,12 @@ function refreshSelected() {
   selectedNode.id = ''
   syncTwinFrom(emptyTwin())
   const wall = d.getWall(id)
-  if (wall) selectedWall.value = { ...wall }
+  if (wall) {
+    selectedWall.value = { ...wall }
+    return
+  }
+  const ws = d.getWorkspace(id)
+  if (ws) selectedWorkspace.value = { ...ws, outline: ws.outline.map(p => [...p] as [number, number]) }
 }
 
 function onPickCandidates(event: PickCandidatesEvent) {
@@ -438,9 +446,16 @@ function onKeyDown(event: KeyboardEvent) {
 
   if (event.key === 'Escape') {
     event.preventDefault()
-    session?.viewport2d?.endWallChain()
-    if (tool.value === 'wall') setTool('select')
-    else doc.value?.selection.clear()
+    const vp = session?.viewport2d
+    if (tool.value === 'wall') {
+      vp?.endWallChain()
+      setTool('select')
+    } else if (tool.value === 'workspace') {
+      vp?.finishOrCancelWorkspace?.()
+      setTool('select')
+    } else {
+      doc.value?.selection.clear()
+    }
     return
   }
 
@@ -459,7 +474,7 @@ function onKeyDown(event: KeyboardEvent) {
 function setTool(next: EditorTool) {
   tool.value = next
   session?.viewport2d?.setTool(next)
-  if (next === 'wall' && viewMode.value === '3d') {
+  if ((next === 'wall' || next === 'workspace') && viewMode.value === '3d') {
     setViewMode('split')
   }
 }
@@ -617,6 +632,33 @@ function removeSelected() {
   if (selectedWall.value) {
     d.commands.removeWall(selectedWall.value.id)
     d.selection.clear()
+    return
+  }
+  if (selectedWorkspace.value) {
+    d.commands.removeWorkspace(selectedWorkspace.value.id)
+    d.selection.clear()
+  }
+}
+
+function applyWorkspacePatch(patch: {
+  name?: string
+  height?: number
+  floor?: Partial<WorkspaceJSON['floor']>
+  ceiling?: Partial<WorkspaceJSON['ceiling']>
+}) {
+  const id = selectedWorkspace.value?.id
+  if (!id) return
+  const ok = doc.value?.commands.updateWorkspace(id, patch)
+  if (!ok) {
+    refreshSelected()
+    return
+  }
+  const ws = doc.value?.getWorkspace(id)
+  if (ws) {
+    selectedWorkspace.value = {
+      ...ws,
+      outline: ws.outline.map(p => [...p] as [number, number])
+    }
   }
 }
 
@@ -781,6 +823,7 @@ async function confirmPanelEdit(content: panel.PanelContentJSON) {
         :bounds-form="boundsForm"
         :selected-node="selectedNode"
         :selected-wall="selectedWall"
+        :selected-workspace="selectedWorkspace"
         :node-twin="nodeTwin"
         :environment="environment"
         :view-mode="viewMode"
@@ -792,6 +835,7 @@ async function confirmPanelEdit(content: panel.PanelContentJSON) {
         @update:transform="applyNodeTransform"
         @update:twin="applyNodeTwin"
         @update:enclosure="applyEnvironment"
+        @update:workspace="applyWorkspacePatch"
         @edit-panel="openPanelEditor"
         @edit-cabinet="editCabinet"
         @remove="removeSelected"

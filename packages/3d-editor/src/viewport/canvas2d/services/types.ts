@@ -1,7 +1,12 @@
 /** 2D service 共享依赖与指针交互约定 */
 import type { CatalogItem } from '../../../catalog/types'
 import type { EditorDocument } from '../../../document/EditorDocument'
-import type { EditorNodeJSON, TransformJSON, WallJSON } from '../../../document/types'
+import type {
+  EditorNodeJSON,
+  TransformJSON,
+  WallJSON,
+  WorkspaceJSON
+} from '../../../document/types'
 import type { PickCandidatesHandler, PlanePoint } from '../types'
 
 /** 由 Viewport2D 注入给各 service 的视口能力 */
@@ -32,6 +37,7 @@ export interface Viewport2DContext {
   requestRender(): void
   onDenied?: (reason: string) => void
   onWallSelect?: (wall: WallJSON) => void
+  onWorkspaceSelect?: (workspace: WorkspaceJSON) => void
   onPickCandidates?: PickCandidatesHandler
 }
 

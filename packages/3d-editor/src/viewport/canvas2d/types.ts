@@ -10,7 +10,7 @@ export interface PickCandidatesEvent {
 
 export type PickCandidatesHandler = (event: PickCandidatesEvent) => void
 
-export type Tool2D = 'select' | 'wall'
+export type Tool2D = 'select' | 'pan' | 'wall' | 'workspace'
 
 /** HTML5 拖放的 dataTransfer 键：值为 JSON.stringify(CatalogItem) */
 export const CATALOG_ITEM_MIME = 'application/x-catalog-item'
@@ -77,6 +77,7 @@ export interface Viewport2DOptions {
   onDenied?: (reason: string) => void
   onPlaceResult?: (result: PlaceResult) => void
   onWallSelect?: (wall: WallJSON) => void
+  onWorkspaceSelect?: (workspace: import('../../document/types').WorkspaceJSON) => void
   /**
    * 同一鼠标点落在 ≥2 个 footprint 内、且未拖移松手时回调。
    * 未提供时保持「选最上层并拖」旧行为。

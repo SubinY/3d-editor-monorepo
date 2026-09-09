@@ -1,16 +1,16 @@
 /**
  * EditorDocumentJSON —— 跨团队存盘与交换的主格式（schema 合同）。
- * 与行业无关：只描述「边界 + 线段墙 + 节点引用与变换 + 3D 呈现环境」。
+ * 与行业无关：只描述「边界 + 线段墙 + 工作区 + 节点引用与变换 + 3D 呈现环境」。
  */
 
-export const SCHEMA_VERSION = '2.0.0'
+export const SCHEMA_VERSION = '1.0.0'
 
 export type DocumentKind = 'scene' | 'container'
 
 export interface BoundsJSON {
   width: number
   depth: number
-  /** container（XY 立面容器）常用净高；scene 可选净高 */
+  /** container（XY 立面容器）常用净高；scene 可选净高（AABB / 回退） */
   height?: number
 }
 
@@ -23,6 +23,27 @@ export interface WallJSON {
   b: [number, number]
   height?: number
   thickness?: number
+  /** 以下为局部外观；未设字段回落 environment.wall */
+  color?: string
+  opacity?: number
+  presetId?: string
+  mapUrl?: string
+  mapRepeat?: number
+}
+
+/**
+ * 场景工作区（多边形）。
+ * 地面 / 天花铺设范围 = outline；仅 scene 使用。
+ */
+export interface WorkspaceJSON {
+  id: string
+  name?: string
+  /** 俯视 XZ，≥3，隐式闭合 */
+  outline: [number, number][]
+  /** 该区天花高度（Y）；缺省回退 bounds.height ?? 3 */
+  height?: number
+  floor: EnvironmentFloorJSON
+  ceiling: EnvironmentCeilingJSON
 }
 
 export interface TransformJSON {
@@ -78,18 +99,12 @@ export interface EnvironmentHelpersJSON {
   enclosure: string
 }
 
-/** 地面铺设范围 */
-export type FloorCoverage = 'bounds' | 'closedRooms'
-
 /**
- * 场景级地面（单套材质）。
- * - bounds：工作区矩形场地 + 可选闭合墙内叠层
- * - closedRooms：仅闭合墙围合区（不规则跟随墙环）
- * presetId 由 Host 解释；内核只加载 mapUrl
+ * 工作区地面材质（铺设范围 = 所属 workspace.outline）。
+ * presetId 由 Host 解释；内核只加载 mapUrl。
  */
 export interface EnvironmentFloorJSON {
   visible: boolean
-  coverage: FloorCoverage
   color: string
   opacity?: number
   presetId?: string
@@ -99,15 +114,12 @@ export interface EnvironmentFloorJSON {
   mapRepeat?: number
 }
 
-/**
- * 场景级天花（与 EnvironmentFloorJSON 同形）。
- * 网格平面 Y = bounds.height（缺省回退与墙高一致）。
- */
+/** 工作区天花（与 EnvironmentFloorJSON 同形）；网格平面 Y = workspace.height */
 export type EnvironmentCeilingJSON = EnvironmentFloorJSON
 
 /**
- * 场景级墙体外观（所有墙共用一套材质）。
- * presetId 由 Host 解释；内核只加载 mapUrl
+ * 场景级墙体默认外观（局部 WallJSON 字段优先覆盖）。
+ * presetId 由 Host 解释；内核只加载 mapUrl。
  */
 export interface EnvironmentWallJSON {
   color: string
@@ -117,6 +129,10 @@ export interface EnvironmentWallJSON {
   mapUrl?: string
   /** 贴图世界重复尺度（米/格），默认 2 */
   mapRepeat?: number
+  /** 新建墙 / 未设局部 height 时的默认净高 */
+  defaultHeight?: number
+  /** 新建墙 / 未设局部 thickness 时的默认厚度 */
+  defaultThickness?: number
   /**
    * true：墙段按全长建盒，拐角体积相交；
    * false / 缺省：两端各收半个厚度对接（减轻 z-fight）
@@ -152,11 +168,7 @@ export interface EnvironmentJSON {
   lights: LightJSON[]
   shadows: { enabled: boolean; type?: 'basic' | 'pcfsoft' }
   helpers: EnvironmentHelpersJSON
-  /** 场景地面；XY 容器默认 visible=false */
-  floor: EnvironmentFloorJSON
-  /** 场景天花；默认 visible=false（Host 开关打开） */
-  ceiling: EnvironmentCeilingJSON
-  /** 场景墙体外观；所有墙共用（仅 XZ scene 有墙） */
+  /** 场景墙体默认外观（仅 XZ scene 有墙）；局部 WallJSON 优先 */
   wall: EnvironmentWallJSON
   /** 默认视角：类型 / 目标 / 位姿 / 视场 / 距离限制；编辑态 Orbit 可静默回写目标与半径 */
   defaultView?: DefaultViewJSON
@@ -173,9 +185,11 @@ export interface EditorDocumentJSON {
   bounds: BoundsJSON
   structure?: {
     walls?: WallJSON[]
+    /** 仅 scene；container 忽略 */
+    workspaces?: WorkspaceJSON[]
   }
   nodes: EditorNodeJSON[]
-  /** 3D 呈现：背景 / 灯 / 阴影 / 辅助体 / 默认视角 */
+  /** 3D 呈现：背景 / 灯 / 阴影 / 辅助体 / 默认视角 / 墙默认 */
   environment: EnvironmentJSON
   /** 非契约扩展；编辑相机等工作区状态不入资产契约 */
   metadata?: Record<string, unknown>

@@ -18,12 +18,15 @@ import { EnvironmentService } from './services/environment'
 import { SelectionService } from './services/selection'
 import { HoverHighlight } from './services/hover-highlight'
 import {
+  resolveWallAppearance,
+  wallAppearanceCacheKey
+} from '../../document/resolve-wall-appearance'
+import {
   createCeilingMaterial,
   createFloorMaterial,
-  createRoomCeilingMesh,
-  createRoomFloorMesh,
-  createSiteCeilingMesh,
-  createSiteFloorMesh,
+  createPolygonCeilingMesh,
+  createPolygonFloorMesh,
+  outlineToUvBounds,
   type FloorMaterialHandle
 } from './helpers/floor'
 import {
@@ -33,7 +36,6 @@ import {
 } from './helpers/wall-material'
 import { buildEnclosure } from './helpers/enclosure'
 import { instantiateProceduralModule } from './services/procedural-module-loader'
-import { findClosedWallLoops } from '../canvas2d/utils/closed-loops'
 import type { NodeInteractionHandler } from '../interaction-events'
 import { findNodePath, isObjectUnder } from './utils/node-path'
 import { disposeObject3D } from './utils/dispose'
@@ -133,17 +135,18 @@ export class Viewport3D {
   private environment: EnvironmentService
   /** 上次已写入的位姿键；仅 type/position/target 变化时才重置 Orbit */
   private lastCameraPoseKey: string | null = null
-  private floorMaterialHandle: FloorMaterialHandle | null = null
+  private floorMaterialHandles: FloorMaterialHandle[] = []
   private floorApplyToken = 0
-  private ceilingMaterialHandle: FloorMaterialHandle | null = null
+  private ceilingMaterialHandles: FloorMaterialHandle[] = []
   private ceilingApplyToken = 0
-  private wallMaterialHandle: WallMaterialHandle | null = null
+  private wallMaterialHandles = new Map<string, WallMaterialHandle>()
   private wallApplyToken = 0
-  /** 墙/地/天花相关 env 快照；仅变化时才 rebuild，避免开关网格整屏闪 */
+  /** 墙相关 env 快照；仅变化时才 rebuild，避免开关网格整屏闪 */
   private lastShellEnvKey: string | null = null
   /** buildNode 竞态 token：同 id 递增使在途 await 失效 */
   private buildTokens = new Map<string, number>()
   private wallRebuildScheduled = false
+  private workspaceRebuildScheduled = false
   /** 上次已应用到 3D 的 props 引用；变化时才调 AssetHandle.apply */
   private lastAppliedProps = new Map<string, Record<string, unknown> | undefined>()
 
@@ -190,6 +193,7 @@ export class Viewport3D {
     this.lastShellEnvKey = shellEnvKey(this.doc.environment)
 
     this.scheduleWallRebuild()
+    this.scheduleWorkspaceRebuild()
     void this.buildAllNodes()
 
     this.hoverHighlight = new HoverHighlight(this.runtime.renderer)
@@ -220,10 +224,14 @@ export class Viewport3D {
       this.doc.on('wall:added', () => this.scheduleWallRebuild()),
       this.doc.on('wall:removed', () => this.scheduleWallRebuild()),
       this.doc.on('wall:updated', () => this.scheduleWallRebuild()),
+      this.doc.on('workspace:added', () => this.scheduleWorkspaceRebuild()),
+      this.doc.on('workspace:removed', () => this.scheduleWorkspaceRebuild()),
+      this.doc.on('workspace:updated', () => this.scheduleWorkspaceRebuild()),
       this.doc.on('bounds:updated', () => {
         void this.environment.apply(this.doc.environment, this.doc.bounds)
         this.lastShellEnvKey = shellEnvKey(this.doc.environment)
         this.scheduleWallRebuild()
+        this.scheduleWorkspaceRebuild()
       }),
       this.doc.on('environment:updated', ({ environment }) => {
         void this.environment.apply(environment, this.doc.bounds)
@@ -322,20 +330,53 @@ export class Viewport3D {
     })
   }
 
-  /** 先建后换：避免 await 材质期间墙体消失导致闪烁 */
+  private scheduleWorkspaceRebuild(): void {
+    if (this.workspaceRebuildScheduled) return
+    this.workspaceRebuildScheduled = true
+    queueMicrotask(() => {
+      this.workspaceRebuildScheduled = false
+      if (this.disposed) return
+      void this.rebuildFloors()
+      void this.rebuildCeilings()
+    })
+  }
+
+  /** 先建后换：避免 await 材质期间墙体消失导致闪烁；按外观缓存材质 */
   private async rebuildWalls(): Promise<void> {
     const token = ++this.wallApplyToken
-    const handle = await createWallMaterial(this.doc.environment.wall)
-    if (token !== this.wallApplyToken || this.disposed) {
-      handle.dispose()
-      return
+    const walls = this.doc.getWalls()
+    const envWall = this.doc.environment.wall
+    const resolvedList = walls.map(wall => ({
+      wall,
+      resolved: resolveWallAppearance(wall, envWall, this.doc.bounds)
+    }))
+
+    const uniqueKeys = new Map<string, (typeof resolvedList)[0]['resolved']>()
+    for (const item of resolvedList) {
+      const key = wallAppearanceCacheKey(item.resolved)
+      if (!uniqueKeys.has(key)) uniqueKeys.set(key, item.resolved)
+    }
+
+    const materialByKey = new Map<string, THREE.MeshStandardMaterial>()
+    const nextHandles = new Map<string, WallMaterialHandle>()
+    for (const [key, resolved] of uniqueKeys) {
+      const handle = await createWallMaterial(resolved)
+      if (token !== this.wallApplyToken || this.disposed) {
+        handle.dispose()
+        nextHandles.forEach(h => h.dispose())
+        return
+      }
+      nextHandles.set(key, handle)
+      materialByKey.set(key, handle.material)
     }
 
     const next = new THREE.Group()
     next.name = '__editorWalls__'
-    this.doc.getWalls().forEach(wall => {
-      next.add(this.buildWallMesh(wall, handle.material))
-    })
+    for (const { wall, resolved } of resolvedList) {
+      const key = wallAppearanceCacheKey(resolved)
+      const material = materialByKey.get(key)!
+      next.add(this.buildWallMesh(wall, resolved, material))
+    }
     this.markNonSelectable(next)
     next.traverse(child => {
       child.raycast = () => {}
@@ -346,130 +387,96 @@ export class Viewport3D {
       ;(child as THREE.Mesh).geometry?.dispose()
     })
     this.wallGroup.clear()
-    if (this.wallMaterialHandle) {
-      this.wallMaterialHandle.dispose()
-      this.wallMaterialHandle = null
-    }
+    this.wallMaterialHandles.forEach(h => h.dispose())
+    this.wallMaterialHandles.clear()
 
-    this.wallMaterialHandle = handle
+    this.wallMaterialHandles = nextHandles
     this.wallGroup = next
     this.runtime.scene.add(this.wallGroup)
-    void this.rebuildFloors()
-    void this.rebuildCeilings()
     this.runtime.markShadowNeedsUpdate()
   }
 
-  private clearMeshGroup(
-    group: THREE.Group,
-    disposeHandle: (() => void) | null
-  ): void {
+  private clearMeshGroup(group: THREE.Group): void {
     while (group.children.length) {
       const child = group.children[0]
       group.remove(child)
       const mesh = child as THREE.Mesh
       if (mesh.geometry) mesh.geometry.dispose()
     }
-    disposeHandle?.()
   }
 
   private async rebuildFloors(): Promise<void> {
     const token = ++this.floorApplyToken
-    this.clearMeshGroup(this.floorGroup, () => {
-      this.floorMaterialHandle?.dispose()
-      this.floorMaterialHandle = null
-    })
+    this.clearMeshGroup(this.floorGroup)
+    this.floorMaterialHandles.forEach(h => h.dispose())
+    this.floorMaterialHandles = []
 
-    const floor = this.doc.environment.floor
-    if (!floor.visible) {
-      this.runtime.markShadowNeedsUpdate()
-      return
-    }
-
-    const handle = await createFloorMaterial(floor, this.doc.bounds)
-    if (token !== this.floorApplyToken || this.disposed) {
-      handle.dispose()
-      return
-    }
-    this.floorMaterialHandle = handle
-    const { material } = handle
-    const loops = findClosedWallLoops(this.doc.getWalls())
-
-    // bounds / closedRooms 互斥：旧逻辑在 bounds 时仍叠房间地板 → 双地 z-fight
-    if (floor.coverage === 'bounds') {
-      this.floorGroup.add(createSiteFloorMesh(this.doc.bounds, material))
-    } else {
-      loops.forEach(loop => {
-        const mesh = createRoomFloorMesh(loop.points, material, this.doc.bounds)
-        if (mesh) this.floorGroup.add(mesh)
-      })
+    const workspaces = this.doc.getWorkspaces()
+    for (const ws of workspaces) {
+      if (!ws.floor?.visible) continue
+      const uvBounds = outlineToUvBounds(ws.outline)
+      const handle = await createFloorMaterial(ws.floor, uvBounds)
+      if (token !== this.floorApplyToken || this.disposed) {
+        handle.dispose()
+        return
+      }
+      this.floorMaterialHandles.push(handle)
+      const mesh = createPolygonFloorMesh(ws.outline, handle.material)
+      if (mesh) this.floorGroup.add(mesh)
     }
 
     this.markNonSelectable(this.floorGroup)
     this.floorGroup.traverse(child => {
-      child.raycast = () => { }
+      child.raycast = () => {}
     })
     this.runtime.markShadowNeedsUpdate()
   }
 
   private async rebuildCeilings(): Promise<void> {
     const token = ++this.ceilingApplyToken
-    this.clearMeshGroup(this.ceilingGroup, () => {
-      this.ceilingMaterialHandle?.dispose()
-      this.ceilingMaterialHandle = null
-    })
+    this.clearMeshGroup(this.ceilingGroup)
+    this.ceilingMaterialHandles.forEach(h => h.dispose())
+    this.ceilingMaterialHandles = []
 
-    const ceiling = this.doc.environment.ceiling
-    if (!ceiling?.visible) {
-      this.runtime.markShadowNeedsUpdate()
-      return
-    }
-
-    const height = this.doc.bounds.height ?? 3
-    const handle = await createCeilingMaterial(ceiling, this.doc.bounds)
-    if (token !== this.ceilingApplyToken || this.disposed) {
-      handle.dispose()
-      return
-    }
-    this.ceilingMaterialHandle = handle
-    const { material } = handle
-    const loops = findClosedWallLoops(this.doc.getWalls())
-
-    if (ceiling.coverage === 'bounds') {
-      this.ceilingGroup.add(createSiteCeilingMesh(this.doc.bounds, material, height))
-    } else {
-      loops.forEach(loop => {
-        const mesh = createRoomCeilingMesh(loop.points, material, this.doc.bounds, height)
-        if (mesh) this.ceilingGroup.add(mesh)
-      })
+    const workspaces = this.doc.getWorkspaces()
+    for (const ws of workspaces) {
+      if (!ws.ceiling?.visible) continue
+      const height = ws.height ?? this.doc.bounds.height ?? 3
+      const uvBounds = outlineToUvBounds(ws.outline)
+      const handle = await createCeilingMaterial(ws.ceiling, uvBounds)
+      if (token !== this.ceilingApplyToken || this.disposed) {
+        handle.dispose()
+        return
+      }
+      this.ceilingMaterialHandles.push(handle)
+      const mesh = createPolygonCeilingMesh(ws.outline, handle.material, height)
+      if (mesh) this.ceilingGroup.add(mesh)
     }
 
     this.markNonSelectable(this.ceilingGroup)
     this.ceilingGroup.traverse(child => {
-      child.raycast = () => { }
+      child.raycast = () => {}
     })
     this.runtime.markShadowNeedsUpdate()
   }
 
   private buildWallMesh(
     wall: WallJSON,
+    resolved: ReturnType<typeof resolveWallAppearance>,
     material: THREE.MeshStandardMaterial
   ): THREE.Mesh {
     const span = Math.hypot(wall.b[0] - wall.a[0], wall.b[1] - wall.a[1])
-    const height = wall.height ?? this.doc.bounds.height ?? 3
-    const thickness = wall.thickness ?? 0.2
-    const wallEnv = this.doc.environment.wall
-    // cornerOverlap：全长相交；否则两端各收半个厚度对接
-    const length = wallEnv.cornerOverlap
+    const { height, thickness, cornerOverlap, mapUrl, mapRepeat } = resolved
+    const length = cornerOverlap
       ? Math.max(span, 0.01)
       : Math.max(span - thickness, 0.01)
     const embed = 0.01
     const geoHeight = height + embed
     const geometry = new THREE.BoxGeometry(length, geoHeight, thickness)
-    if (wallEnv.mapUrl) {
-      scaleWallBoxUVs(geometry, length, geoHeight, wallEnv.mapRepeat ?? 2)
+    if (mapUrl) {
+      scaleWallBoxUVs(geometry, length, geoHeight, mapRepeat)
     }
     const mesh = new THREE.Mesh(geometry, material)
-    // 底埋入地面；顶仍到净高
     mesh.position.set(
       (wall.a[0] + wall.b[0]) / 2,
       geoHeight / 2 - embed,
@@ -647,7 +654,7 @@ export class Viewport3D {
 
     if (shell3d) {
       return this.styleAsShell(await this.buildModel(shell3d, item), {
-        seeThrough: shell3d.type === 'gltf' ? false : undefined
+        seeThrough: (shell3d as { type: string }).type === 'gltf' ? false : undefined
       })
     }
     return undefined
@@ -1052,14 +1059,12 @@ export class Viewport3D {
     this.floorApplyToken++
     this.ceilingApplyToken++
     this.wallApplyToken++
-    this.clearMeshGroup(this.floorGroup, () => {
-      this.floorMaterialHandle?.dispose()
-      this.floorMaterialHandle = null
-    })
-    this.clearMeshGroup(this.ceilingGroup, () => {
-      this.ceilingMaterialHandle?.dispose()
-      this.ceilingMaterialHandle = null
-    })
+    this.clearMeshGroup(this.floorGroup)
+    this.floorMaterialHandles.forEach(h => h.dispose())
+    this.floorMaterialHandles = []
+    this.clearMeshGroup(this.ceilingGroup)
+    this.ceilingMaterialHandles.forEach(h => h.dispose())
+    this.ceilingMaterialHandles = []
     this.unsubscribers.forEach(off => off())
     const dom = this.runtime.domElement
     dom.removeEventListener('pointerdown', this.selection.handlePointerDown)
@@ -1073,10 +1078,8 @@ export class Viewport3D {
     this.pickables.length = 0
     this.buildTokens.clear()
     this.lastAppliedProps.clear()
-    if (this.wallMaterialHandle) {
-      this.wallMaterialHandle.dispose()
-      this.wallMaterialHandle = null
-    }
+    this.wallMaterialHandles.forEach(h => h.dispose())
+    this.wallMaterialHandles.clear()
     this.environment.dispose()
     this.runtime.dispose()
   }
@@ -1088,11 +1091,9 @@ export class Viewport3D {
   }
 }
 
-/** 仅墙/地/天花外观；网格/灯/相机变化不触发 rebuildWalls */
+/** 仅墙默认外观；网格/灯/相机变化不触发 rebuildWalls */
 function shellEnvKey(env: EnvironmentJSON): string {
   return JSON.stringify({
-    floor: env.floor,
-    ceiling: env.ceiling,
     wall: env.wall
   })
 }

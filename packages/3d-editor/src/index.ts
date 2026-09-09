@@ -11,8 +11,14 @@ export {
   createDefaultFloor,
   createDefaultCeiling,
   createDefaultWall,
-  cloneEnvironment
+  createDefaultWorkspace,
+  cloneEnvironment,
+  cloneWorkspace
 } from './document/defaults'
+export {
+  resolveWallAppearance,
+  wallAppearanceCacheKey
+} from './document/resolve-wall-appearance'
 export { createEmptyDocumentJSON } from './document/serialize'
 export { createId, randomUUID } from './utils/id'
 export { isDocumentItem } from './catalog/types'
@@ -33,6 +39,7 @@ export type {
   DocumentKind,
   BoundsJSON,
   WallJSON,
+  WorkspaceJSON,
   TransformJSON,
   CatalogRefJSON,
   EditorNodeJSON,
@@ -44,11 +51,11 @@ export type {
   EnvironmentFloorJSON,
   EnvironmentCeilingJSON,
   EnvironmentWallJSON,
-  FloorCoverage,
   DefaultViewJSON,
   CameraViewType,
   VisualState
 } from './document/types'
+export type { ResolvedWallAppearance } from './document/resolve-wall-appearance'
 export type {
   EditorDocument,
   PlaceResult,

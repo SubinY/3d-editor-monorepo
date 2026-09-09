@@ -215,15 +215,12 @@ describe('setBounds', () => {
     expect(doc.bounds.width).toBe(1.2)
   })
 
-  it('修改 height 时同步墙高，撤销可恢复', () => {
+  it('修改 height 时不强制同步墙高', () => {
     const doc = createDocument({ kind: 'scene', bounds: { width: 10, depth: 5, height: 2 } })
     doc.createRectRoom()
     expect(doc.getWalls().every(w => w.height === 2)).toBe(true)
     doc.commands.setBounds({ height: 3.5 })
     expect(doc.bounds.height).toBe(3.5)
-    expect(doc.getWalls().every(w => w.height === 3.5)).toBe(true)
-    doc.history.undo()
-    expect(doc.bounds.height).toBe(2)
     expect(doc.getWalls().every(w => w.height === 2)).toBe(true)
   })
 })
@@ -249,13 +246,13 @@ describe('setEnvironment', () => {
   it('toJSON 带上 environment；缺省 fromJSON 补默认', () => {
     const doc = createDocument({ kind: 'scene', bounds: { width: 20, depth: 15, height: 3 } })
     const json = doc.toJSON()
-    expect(json.environment.helpers.grid).toBe(false)
-    expect(json.environment.ceiling.visible).toBe(false)
+    expect(json.environment.helpers.grid).toBe(true)
+    expect((json.environment as { ceiling?: unknown }).ceiling).toBeUndefined()
     const bare = { ...json, environment: undefined as unknown as typeof json.environment }
     const loaded = EditorDocument.fromJSON(bare as typeof json)
     expect(loaded.environment.helpers.enclosure).toBe('none')
     expect(loaded.environment.background.type).toBe('color')
-    expect(loaded.environment.ceiling.visible).toBe(false)
+    expect(loaded.environment.wall).toBeDefined()
   })
 })
 
@@ -308,9 +305,9 @@ describe('序列化与加载', () => {
     doc.createRectRoom()
     doc.commands.placeItem(cabinetItem, { position: [2, 0, 3], props: { circuit: 'A-01' } })
     const json = doc.toJSON()
-    expect(json.schemaVersion).toBe('2.0.0')
+    expect(json.schemaVersion).toBe('1.0.0')
     expect(json.unit).toBe('m')
-    expect(json.environment.helpers.grid).toBe(false)
+    expect(json.environment.helpers.grid).toBe(true)
     expect(json.environment.helpers.enclosure).toBe('none')
     expect(json.structure?.walls).toHaveLength(4)
     expect(json.nodes).toHaveLength(1)

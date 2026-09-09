@@ -12,10 +12,11 @@ import { DocumentSelection } from './selection'
 import {
   cloneEnvironment,
   cloneTransform,
-  createDefaultCeiling,
+  cloneWorkspace,
   createDefaultEnvironment,
   createDefaultTransform,
-  createDefaultWall
+  createDefaultWall,
+  createDefaultWorkspace
 } from './defaults'
 import {
   SCHEMA_VERSION,
@@ -23,9 +24,11 @@ import {
   type DocumentKind,
   type EditorDocumentJSON,
   type EditorNodeJSON,
+  type EnvironmentFloorJSON,
   type EnvironmentJSON,
   type TransformJSON,
-  type WallJSON
+  type WallJSON,
+  type WorkspaceJSON
 } from './types'
 
 export interface CreateDocumentOptions {
@@ -34,6 +37,7 @@ export interface CreateDocumentOptions {
   name?: string
   bounds: BoundsJSON
   walls?: WallJSON[]
+  workspaces?: WorkspaceJSON[]
   environment?: EnvironmentJSON
   metadata?: Record<string, unknown>
 }
@@ -77,6 +81,29 @@ export interface ValidationWarning {
   message: string
 }
 
+export type WallUpdatePatch = Partial<
+  Pick<
+    WallJSON,
+    | 'height'
+    | 'thickness'
+    | 'color'
+    | 'opacity'
+    | 'presetId'
+    | 'mapUrl'
+    | 'mapRepeat'
+  >
+>
+
+export type WorkspaceUpdatePatch = {
+  name?: string
+  height?: number
+  floor?: Partial<EnvironmentFloorJSON>
+  ceiling?: Partial<EnvironmentFloorJSON>
+}
+
+const MIN_WORKSPACE_POINTS = 3
+const MIN_WALL_LEN = 0.05
+
 /**
  * 运行时 Document：命令 / 历史 / 选中 / 事件。
  * 存盘形态见 EditorDocumentJSON；Host 经 createEditor 获得实例。
@@ -96,6 +123,7 @@ export class EditorDocument {
 
   private nodes: EditorNodeJSON[] = []
   private walls: WallJSON[] = []
+  private workspaces: WorkspaceJSON[] = []
   private nodeIndex = new Map<string, EditorNodeJSON>()
   private emitter = new DocumentEmitter()
   private itemCache = new Map<string, CatalogItem>()
@@ -110,9 +138,14 @@ export class EditorDocument {
       ? cloneEnvironment(options.environment)
       : createDefaultEnvironment(options.kind, options.bounds)
     if (!this.environment.wall) this.environment.wall = createDefaultWall()
-    if (!this.environment.ceiling) this.environment.ceiling = createDefaultCeiling(this.kind)
+    delete (this.environment as { floor?: unknown }).floor
+    delete (this.environment as { ceiling?: unknown }).ceiling
     this.metadata = { ...(options.metadata ?? {}) }
     this.walls = (options.walls ?? []).map(wall => ({ ...wall }))
+    this.workspaces =
+      this.kind === 'scene'
+        ? (options.workspaces ?? []).map(ws => cloneWorkspace(ws))
+        : []
     this.selection = new DocumentSelection(ids => {
       this.emitter.emit('selection:changed', { ids })
     })
@@ -180,6 +213,14 @@ export class EditorDocument {
     return this.walls.find(wall => wall.id === id)
   }
 
+  getWorkspaces(): WorkspaceJSON[] {
+    return this.workspaces
+  }
+
+  getWorkspace(id: string): WorkspaceJSON | undefined {
+    return this.workspaces.find(ws => ws.id === id)
+  }
+
   checkCollision(
     transform: TransformJSON,
     item: CatalogItem | undefined,
@@ -245,6 +286,14 @@ export class EditorDocument {
     if (patch.props !== undefined) node.props = { ...(node.props ?? {}), ...patch.props }
     this.emitter.emit('node:updated', { node, source })
     this.emitChange()
+  }
+
+  private defaultWallHeight(): number {
+    return this.environment.wall?.defaultHeight ?? this.bounds.height ?? 2
+  }
+
+  private defaultWallThickness(): number {
+    return this.environment.wall?.defaultThickness ?? 0.2
   }
 
   public readonly commands = {
@@ -340,7 +389,6 @@ export class EditorDocument {
       return true
     },
 
-    /** 深拷贝节点（含 props），新 id；position 加 offset。 */
     duplicateNode: (id: string, options?: DuplicateOptions): PlaceResult => {
       const src = this.nodeIndex.get(id)
       if (!src) return { denied: 'node-not-found' }
@@ -417,8 +465,8 @@ export class EditorDocument {
         id: createId('wall'),
         a: [...a],
         b: [...b],
-        height: options?.height ?? this.bounds.height ?? 2,
-        thickness: options?.thickness ?? 0.2
+        height: options?.height ?? this.defaultWallHeight(),
+        thickness: options?.thickness ?? this.defaultWallThickness()
       }
       const doAdd = () => {
         this.walls.push(wall)
@@ -453,14 +501,12 @@ export class EditorDocument {
       return true
     },
 
-    /** 批量更新墙端点（墙拖/端点联动）；一条历史；有近零长则整次拒绝 */
     moveWalls: (
       updates: Array<{ id: string; a: [number, number]; b: [number, number] }>
     ): boolean => {
       if (this.kind !== 'scene' || !updates.length) return false
-      const MIN_LEN = 0.05
       for (const u of updates) {
-        if (Math.hypot(u.b[0] - u.a[0], u.b[1] - u.a[1]) < MIN_LEN) return false
+        if (Math.hypot(u.b[0] - u.a[0], u.b[1] - u.a[1]) < MIN_WALL_LEN) return false
       }
       const before = updates.map(u => {
         const wall = this.walls.find(w => w.id === u.id)
@@ -498,6 +544,173 @@ export class EditorDocument {
       return true
     },
 
+    updateWall: (
+      id: string,
+      patch: WallUpdatePatch & {
+        color?: string | null
+        opacity?: number | null
+        presetId?: string | null
+        mapUrl?: string | null
+        mapRepeat?: number | null
+        height?: number | null
+        thickness?: number | null
+      }
+    ): boolean => {
+      if (this.kind !== 'scene') return false
+      const wall = this.walls.find(w => w.id === id)
+      if (!wall) return false
+      const before = { ...wall, a: [...wall.a] as [number, number], b: [...wall.b] as [number, number] }
+
+      const keys = [
+        'height',
+        'thickness',
+        'color',
+        'opacity',
+        'presetId',
+        'mapUrl',
+        'mapRepeat'
+      ] as const
+      for (const key of keys) {
+        if (!(key in patch)) continue
+        const value = patch[key]
+        if (value === null) {
+          delete wall[key]
+        } else if (value !== undefined) {
+          ;(wall as unknown as Record<string, unknown>)[key] = value
+        }
+      }
+
+      this.emitter.emit('wall:updated', { wall })
+      this.emitChange()
+
+      const after = { ...wall, a: [...wall.a] as [number, number], b: [...wall.b] as [number, number] }
+      this.history.push({
+        label: `update wall ${id}`,
+        undo: () => {
+          const w = this.walls.find(x => x.id === id)
+          if (!w) return
+          Object.assign(w, before)
+          w.a = [...before.a]
+          w.b = [...before.b]
+          this.emitter.emit('wall:updated', { wall: w })
+          this.emitChange()
+        },
+        redo: () => {
+          const w = this.walls.find(x => x.id === id)
+          if (!w) return
+          Object.assign(w, after)
+          w.a = [...after.a]
+          w.b = [...after.b]
+          this.emitter.emit('wall:updated', { wall: w })
+          this.emitChange()
+        }
+      })
+      return true
+    },
+
+    addWorkspace: (
+      outline: [number, number][],
+      options?: { name?: string; height?: number }
+    ): WorkspaceJSON | undefined => {
+      if (this.kind !== 'scene') return undefined
+      if (!outline || outline.length < MIN_WORKSPACE_POINTS) return undefined
+      const workspace = createDefaultWorkspace(outline, {
+        name: options?.name,
+        height: options?.height
+      })
+      const doAdd = () => {
+        this.workspaces.push(workspace)
+        this.emitter.emit('workspace:added', { workspace })
+        this.emitChange()
+      }
+      const doRemove = () => {
+        this.workspaces = this.workspaces.filter(w => w.id !== workspace.id)
+        this.emitter.emit('workspace:removed', { workspace })
+        this.emitChange()
+      }
+      doAdd()
+      this.history.push({ label: 'add workspace', undo: doRemove, redo: doAdd })
+      return workspace
+    },
+
+    removeWorkspace: (id: string): boolean => {
+      if (this.kind !== 'scene') return false
+      const workspace = this.workspaces.find(w => w.id === id)
+      if (!workspace) return false
+      const snapshot = cloneWorkspace(workspace)
+      const doRemove = () => {
+        this.workspaces = this.workspaces.filter(w => w.id !== id)
+        this.emitter.emit('workspace:removed', { workspace: snapshot })
+        this.emitChange()
+      }
+      const doAdd = () => {
+        this.workspaces.push(cloneWorkspace(snapshot))
+        this.emitter.emit('workspace:added', { workspace: snapshot })
+        this.emitChange()
+      }
+      doRemove()
+      this.history.push({ label: 'remove workspace', undo: doAdd, redo: doRemove })
+      return true
+    },
+
+    updateWorkspace: (id: string, patch: WorkspaceUpdatePatch): boolean => {
+      if (this.kind !== 'scene') return false
+      const workspace = this.workspaces.find(w => w.id === id)
+      if (!workspace) return false
+      const before = cloneWorkspace(workspace)
+
+      if (patch.name !== undefined) workspace.name = patch.name
+      if (patch.height !== undefined) workspace.height = patch.height
+      if (patch.floor) workspace.floor = { ...workspace.floor, ...patch.floor }
+      if (patch.ceiling) workspace.ceiling = { ...workspace.ceiling, ...patch.ceiling }
+
+      this.emitter.emit('workspace:updated', { workspace })
+      this.emitChange()
+      const after = cloneWorkspace(workspace)
+
+      this.history.push({
+        label: `update workspace ${id}`,
+        undo: () => {
+          const idx = this.workspaces.findIndex(w => w.id === id)
+          if (idx < 0) return
+          this.workspaces[idx] = cloneWorkspace(before)
+          this.emitter.emit('workspace:updated', { workspace: this.workspaces[idx] })
+          this.emitChange()
+        },
+        redo: () => {
+          const idx = this.workspaces.findIndex(w => w.id === id)
+          if (idx < 0) return
+          this.workspaces[idx] = cloneWorkspace(after)
+          this.emitter.emit('workspace:updated', { workspace: this.workspaces[idx] })
+          this.emitChange()
+        }
+      })
+      return true
+    },
+
+    setWorkspaceOutline: (id: string, outline: [number, number][]): boolean => {
+      if (this.kind !== 'scene') return false
+      if (!outline || outline.length < MIN_WORKSPACE_POINTS) return false
+      const workspace = this.workspaces.find(w => w.id === id)
+      if (!workspace) return false
+      const before = workspace.outline.map(p => [...p] as [number, number])
+      const after = outline.map(p => [...p] as [number, number])
+      const apply = (pts: [number, number][]) => {
+        const ws = this.workspaces.find(w => w.id === id)
+        if (!ws) return
+        ws.outline = pts.map(p => [...p] as [number, number])
+        this.emitter.emit('workspace:updated', { workspace: ws })
+        this.emitChange()
+      }
+      apply(after)
+      this.history.push({
+        label: `set workspace outline ${id}`,
+        undo: () => apply(before),
+        redo: () => apply(after)
+      })
+      return true
+    },
+
     setBounds: (next: Partial<BoundsJSON>): void => {
       const before = { ...this.bounds }
       const after: BoundsJSON = {
@@ -509,50 +722,32 @@ export class EditorDocument {
         return
       }
 
-      const heightChanged = after.height !== before.height
-      const wallsBefore = heightChanged
-        ? this.walls.map(w => ({ id: w.id, height: w.height }))
-        : null
-
-      const apply = (
-        bounds: BoundsJSON,
-        wallHeights: Array<{ id: string; height?: number }> | null,
-        syncToBoundsHeight: boolean
-      ) => {
+      const apply = (bounds: BoundsJSON) => {
         this.bounds = { ...bounds }
-        if (wallHeights) {
-          const map = new Map(wallHeights.map(w => [w.id, w.height]))
-          this.walls.forEach(wall => {
-            if (map.has(wall.id)) wall.height = map.get(wall.id)
-          })
-        } else if (syncToBoundsHeight && bounds.height != null) {
-          this.walls.forEach(wall => {
-            wall.height = bounds.height
-          })
-        }
         this.emitter.emit('bounds:updated', { bounds: this.bounds })
-        if (wallHeights || syncToBoundsHeight) {
-          this.walls.forEach(wall => this.emitter.emit('wall:updated', { wall }))
-        }
         this.emitChange()
       }
 
-      apply(after, null, heightChanged)
+      apply(after)
       this.history.push({
         label: 'set bounds',
-        undo: () => apply(before, wallsBefore, false),
-        redo: () => apply(after, null, heightChanged)
+        undo: () => apply(before),
+        redo: () => apply(after)
       })
     },
 
     setEnvironment: (next: EnvironmentJSON, options?: { history?: boolean }): void => {
       const before = cloneEnvironment(this.environment)
       const after = cloneEnvironment(next)
+      delete (after as { floor?: unknown }).floor
+      delete (after as { ceiling?: unknown }).ceiling
+      if (!after.wall) after.wall = createDefaultWall()
       const recordHistory = options?.history !== false
       const apply = (environment: EnvironmentJSON) => {
         this.environment = cloneEnvironment(environment)
+        delete (this.environment as { floor?: unknown }).floor
+        delete (this.environment as { ceiling?: unknown }).ceiling
         this.emitter.emit('environment:updated', { environment: this.environment })
-        // Orbit 位姿静默回写不触发全局 change，避免拖相机时刷图层树
         if (recordHistory) this.emitChange()
       }
       apply(after)
@@ -575,8 +770,8 @@ export class EditorDocument {
       [-hw, hd]
     ]
     const wallOpts = {
-      height: options?.height ?? this.bounds.height ?? 2,
-      thickness: options?.thickness ?? 0.2
+      height: options?.height ?? this.defaultWallHeight(),
+      thickness: options?.thickness ?? this.defaultWallThickness()
     }
     const walls: WallJSON[] = []
     for (let i = 0; i < corners.length; i++) {
@@ -605,6 +800,13 @@ export class EditorDocument {
   }
 
   toJSON(): EditorDocumentJSON {
+    const structure: EditorDocumentJSON['structure'] =
+      this.walls.length || this.workspaces.length
+        ? {
+            walls: this.walls.length ? this.walls : undefined,
+            workspaces: this.workspaces.length ? this.workspaces : undefined
+          }
+        : undefined
     return JSON.parse(
       JSON.stringify({
         schemaVersion: SCHEMA_VERSION,
@@ -613,7 +815,7 @@ export class EditorDocument {
         name: this.name,
         unit: 'm' as const,
         bounds: this.bounds,
-        structure: this.walls.length ? { walls: this.walls } : undefined,
+        structure,
         nodes: this.nodes,
         environment: this.environment,
         metadata: Object.keys(this.metadata).length ? this.metadata : undefined
@@ -628,12 +830,12 @@ export class EditorDocument {
       name: json.name,
       bounds: json.bounds,
       walls: json.structure?.walls,
+      workspaces: json.structure?.workspaces,
       environment: json.environment ?? createDefaultEnvironment(json.kind, json.bounds),
       metadata: json.metadata
     })
     const nodes: EditorNodeJSON[] = JSON.parse(JSON.stringify(json.nodes ?? []))
     nodes.forEach(node => {
-      // 丢弃历史字段 children（若有）；嵌套只走 catalog document
       delete (node as { children?: unknown }).children
       doc.nodes.push(node)
       doc.indexNode(node)

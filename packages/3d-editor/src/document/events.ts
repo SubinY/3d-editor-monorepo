@@ -1,4 +1,10 @@
-import type { BoundsJSON, EditorNodeJSON, EnvironmentJSON, WallJSON } from './types'
+import type {
+  BoundsJSON,
+  EditorNodeJSON,
+  EnvironmentJSON,
+  WallJSON,
+  WorkspaceJSON
+} from './types'
 
 export interface NodeEventPayload {
   node: EditorNodeJSON
@@ -8,6 +14,10 @@ export interface NodeEventPayload {
 
 export interface WallEventPayload {
   wall: WallJSON
+}
+
+export interface WorkspaceEventPayload {
+  workspace: WorkspaceJSON
 }
 
 export interface SelectionEventPayload {
@@ -21,6 +31,9 @@ export type DocumentEventMap = {
   'wall:added': WallEventPayload
   'wall:removed': WallEventPayload
   'wall:updated': WallEventPayload
+  'workspace:added': WorkspaceEventPayload
+  'workspace:removed': WorkspaceEventPayload
+  'workspace:updated': WorkspaceEventPayload
   'bounds:updated': { bounds: BoundsJSON }
   'environment:updated': { environment: EnvironmentJSON }
   'selection:changed': SelectionEventPayload

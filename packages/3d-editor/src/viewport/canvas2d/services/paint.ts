@@ -2,13 +2,14 @@
 import type { CatalogItem } from '../../../catalog/types'
 import type { EditorDocument } from '../../../document/EditorDocument'
 import type { EditorNodeJSON, WallJSON } from '../../../document/types'
+import { resolveWallAppearance } from '../../../document/resolve-wall-appearance'
 import type { PlanePoint, Theme2D, Tool2D } from '../types'
-import { findClosedWallLoops } from '../utils/closed-loops'
 import { yawToDisplayAngle } from '../utils/node-layout'
 import type { Camera2D } from './camera'
 import type { DropGhost } from './place'
 import type { SelectInteraction } from './select-interaction'
 import type { WallInteraction } from './wall-interaction'
+import type { WorkspaceInteraction } from './workspace-interaction'
 
 export interface Paint2DContext {
   ctx: CanvasRenderingContext2D
@@ -20,6 +21,7 @@ export interface Paint2DContext {
   isElevation: boolean
   select: SelectInteraction
   wall: WallInteraction
+  workspace: WorkspaceInteraction
   dropGhost: DropGhost | null
   footprintSize: (item: CatalogItem | undefined) => { wu: number; wv: number }
   itemFor: (node: EditorNodeJSON) => CatalogItem | undefined
@@ -46,6 +48,7 @@ export function paintScene(p: Paint2DContext, width: number, height: number): vo
   }
   drawNodes(p)
   drawChainGhost(p)
+  drawWorkspaceGhost(p)
   drawDropGhost(p)
   drawAlignGuides(p)
   drawWallGuides(p, width, height)
@@ -125,41 +128,31 @@ function drawBounds(p: Paint2DContext): void {
 }
 
 function drawFloors(p: Paint2DContext): void {
-  const floor = p.doc.environment.floor
-  if (!floor.visible) return
-
   const { ctx, camera, theme, doc } = p
-  const color = floor.color || theme.floor
-  const coverage = floor.coverage
+  const selection = doc.selection.get()
 
-  if (coverage === 'bounds') {
-    const w = doc.bounds.width
-    const d = doc.bounds.depth
-    const tl = camera.worldToScreen(-w / 2, -d / 2)
-    const br = camera.worldToScreen(w / 2, d / 2)
+  doc.getWorkspaces().forEach(ws => {
+    if (!ws.floor?.visible || ws.outline.length < 3) return
+    const color = ws.floor.color || theme.floor
+    const selected = selection.includes(ws.id)
     ctx.fillStyle = color
-    ctx.globalAlpha = 0.35
-    ctx.fillRect(tl.sx, tl.sy, br.sx - tl.sx, br.sy - tl.sy)
-    ctx.globalAlpha = 1
-  }
-
-  const loops = findClosedWallLoops(doc.getWalls())
-  if (!loops.length) return
-  ctx.fillStyle = color
-  ctx.globalAlpha = coverage === 'bounds' ? 0.55 : 0.5
-  loops.forEach(loop => {
-    if (loop.points.length < 3) return
+    ctx.globalAlpha = selected ? 0.55 : 0.4
     ctx.beginPath()
-    const first = camera.worldToScreen(loop.points[0].u, loop.points[0].v)
+    const first = camera.worldToScreen(ws.outline[0][0], ws.outline[0][1])
     ctx.moveTo(first.sx, first.sy)
-    for (let i = 1; i < loop.points.length; i++) {
-      const pt = camera.worldToScreen(loop.points[i].u, loop.points[i].v)
+    for (let i = 1; i < ws.outline.length; i++) {
+      const pt = camera.worldToScreen(ws.outline[i][0], ws.outline[i][1])
       ctx.lineTo(pt.sx, pt.sy)
     }
     ctx.closePath()
     ctx.fill()
+    ctx.globalAlpha = 1
+    ctx.strokeStyle = selected ? theme.wallSelected : theme.bounds
+    ctx.lineWidth = selected ? 2 : 1.2
+    ctx.setLineDash(selected ? [] : [6, 4])
+    ctx.stroke()
+    ctx.setLineDash([])
   })
-  ctx.globalAlpha = 1
 }
 
 function drawAlignGuides(p: Paint2DContext): void {
@@ -201,16 +194,16 @@ function drawWalls(p: Paint2DContext): void {
     const a = camera.worldToScreen(wa[0], wa[1])
     const b = camera.worldToScreen(wb[0], wb[1])
     const selected = selection.includes(wall.id)
-    const wallColor = doc.environment.wall?.color || theme.wall
-    ctx.strokeStyle = selected ? theme.wallSelected : wallColor
-    ctx.lineWidth = Math.max(3, (wall.thickness ?? 0.2) * camera.scale)
-    ctx.globalAlpha = doc.environment.wall?.opacity ?? 0.92
+    const resolved = resolveWallAppearance(wall, doc.environment.wall, doc.bounds)
+    ctx.strokeStyle = selected ? theme.wallSelected : resolved.color
+    ctx.lineWidth = Math.max(3, resolved.thickness * camera.scale)
+    ctx.globalAlpha = resolved.opacity
     ctx.beginPath()
     ctx.moveTo(a.sx, a.sy)
     ctx.lineTo(b.sx, b.sy)
     ctx.stroke()
     ctx.globalAlpha = 1
-    drawWallDimension(p, { ...wall, a: wa, b: wb })
+    drawWallDimension(p, { ...wall, a: wa, b: wb, thickness: resolved.thickness })
 
     if (selected && tool === 'select' && !readonly) {
       drawWallEndpointHandles(p, wa, wb)
@@ -284,6 +277,42 @@ function drawChainGhost(p: Paint2DContext): void {
     ctx.textAlign = 'center'
     ctx.fillText(`${length.toFixed(1)}m`, (a.sx + b.sx) / 2, (a.sy + b.sy) / 2 - 8)
   }
+}
+
+function drawWorkspaceGhost(p: Paint2DContext): void {
+  const { points, cursor } = p.workspace
+  if (!points.length) return
+  const { ctx, camera, theme } = p
+  ctx.strokeStyle = theme.bounds
+  ctx.fillStyle = theme.floor
+  ctx.lineWidth = 2
+  ctx.setLineDash([5, 4])
+  ctx.beginPath()
+  const first = camera.worldToScreen(points[0].u, points[0].v)
+  ctx.moveTo(first.sx, first.sy)
+  for (let i = 1; i < points.length; i++) {
+    const pt = camera.worldToScreen(points[i].u, points[i].v)
+    ctx.lineTo(pt.sx, pt.sy)
+  }
+  if (cursor) {
+    const c = camera.worldToScreen(cursor.u, cursor.v)
+    ctx.lineTo(c.sx, c.sy)
+  }
+  if (points.length >= 3) {
+    ctx.closePath()
+    ctx.globalAlpha = 0.25
+    ctx.fill()
+    ctx.globalAlpha = 1
+  }
+  ctx.stroke()
+  ctx.setLineDash([])
+  points.forEach((pt, i) => {
+    const s = camera.worldToScreen(pt.u, pt.v)
+    ctx.fillStyle = i === 0 ? theme.wallSelected : theme.nodeSelected
+    ctx.beginPath()
+    ctx.arc(s.sx, s.sy, 4, 0, Math.PI * 2)
+    ctx.fill()
+  })
 }
 
 function drawDropGhost(p: Paint2DContext): void {
