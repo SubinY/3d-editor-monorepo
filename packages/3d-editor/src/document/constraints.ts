@@ -1,4 +1,5 @@
 import type { CatalogItem } from '../catalog/types'
+import { rotatedExtents } from './collision'
 import { cloneTransform } from './defaults'
 import type { EditorNodeJSON, TransformJSON } from './types'
 import type { EditorDocument } from './EditorDocument'
@@ -71,27 +72,22 @@ export class ConstraintEngine {
   }
 }
 
-/** 通用规则：节点 footprint 不越出文档 bounds（按 yaw 旋转后的包围盒近似） */
+/** 通用规则：节点 footprint 不越出文档 bounds（scene XZ；三轴旋转后 OBB→AABB） */
 export function boundsConstraint(options?: { margin?: number }): ConstraintRule {
   const margin = options?.margin ?? 0
   return {
     id: 'core:bounds',
     evaluate(input, doc) {
+      if (doc.kind === 'container') return true
       const { bounds } = doc
-      const fp = input.item?.footprint
-      const halfW = (fp?.width ?? 0) / 2
-      const halfD = (fp?.depth ?? 0) / 2
-      const yaw = input.transform.rotation[1]
-      const cos = Math.abs(Math.cos(yaw))
-      const sin = Math.abs(Math.sin(yaw))
-      const extentX = halfW * cos + halfD * sin
-      const extentZ = halfW * sin + halfD * cos
+      const fp = input.item?.footprint ?? { width: 0, depth: 0, height: 0 }
+      const { eu, ev } = rotatedExtents(fp, input.transform.rotation, 'xz')
 
       const [x, , z] = input.transform.position
-      const minX = -bounds.width / 2 + extentX + margin
-      const maxX = bounds.width / 2 - extentX - margin
-      const minZ = -bounds.depth / 2 + extentZ + margin
-      const maxZ = bounds.depth / 2 - extentZ - margin
+      const minX = -bounds.width / 2 + eu + margin
+      const maxX = bounds.width / 2 - eu - margin
+      const minZ = -bounds.depth / 2 + ev + margin
+      const maxZ = bounds.depth / 2 - ev - margin
 
       if (minX > maxX || minZ > maxZ) {
         return { allowed: false, reason: 'core:bounds:item-too-large' }

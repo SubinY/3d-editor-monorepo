@@ -1,4 +1,4 @@
-import type { CatalogItem, CatalogProvider } from '../catalog/types'
+import type { CatalogItem, CatalogProvider, FootprintSpec } from '../catalog/types'
 import { catalogKey } from '../catalog/types'
 import { createId } from '../utils/id'
 import { findCollision, type CollisionHit } from './collision'
@@ -30,6 +30,30 @@ import {
   type WallJSON,
   type WorkspaceJSON
 } from './types'
+
+function readFootprintOverride(
+  props: Record<string, unknown> | undefined
+): FootprintSpec | undefined {
+  const raw = props?.footprint
+  if (!raw || typeof raw !== 'object') return undefined
+  const fp = raw as Record<string, unknown>
+  const width = Number(fp.width)
+  const depth = Number(fp.depth)
+  const height = fp.height == null ? undefined : Number(fp.height)
+  if (!Number.isFinite(width) || width <= 0 || !Number.isFinite(depth) || depth <= 0) {
+    return undefined
+  }
+  if (height != null && (!Number.isFinite(height) || height <= 0)) return undefined
+  return { width, depth, height }
+}
+
+function cloneFootprint(fp: FootprintSpec): FootprintSpec {
+  return {
+    width: fp.width,
+    depth: fp.depth,
+    ...(fp.height != null ? { height: fp.height } : {})
+  }
+}
 
 export interface CreateDocumentOptions {
   kind: DocumentKind
@@ -175,9 +199,22 @@ export class EditorDocument {
     this.itemCache.set(catalogKey(item.id, item.version), item)
   }
 
-  getCachedItem(node: EditorNodeJSON): CatalogItem | undefined {
+  /** catalog 原条目（不含 props.footprint 覆盖），供等比缩放取基准比例 */
+  getBaseCachedItem(node: EditorNodeJSON): CatalogItem | undefined {
     if (!node.catalogRef) return undefined
     return this.itemCache.get(catalogKey(node.catalogRef.id, node.catalogRef.version))
+  }
+
+  getCachedItem(node: EditorNodeJSON): CatalogItem | undefined {
+    if (!node.catalogRef) return undefined
+    const item = this.itemCache.get(catalogKey(node.catalogRef.id, node.catalogRef.version))
+    if (!item) return undefined
+    const fp = readFootprintOverride(node.props)
+    if (!fp) return item
+    return {
+      ...item,
+      footprint: { width: fp.width, depth: fp.depth, height: fp.height }
+    }
   }
 
   async resolveItems(): Promise<void> {
@@ -457,6 +494,80 @@ export class EditorDocument {
         }
       })
       return true
+    },
+
+    /**
+     * 按节点覆盖 footprint（写入 props.footprint，可落库）。
+     * getCachedItem 会叠加覆盖值；node:updated 触发 3D 重建。
+     */
+    resizeNode: (
+      id: string,
+      footprint: FootprintSpec,
+      options?: TransformOptions
+    ): TransformResult => {
+      const node = this.nodeIndex.get(id)
+      if (!node) return { ok: false, denied: 'node-not-found' }
+      if (
+        !Number.isFinite(footprint.width) ||
+        footprint.width <= 0 ||
+        !Number.isFinite(footprint.depth) ||
+        footprint.depth <= 0 ||
+        (footprint.height != null &&
+          (!Number.isFinite(footprint.height) || footprint.height <= 0))
+      ) {
+        return { ok: false, denied: 'invalid-footprint' }
+      }
+
+      const nextFp = cloneFootprint(footprint)
+      const base = node.catalogRef
+        ? this.itemCache.get(catalogKey(node.catalogRef.id, node.catalogRef.version))
+        : undefined
+      const nextItem = base
+        ? { ...base, footprint: nextFp }
+        : ({
+            id: node.catalogRef?.id ?? id,
+            version: node.catalogRef?.version ?? '0',
+            name: node.name ?? id,
+            placeableIn: [this.kind],
+            footprint: nextFp
+          } satisfies CatalogItem)
+
+      const verdict: ConstraintResult = this.constraints.evaluate(
+        { operation: 'transform', node, transform: node.transform, item: nextItem },
+        this
+      )
+      if (!verdict.allowed) {
+        return { ok: false, denied: verdict.reason }
+      }
+      const finalTransform = verdict.transform ?? node.transform
+      const hit = this.checkCollision(finalTransform, nextItem, { excludeId: id })
+      if (hit) {
+        return { ok: false, denied: `collision:${hit.nodeName ?? hit.nodeId}` }
+      }
+
+      const beforeProps = node.props ? { ...node.props } : undefined
+      const beforeTransform = cloneTransform(node.transform)
+      const afterProps: Record<string, unknown> = {
+        ...(node.props ?? {}),
+        footprint: nextFp
+      }
+
+      const apply = (props: Record<string, unknown> | undefined, transform: TransformJSON) => {
+        const target = this.nodeIndex.get(id)
+        if (!target) return
+        target.props = props
+        target.transform = cloneTransform(transform)
+        this.emitter.emit('node:updated', { node: target, source: options?.source })
+        this.emitChange()
+      }
+
+      apply(afterProps, finalTransform)
+      this.history.push({
+        label: `resize ${node.name ?? id}`,
+        undo: () => apply(beforeProps, beforeTransform),
+        redo: () => apply(afterProps, finalTransform)
+      })
+      return { ok: true, transform: cloneTransform(finalTransform) }
     },
 
     addWall: (a: [number, number], b: [number, number], options?: { height?: number; thickness?: number }): WallJSON | undefined => {

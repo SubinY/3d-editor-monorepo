@@ -335,15 +335,20 @@ export class Viewport2D {
 
   private itemFor(node: EditorNodeJSON): CatalogItem | undefined {
     if (!node.catalogRef) return undefined
+    // Document 侧已叠加 props.footprint；优先走这里以免视口缓存脏读
+    const fromDoc = this.doc.getCachedItem(node)
+    if (fromDoc) return fromDoc
+
     const key = catalogKey(node.catalogRef.id, node.catalogRef.version)
-    const cached = this.itemCache.get(key) ?? this.doc.getCachedItem(node)
+    const cached = this.itemCache.get(key)
     if (cached) {
-      this.itemCache.set(key, cached)
-      return cached
+      this.doc.cacheItem(cached)
+      return this.doc.getCachedItem(node) ?? cached
     }
     this.catalog?.get(node.catalogRef.id, node.catalogRef.version).then(item => {
       if (item) {
         this.itemCache.set(key, item)
+        this.doc.cacheItem(item)
         this.requestRender()
       }
     })

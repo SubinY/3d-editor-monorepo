@@ -1,5 +1,6 @@
 /** 2D Canvas 整帧绘制：地板、网格、墙、节点、ghost、旋转手柄、对齐线 */
 import type { CatalogItem } from '../../../catalog/types'
+import { rotatedExtents } from '../../../document/collision'
 import type { EditorDocument } from '../../../document/EditorDocument'
 import type { EditorNodeJSON, WallJSON } from '../../../document/types'
 import { resolveWallAppearance } from '../../../document/resolve-wall-appearance'
@@ -319,10 +320,17 @@ function drawDropGhost(p: Paint2DContext): void {
   if (!p.dropGhost) return
   const { ctx, camera, theme, isElevation, dropGhost } = p
   const item = dropGhost.item
-  const { wu, wv } = p.footprintSize(item)
-  const w = wu * camera.scale
-  const d = wv * camera.scale
-  const cv = isElevation ? dropGhost.v + wv / 2 : dropGhost.v
+  const plane = isElevation ? 'xy' : 'xz'
+  const rotation: [number, number, number] = isElevation
+    ? [0, 0, dropGhost.yaw]
+    : [0, dropGhost.yaw, 0]
+  const { eu, ev } = rotatedExtents(item.footprint, rotation, plane)
+  const w = eu * 2 * camera.scale
+  const d = ev * 2 * camera.scale
+  const sizeV = isElevation
+    ? item.footprint.height ?? item.footprint.depth
+    : item.footprint.depth
+  const cv = isElevation ? dropGhost.v + sizeV / 2 : dropGhost.v
   const { sx, sy } = camera.worldToScreen(dropGhost.u, cv)
   const denied = dropGhost.colliding
   const color =
@@ -330,7 +338,6 @@ function drawDropGhost(p: Paint2DContext): void {
 
   ctx.save()
   ctx.translate(sx, sy)
-  ctx.rotate(yawToDisplayAngle(dropGhost.yaw, isElevation))
   ctx.globalAlpha = 0.45
   ctx.fillStyle = denied ? theme.nodeDenied : color
   ctx.fillRect(-w / 2, -d / 2, w, d)
@@ -346,33 +353,35 @@ function drawDropGhost(p: Paint2DContext): void {
 function drawNodes(p: Paint2DContext): void {
   const { ctx, camera, doc, theme, select, tool, readonly, isElevation } = p
   const selection = doc.selection.get()
+  const planeKind = isElevation ? 'xy' : 'xz'
   doc.getNodes().forEach(node => {
     if (node.visible === false) return
     const item = p.itemFor(node)
-    const { wu, wv } = p.footprintSize(item)
-    const w = wu * camera.scale
-    const d = wv * camera.scale
+    const footprint = item?.footprint ?? { width: 1, depth: 1, height: 1 }
+    const rotating = node.id === select.rotateNodeId && select.rotateMoved
+    const rotation: [number, number, number] = rotating
+      ? isElevation
+        ? [node.transform.rotation[0], node.transform.rotation[1], select.rotateGhostYaw]
+        : [node.transform.rotation[0], select.rotateGhostYaw, node.transform.rotation[2]]
+      : [...node.transform.rotation]
+
+    const { eu, ev } = rotatedExtents(footprint, rotation, planeKind)
+    const w = eu * 2 * camera.scale
+    const d = ev * 2 * camera.scale
+    const sizeV = isElevation ? footprint.height ?? footprint.depth : footprint.depth
 
     let plane = p.planeFromPosition(node.transform.position)
     const dragging = node.id === select.dragNodeId && select.dragGhost
     if (dragging) plane = select.dragGhost!
 
-    const cv = isElevation ? plane.v + wv / 2 : plane.v
+    const cv = isElevation ? plane.v + sizeV / 2 : plane.v
     const { sx, sy } = camera.worldToScreen(plane.u, cv)
-    const rotating = node.id === select.rotateNodeId && select.rotateMoved
-    const yaw = rotating
-      ? select.rotateGhostYaw
-      : isElevation
-        ? node.transform.rotation[2]
-        : node.transform.rotation[1]
-    const angle = yawToDisplayAngle(yaw, isElevation)
     const selected = selection.includes(node.id)
     const denied =
       (dragging && select.dragColliding) || (rotating && select.rotateColliding)
 
     ctx.save()
     ctx.translate(sx, sy)
-    ctx.rotate(angle)
     const color = typeof item?.thumb === 'string' && item.thumb.startsWith('#') ? item.thumb : theme.node
     ctx.fillStyle = denied ? theme.nodeDenied : color
     ctx.globalAlpha = dragging || rotating ? 0.55 : 0.9
@@ -385,9 +394,13 @@ function drawNodes(p: Paint2DContext): void {
         ? theme.nodeSelected
         : 'rgba(255,255,255,0.35)'
     ctx.strokeRect(-w / 2, -d / 2, w, d)
+    // 朝向短划：用平面 yaw 指示（AABB 本身轴对齐）
+    const yaw = isElevation ? rotation[2] : rotation[1]
+    const tip = yawToDisplayAngle(yaw, isElevation)
+    const tipLen = Math.min(10, d / 4)
     ctx.beginPath()
-    ctx.moveTo(0, -d / 2)
-    ctx.lineTo(0, -d / 2 - Math.min(10, d / 4))
+    ctx.moveTo(Math.sin(tip) * (d / 2), -Math.cos(tip) * (d / 2))
+    ctx.lineTo(Math.sin(tip) * (d / 2 + tipLen), -Math.cos(tip) * (d / 2 + tipLen))
     ctx.stroke()
     ctx.restore()
 

@@ -574,7 +574,9 @@ export class Viewport3D {
     if (!node.catalogRef) {
       return this.buildFootprintBox(undefined)
     }
-    const item = await this.resolveItem(node.catalogRef.id, node.catalogRef.version)
+    // 先填入 catalog 缓存，再取 Document 侧（含 props.footprint 覆盖）的条目
+    await this.resolveItem(node.catalogRef.id, node.catalogRef.version)
+    const item = this.doc.getCachedItem(node)
     if (!item) {
       return this.buildFootprintBox(undefined)
     }
@@ -832,6 +834,18 @@ export class Viewport3D {
   private syncNodeObject(node: EditorNodeJSON): void {
     const root = this.nodeRoots.get(node.id)
     if (!root) return
+
+    const prevProps = this.lastAppliedProps.get(node.id)
+    const nextFp = node.props?.footprint
+    const prevFp = prevProps?.footprint
+    const footprintChanged =
+      JSON.stringify(nextFp ?? null) !== JSON.stringify(prevFp ?? null)
+    if (footprintChanged) {
+      this.lastAppliedProps.set(node.id, node.props)
+      void this.buildNode(node)
+      return
+    }
+
     this.applyTransformToObject(root, node.transform)
     root.visible = node.visible !== false
     // 隐藏时立刻卸掉 gizmo（visible 变更不会走 selection:changed）
@@ -843,7 +857,6 @@ export class Viewport3D {
     // transform / visible 变化后刷新阴影（Tier0: autoUpdate=false，按需 needsUpdate）
     this.runtime.markShadowNeedsUpdate()
 
-    const prevProps = this.lastAppliedProps.get(node.id)
     if (node.props === prevProps) return
     this.lastAppliedProps.set(node.id, node.props)
     const handle = getAssetHandle(root)
