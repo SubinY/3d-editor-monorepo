@@ -106,14 +106,14 @@ export function parseCabinetIdFromCatalogLabel(catalog: string): string | null {
 }
 
 export function getEditingVersion(json: EditorDocumentJSON): string {
-  const v = json.metadata?.editingVersion
+  const v = json.props?.editingVersion
   return typeof v === 'string' && v ? v : INITIAL_CABINET_VERSION
 }
 
 export function setEditingVersion(json: EditorDocumentJSON, version: string): EditorDocumentJSON {
   return {
     ...json,
-    metadata: { ...(json.metadata ?? {}), editingVersion: version }
+    props: { ...(json.props ?? {}), editingVersion: version }
   }
 }
 
@@ -148,7 +148,7 @@ export function cabinetDocument(
     bounds,
     nodes,
     environment: createDefaultEnvironment('container', bounds),
-    metadata: { editingVersion: version }
+    props: { editingVersion: version }
   }
 }
 

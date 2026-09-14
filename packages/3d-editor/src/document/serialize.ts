@@ -33,7 +33,7 @@ export function createEmptyDocumentJSON(options: CreateDocumentOptions): EditorD
     environment: options.environment
       ? cloneEnvironment(options.environment)
       : createDefaultEnvironment(options.kind, bounds),
-    metadata: options.metadata ? { ...options.metadata } : undefined
+    props: options.props ? { ...options.props } : undefined
   }
 }
 

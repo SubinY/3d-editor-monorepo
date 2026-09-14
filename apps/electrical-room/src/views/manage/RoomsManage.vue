@@ -28,7 +28,7 @@ const tableRows = computed(() =>
     return {
       id: entry.json.id,
       name: entry.json.name,
-      location: String(entry.json.metadata?.location ?? '—'),
+      location: String(entry.json.props?.location ?? '—'),
       size: boundsLabel(entry.json),
       walls: entry.json.structure?.walls?.length ?? 0,
       devices: entry.json.nodes.length,
@@ -85,7 +85,7 @@ async function submitCreate() {
       depth: form.depth || DEFAULT_SCENE_BOUNDS.depth,
       height: form.height || DEFAULT_SCENE_BOUNDS.height
     },
-    metadata: form.location ? { location: form.location } : undefined
+    props: form.location ? { location: form.location } : undefined
   })
   await api.saveDocument(json)
   creating.value = false

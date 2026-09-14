@@ -63,7 +63,7 @@ export interface CreateDocumentOptions {
   walls?: WallJSON[]
   workspaces?: WorkspaceJSON[]
   environment?: EnvironmentJSON
-  metadata?: Record<string, unknown>
+  props?: Record<string, unknown>
 }
 
 export interface PlaceOptions {
@@ -138,7 +138,7 @@ export class EditorDocument {
   public name: string
   public bounds: BoundsJSON
   public environment: EnvironmentJSON
-  public metadata: Record<string, unknown>
+  public props: Record<string, unknown>
 
   public readonly history = new DocumentHistory(100, () => this.emitChange())
   public readonly constraints = new ConstraintEngine()
@@ -164,7 +164,7 @@ export class EditorDocument {
     if (!this.environment.wall) this.environment.wall = createDefaultWall()
     delete (this.environment as { floor?: unknown }).floor
     delete (this.environment as { ceiling?: unknown }).ceiling
-    this.metadata = { ...(options.metadata ?? {}) }
+    this.props = { ...(options.props ?? {}) }
     this.walls = (options.walls ?? []).map(wall => ({ ...wall }))
     this.workspaces =
       this.kind === 'scene'
@@ -929,7 +929,7 @@ export class EditorDocument {
         structure,
         nodes: this.nodes,
         environment: this.environment,
-        metadata: Object.keys(this.metadata).length ? this.metadata : undefined
+        props: Object.keys(this.props).length ? this.props : undefined
       })
     )
   }
@@ -943,7 +943,7 @@ export class EditorDocument {
       walls: json.structure?.walls,
       workspaces: json.structure?.workspaces,
       environment: json.environment ?? createDefaultEnvironment(json.kind, json.bounds),
-      metadata: json.metadata
+      props: json.props
     })
     const nodes: EditorNodeJSON[] = JSON.parse(JSON.stringify(json.nodes ?? []))
     nodes.forEach(node => {

@@ -191,8 +191,8 @@ export interface EditorDocumentJSON {
   nodes: EditorNodeJSON[]
   /** 3D 呈现：背景 / 灯 / 阴影 / 辅助体 / 默认视角 / 墙默认 */
   environment: EnvironmentJSON
-  /** 非契约扩展；编辑相机等工作区状态不入资产契约 */
-  metadata?: Record<string, unknown>
+  /** 业务扩展字段，编辑器不解释 */
+  props?: Record<string, unknown>
 }
 
 /** 运行时可视呈现；不含业务状态枚举（色值由 Host 传入） */

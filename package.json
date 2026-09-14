@@ -18,7 +18,7 @@
     "version:patch": "pnpm --filter @mh/3d-editor exec npm version patch",
     "version:minor": "pnpm --filter @mh/3d-editor exec npm version minor",
     "version:major": "pnpm --filter @mh/3d-editor exec npm version major",
-    "publish": "pnpm build && pnpm --filter @mh/3d-editor publish --no-git-checks"
+    "publish": "pnpm build && pnpm --filter @mh/3d-editor publish --no-git-checks --force"
   },
   "devDependencies": {
     "@types/node": "^20.11.0",
