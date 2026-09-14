@@ -87,6 +87,7 @@ export class EditorSessionImpl implements EditorSession {
       onPickCandidates: this.viewport2dOptions?.onPickCandidates
     }
     this.viewport2d = new Viewport2D(el, options)
+    this.bindNodePreview()
     return this.viewport2d
   }
 
@@ -111,10 +112,12 @@ export class EditorSessionImpl implements EditorSession {
       proceduralResolvers: this.proceduralResolvers
     }
     this.viewport3d = new Viewport3D(el, options)
+    this.bindNodePreview()
     return this.viewport3d
   }
 
   unmountCanvas3d(): void {
+    this.viewport2d?.setPreviewHandler(undefined)
     this.viewport3d?.dispose()
     this.viewport3d = undefined
   }
@@ -170,6 +173,13 @@ export class EditorSessionImpl implements EditorSession {
     this.disposed = true
     this.unmountCanvas2d()
     this.unmountCanvas3d()
+  }
+
+  private bindNodePreview(): void {
+    const viewport3d = this.viewport3d
+    this.viewport2d?.setPreviewHandler(
+      viewport3d ? (id, preview) => viewport3d.previewNode(id, preview) : undefined
+    )
   }
 
   private applyInteraction(): void {

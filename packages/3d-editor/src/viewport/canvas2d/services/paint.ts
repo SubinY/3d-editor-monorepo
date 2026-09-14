@@ -1,4 +1,4 @@
-/** 2D Canvas 整帧绘制：地板、网格、墙、节点、ghost、旋转手柄、对齐线 */
+/** 2D Canvas 整帧绘制：地板、网格、墙、节点、ghost、选中手柄、对齐线 */
 import type { CatalogItem } from '../../../catalog/types'
 import { rotatedExtents } from '../../../document/collision'
 import type { EditorDocument } from '../../../document/EditorDocument'
@@ -8,6 +8,7 @@ import type { PlanePoint, Theme2D, Tool2D } from '../types'
 import { yawToDisplayAngle } from '../utils/node-layout'
 import type { Camera2D } from './camera'
 import type { DropGhost } from './place'
+import { drawSelectionHandleButton } from './draw-selection-handles'
 import type { SelectInteraction } from './select-interaction'
 import type { WallInteraction } from './wall-interaction'
 import type { WorkspaceInteraction } from './workspace-interaction'
@@ -359,16 +360,18 @@ function drawNodes(p: Paint2DContext): void {
     const item = p.itemFor(node)
     const footprint = item?.footprint ?? { width: 1, depth: 1, height: 1 }
     const rotating = node.id === select.rotateNodeId && select.rotateMoved
+    const scaling = node.id === select.scaleNodeId && select.scaleGhost
     const rotation: [number, number, number] = rotating
       ? isElevation
         ? [node.transform.rotation[0], node.transform.rotation[1], select.rotateGhostYaw]
         : [node.transform.rotation[0], select.rotateGhostYaw, node.transform.rotation[2]]
       : [...node.transform.rotation]
 
-    const { eu, ev } = rotatedExtents(footprint, rotation, planeKind)
+    const drawFp = scaling ? select.scaleGhost! : footprint
+    const { eu, ev } = rotatedExtents(drawFp, rotation, planeKind)
     const w = eu * 2 * camera.scale
     const d = ev * 2 * camera.scale
-    const sizeV = isElevation ? footprint.height ?? footprint.depth : footprint.depth
+    const sizeV = isElevation ? drawFp.height ?? drawFp.depth : drawFp.depth
 
     let plane = p.planeFromPosition(node.transform.position)
     const dragging = node.id === select.dragNodeId && select.dragGhost
@@ -378,22 +381,27 @@ function drawNodes(p: Paint2DContext): void {
     const { sx, sy } = camera.worldToScreen(plane.u, cv)
     const selected = selection.includes(node.id)
     const denied =
-      (dragging && select.dragColliding) || (rotating && select.rotateColliding)
+      (dragging && select.dragColliding) ||
+      (rotating && select.rotateColliding) ||
+      (scaling && select.scaleColliding)
 
     ctx.save()
     ctx.translate(sx, sy)
     const color = typeof item?.thumb === 'string' && item.thumb.startsWith('#') ? item.thumb : theme.node
     ctx.fillStyle = denied ? theme.nodeDenied : color
-    ctx.globalAlpha = dragging || rotating ? 0.55 : 0.9
+    ctx.globalAlpha = dragging || rotating || scaling ? 0.55 : 0.9
     ctx.fillRect(-w / 2, -d / 2, w, d)
     ctx.globalAlpha = 1
-    ctx.lineWidth = selected ? 2.5 : 1
+    ctx.lineWidth = selected ? 2 : 1
     ctx.strokeStyle = denied
       ? theme.nodeDenied
       : selected
         ? theme.nodeSelected
         : 'rgba(255,255,255,0.35)'
-    ctx.strokeRect(-w / 2, -d / 2, w, d)
+    if (selected) ctx.setLineDash([6, 4])
+    const pad = selected ? 3 : 0
+    ctx.strokeRect(-w / 2 - pad, -d / 2 - pad, w + pad * 2, d + pad * 2)
+    ctx.setLineDash([])
     // 朝向短划：用平面 yaw 指示（AABB 本身轴对齐）
     const yaw = isElevation ? rotation[2] : rotation[1]
     const tip = yawToDisplayAngle(yaw, isElevation)
@@ -405,7 +413,7 @@ function drawNodes(p: Paint2DContext): void {
     ctx.restore()
 
     if (selected && tool === 'select' && !readonly) {
-      drawRotateHandle(p, node)
+      drawSelectionHandles(p, node, denied)
     }
 
     if (p.showNodeNames && camera.scale > 14 && node.name) {
@@ -417,32 +425,18 @@ function drawNodes(p: Paint2DContext): void {
   })
 }
 
-function drawRotateHandle(p: Paint2DContext, node: EditorNodeJSON): void {
+function drawSelectionHandles(
+  p: Paint2DContext,
+  node: EditorNodeJSON,
+  denied: boolean
+): void {
   const layout = p.select.layoutFor(node)
-  const center = p.camera.worldToScreen(layout.center.u, layout.center.v)
-  const handle = p.camera.worldToScreen(layout.handle.u, layout.handle.v)
-  const radiusPx = layout.reach * p.camera.scale
-  const denied = node.id === p.select.rotateNodeId && p.select.rotateColliding
   const color = denied ? p.theme.nodeDenied : p.theme.nodeSelected
-  const ctx = p.ctx
-
-  ctx.save()
-  ctx.strokeStyle = color
-  ctx.lineWidth = 1.5
-  ctx.globalAlpha = 0.85
-  ctx.beginPath()
-  ctx.arc(center.sx, center.sy, radiusPx, 0, Math.PI * 2)
-  ctx.stroke()
-
-  ctx.globalAlpha = 1
-  ctx.fillStyle = color
-  ctx.beginPath()
-  ctx.arc(handle.sx, handle.sy, 6, 0, Math.PI * 2)
-  ctx.fill()
-  ctx.strokeStyle = 'rgba(255,255,255,0.9)'
-  ctx.lineWidth = 1.5
-  ctx.stroke()
-  ctx.restore()
+  for (const kind of ['rotate', 'lift', 'slideV', 'scale'] as const) {
+    const h = layout.handles[kind]
+    const { sx, sy } = p.camera.worldToScreen(h.u, h.v)
+    drawSelectionHandleButton(p.ctx, sx, sy, kind, color, p.theme)
+  }
 }
 
 // ---------------------------------------------------------------------------

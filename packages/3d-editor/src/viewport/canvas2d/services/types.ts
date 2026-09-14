@@ -8,6 +8,7 @@ import type {
   WorkspaceJSON
 } from '../../../document/types'
 import type { PickCandidatesHandler, PlanePoint } from '../types'
+import type { NodeTransformPreview } from '../../node-preview'
 
 /** 由 Viewport2D 注入给各 service 的视口能力 */
 export interface Viewport2DContext {
@@ -35,6 +36,8 @@ export interface Viewport2DContext {
   nodeYaw(node: EditorNodeJSON): number
   yawToRotation(yaw: number, base: TransformJSON['rotation']): [number, number, number]
   requestRender(): void
+  /** 2D 拖动中预览 3D Object3D；null 则回到 document 变换 */
+  previewNode?: (id: string, preview: NodeTransformPreview | null) => void
   onDenied?: (reason: string) => void
   onWallSelect?: (wall: WallJSON) => void
   onWorkspaceSelect?: (workspace: WorkspaceJSON) => void

@@ -47,6 +47,10 @@ import {
   type CreateIndoorDefaultViewOptions
 } from './utils/indoor-view'
 import { cloneEnvironment } from '../../document/defaults'
+import {
+  composePreviewTransform,
+  type NodeTransformPreview
+} from '../node-preview'
 
 export interface Viewport3DOptions {
   document: EditorDocument
@@ -876,6 +880,21 @@ export class Viewport3D {
     object.position.fromArray(transform.position)
     object.rotation.set(transform.rotation[0], transform.rotation[1], transform.rotation[2])
     object.scale.fromArray(transform.scale)
+  }
+
+  /**
+   * 2D 拖动中的 3D 预览：只改 Object3D，不写 document。
+   * `preview === null` 时回到当前 document 变换。
+   */
+  previewNode(id: string, preview: NodeTransformPreview | null): void {
+    const node = this.doc.getNode(id)
+    const root = this.nodeRoots.get(id)
+    if (!node || !root) return
+    const transform = preview
+      ? composePreviewTransform(node.transform, preview)
+      : node.transform
+    this.applyTransformToObject(root, transform)
+    this.runtime.markShadowNeedsUpdate()
   }
 
   // -- 会话交互 ----------------------------------------------------------------

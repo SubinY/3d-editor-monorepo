@@ -1,20 +1,9 @@
-/** 节点 / 墙 / 旋转手柄命中检测（纯函数） */
+/** 节点 / 墙 / 选中手柄命中检测（纯函数） */
 import type { CatalogItem } from '../../../catalog/types'
 import { rotatedExtents } from '../../../document/collision'
 import type { EditorNodeJSON, WallJSON } from '../../../document/types'
 import type { PlanePoint } from '../types'
-import type { NodeLayout } from './node-layout'
 import { nearestWall } from './wall-snap'
-
-export function hitTestRotateHandle(
-  layout: NodeLayout,
-  u: number,
-  v: number,
-  scale: number
-): boolean {
-  const threshold = Math.max(0.12, 12 / scale)
-  return Math.hypot(u - layout.handle.u, v - layout.handle.v) <= threshold
-}
 
 export interface HitTestNodeOpts {
   nodes: EditorNodeJSON[]

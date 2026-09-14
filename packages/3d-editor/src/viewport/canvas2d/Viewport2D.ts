@@ -11,10 +11,9 @@ import { WallInteraction } from './services/wall-interaction'
 import { WorkspaceInteraction } from './services/workspace-interaction'
 import type { Theme2D, Tool2D, Viewport2DOptions } from './types'
 import { DEFAULT_THEME } from './types'
-import {
-  defaultContainerBackZ,
-  defaultSceneGroundY,
-} from './utils/place-defaults'
+import { defaultContainerBackZ, defaultSceneGroundY } from './utils/place-defaults'
+import type { NodeTransformPreview } from '../node-preview'
+import { ensureSelectionHandleIcons } from './assets/handles'
 
 /**
  * 2D 编辑视图门面：装配 camera / interactions / place / paint，按 tool 路由指针事件。
@@ -50,6 +49,7 @@ export class Viewport2D {
   private showNodeNames: boolean
   private rulerCursorSx: number | undefined
   private rulerCursorSy: number | undefined
+  private previewNodeHandler?: (id: string, preview: NodeTransformPreview | null) => void
 
   constructor(container: HTMLElement, options: Viewport2DOptions) {
     this.doc = options.document
@@ -102,6 +102,7 @@ export class Viewport2D {
     window.addEventListener('keydown', this.onKeyDown)
 
     this.prefetchItems()
+    void ensureSelectionHandleIcons().then(() => this.requestRender())
     this.requestRender()
   }
 
@@ -146,8 +147,16 @@ export class Viewport2D {
       itemFor: node => self.itemFor(node),
       nodeYaw: node => self.nodeYaw(node),
       yawToRotation: (yaw, base) => self.yawToRotation(yaw, base),
-      requestRender: () => self.requestRender()
+      requestRender: () => self.requestRender(),
+      previewNode: (id, preview) => self.previewNodeHandler?.(id, preview)
     }
+  }
+
+  /** 由会话接入 Viewport3D.previewNode；未挂 3D 时不传 */
+  setPreviewHandler(
+    handler?: (id: string, preview: NodeTransformPreview | null) => void
+  ): void {
+    this.previewNodeHandler = handler
   }
 
   setSnapEnabled(enabled: boolean): void {

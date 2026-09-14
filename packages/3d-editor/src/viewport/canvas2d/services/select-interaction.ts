@@ -1,4 +1,6 @@
-/** 选择模式：点选、拖移、旋转手柄、墙身/端点拖拽，写回 doc.commands */
+/** 选择模式：点选、拖移、四角手柄（旋转/面外/平面纵向/缩放）、墙身/端点拖拽，写回 doc.commands */
+import type { CatalogItem, FootprintSpec } from '../../../catalog/types'
+import { rotatedExtents } from '../../../document/collision'
 import { cloneTransform } from '../../../document/defaults'
 import type { EditorNodeJSON, TransformJSON } from '../../../document/types'
 import type { AlignGuide } from '../utils/align-guides'
@@ -8,8 +10,17 @@ import {
   displayAngleToYaw,
   planeHandleAngle,
   yawToDisplayAngle,
+  type NodeLayout
 } from '../utils/node-layout'
-import { hitTestNodes, hitTestRotateHandle } from '../utils/hit-test'
+import { hitTestNodes } from '../utils/hit-test'
+import {
+  computeSelectionHandles,
+  hitTestSelectionHandle,
+  screenUpDeltaV,
+  uniformFootprintFromRatio,
+  type SelectionHandleKind,
+  type SelectionHandles
+} from '../utils/selection-handles'
 import type { WallDragMode, WallDragPatch } from '../utils/wall-snap'
 import { applyWallDrag, hitWallDragTarget } from '../utils/wall-snap'
 import { hitWorkspace } from '../utils/workspace-hit'
@@ -18,12 +29,22 @@ import type { PointerInteraction, Viewport2DContext } from './types'
 
 const SOURCE = 'viewport2d'
 const MOVE_THRESHOLD_PX = 5
+const HANDLE_PAD_PX = 0
 
-/** 选择 / 平移 / 旋转手柄 / 墙拖 */
+export interface NodeSelectLayout extends NodeLayout {
+  eu: number
+  ev: number
+  handles: SelectionHandles
+}
+
+/** 选择 / 平移 / 四角手柄 / 墙拖 */
 export class SelectInteraction implements PointerInteraction {
   dragNodeId: string | null = null
   dragGhost: PlanePoint | null = null
   dragOffset: PlanePoint = { u: 0, v: 0 }
+  dragOrigin: PlanePoint | null = null
+  /** 仅改平面 v（屏幕上下） */
+  dragAxisLock: 'v' | null = null
   dragColliding = false
   dragMoved = false
   alignGuides: AlignGuide[] = []
@@ -39,6 +60,21 @@ export class SelectInteraction implements PointerInteraction {
   /** pointerdown 时的完整 transform，供松手写一条撤销 */
   rotateBeforeTransform: TransformJSON | null = null
 
+  /** 面外轴：scene=Y，container=Z */
+  liftNodeId: string | null = null
+  liftStartOut = 0
+  liftStartV = 0
+  liftGhostOut = 0
+  liftMoved = false
+
+  scaleNodeId: string | null = null
+  scaleCenter: PlanePoint | null = null
+  scaleStartDist = 0
+  scaleStartFp: FootprintSpec | null = null
+  scaleGhost: FootprintSpec | null = null
+  scaleMoved = false
+  scaleColliding = false
+
   dragWallId: string | null = null
   wallDragMode: WallDragMode = 'body'
   wallDragOrigin: PlanePoint | null = null
@@ -51,9 +87,13 @@ export class SelectInteraction implements PointerInteraction {
 
   constructor(private host: Viewport2DContext) {}
 
-  reset(): void {
+  reset(options?: { revertPreview?: boolean }): void {
+    const previewId =
+      this.dragNodeId ?? this.rotateNodeId ?? this.liftNodeId ?? this.scaleNodeId
     this.dragNodeId = null
     this.dragGhost = null
+    this.dragOrigin = null
+    this.dragAxisLock = null
     this.dragColliding = false
     this.dragMoved = false
     this.alignGuides = []
@@ -62,6 +102,14 @@ export class SelectInteraction implements PointerInteraction {
     this.rotateMoved = false
     this.rotateColliding = false
     this.rotateBeforeTransform = null
+    this.liftNodeId = null
+    this.liftMoved = false
+    this.scaleNodeId = null
+    this.scaleCenter = null
+    this.scaleStartFp = null
+    this.scaleGhost = null
+    this.scaleMoved = false
+    this.scaleColliding = false
     this.dragWallId = null
     this.wallDragMode = 'body'
     this.wallDragOrigin = null
@@ -69,6 +117,9 @@ export class SelectInteraction implements PointerInteraction {
     this.wallDragMoved = false
     this.pendingPickHits = null
     this.pendingPickDown = null
+    if (options?.revertPreview !== false && previewId) {
+      this.host.previewNode?.(previewId, null)
+    }
   }
 
   onPointerDown(event: PointerEvent, plane: PlanePoint): boolean {
@@ -78,21 +129,12 @@ export class SelectInteraction implements PointerInteraction {
     const selectedId = doc.selection.first()
     if (selectedId) {
       const selected = doc.getNode(selectedId)
-      if (selected && this.hitRotate(selected, plane.u, plane.v)) {
-        const layout = this.layoutFor(selected)
-        this.rotateNodeId = selected.id
-        this.rotateCenter = layout.center
-        this.rotateBaseYaw = layout.yaw
-        this.rotateGhostYaw = layout.yaw
-        this.rotateStartPointerAngle = planeHandleAngle(
-          plane.u - layout.center.u,
-          plane.v - layout.center.v,
-        )
-        this.rotateBeforeTransform = cloneTransform(selected.transform)
-        this.rotateMoved = false
-        this.rotateColliding = false
-        this.host.requestRender()
-        return true
+      if (selected) {
+        const kind = this.hitHandle(selected, plane.u, plane.v)
+        if (kind) {
+          this.beginHandle(selected, kind, plane)
+          return true
+        }
       }
     }
 
@@ -192,6 +234,34 @@ export class SelectInteraction implements PointerInteraction {
         )
         this.rotateColliding = Boolean(hit)
       }
+      this.push3dPreview()
+      this.host.requestRender()
+      return true
+    }
+
+    if (this.liftNodeId) {
+      this.liftMoved = true
+      const dv = plane.v - this.liftStartV
+      this.liftGhostOut = this.liftStartOut + screenUpDeltaV(this.host.isElevation, dv)
+      this.push3dPreview()
+      this.host.requestRender()
+      return true
+    }
+
+    if (this.scaleNodeId && this.scaleCenter && this.scaleStartFp) {
+      this.scaleMoved = true
+      const dist = Math.hypot(plane.u - this.scaleCenter.u, plane.v - this.scaleCenter.v)
+      const ratio = dist / this.scaleStartDist
+      this.scaleGhost = uniformFootprintFromRatio(this.scaleStartFp, ratio)
+      const node = this.host.doc.getNode(this.scaleNodeId)
+      if (node) {
+        const item = this.ghostItem(node, this.scaleGhost)
+        const hit = this.host.doc.checkCollision(node.transform, item, {
+          excludeId: this.scaleNodeId
+        })
+        this.scaleColliding = Boolean(hit)
+      }
+      this.push3dPreview()
       this.host.requestRender()
       return true
     }
@@ -214,6 +284,7 @@ export class SelectInteraction implements PointerInteraction {
     if (this.dragNodeId) {
       this.dragMoved = true
       let next = { u: plane.u + this.dragOffset.u, v: plane.v + this.dragOffset.v }
+      if (this.dragAxisLock === 'v' && this.dragOrigin) next.u = this.dragOrigin.u
       const node = this.host.doc.getNode(this.dragNodeId)
       if (node) {
         const item = this.host.itemFor(node)
@@ -241,6 +312,7 @@ export class SelectInteraction implements PointerInteraction {
             u: snapped.u,
             v: this.host.isElevation ? snapped.v - wv / 2 : snapped.v
           }
+          if (this.dragAxisLock === 'v' && this.dragOrigin) next.u = this.dragOrigin.u
         } else {
           this.alignGuides = []
         }
@@ -256,6 +328,7 @@ export class SelectInteraction implements PointerInteraction {
         this.dragGhost = next
         this.alignGuides = []
       }
+      this.push3dPreview()
       this.host.requestRender()
       return true
     }
@@ -280,6 +353,8 @@ export class SelectInteraction implements PointerInteraction {
       return true
     }
 
+    let revertPreview = true
+
     if (this.rotateNodeId && this.rotateMoved) {
       const node = this.host.doc.getNode(this.rotateNodeId)
       if (node) {
@@ -290,6 +365,31 @@ export class SelectInteraction implements PointerInteraction {
         )
         if (!result.ok && result.denied) this.host.onDenied?.(result.denied)
       }
+    }
+
+    if (this.liftNodeId && this.liftMoved) {
+      const node = this.host.doc.getNode(this.liftNodeId)
+      if (node) {
+        const position: [number, number, number] = [...node.transform.position]
+        if (this.host.isElevation) position[2] = this.liftGhostOut
+        else position[1] = this.liftGhostOut
+        const result = this.host.doc.commands.transformNode(
+          this.liftNodeId,
+          { position },
+          { source: SOURCE }
+        )
+        if (!result.ok && result.denied) this.host.onDenied?.(result.denied)
+      }
+    }
+
+    if (this.scaleNodeId && this.scaleMoved && this.scaleGhost) {
+      const result = this.host.doc.commands.resizeNode(
+        this.scaleNodeId,
+        this.scaleGhost,
+        { source: SOURCE }
+      )
+      if (result.ok) revertPreview = false
+      else if (result.denied) this.host.onDenied?.(result.denied)
     }
 
     if (this.dragWallId && this.wallDragMoved && this.wallDragPatches.length) {
@@ -308,31 +408,159 @@ export class SelectInteraction implements PointerInteraction {
       }
     }
 
-    this.reset()
+    this.reset({ revertPreview })
     this.host.requestRender()
     return true
   }
 
-  layoutFor(node: EditorNodeJSON) {
-    const item = this.host.itemFor(node)
-    const { wu, wv } = this.host.footprintSize(item)
+  layoutFor(node: EditorNodeJSON): NodeSelectLayout {
+    const fp = this.footprintFor(node)
+    const wu = fp.width
+    const wv = this.host.isElevation ? (fp.height ?? fp.depth) : fp.depth
     let plane = this.host.planeFromPosition(node.transform.position)
     if (node.id === this.dragNodeId && this.dragGhost) plane = this.dragGhost
     const yaw =
       node.id === this.rotateNodeId && this.rotateMoved ? this.rotateGhostYaw : this.host.nodeYaw(node)
-    return computeNodeLayout({
+    const rotation = this.host.yawToRotation(yaw, node.transform.rotation)
+    const planeKind = this.host.isElevation ? 'xy' : 'xz'
+    const { eu, ev } = rotatedExtents(fp, rotation, planeKind)
+    const base = computeNodeLayout({
       isElevation: this.host.isElevation,
       plane,
       yaw,
       wu,
       wv
     })
+    const handles = computeSelectionHandles({
+      isElevation: this.host.isElevation,
+      center: base.center,
+      eu,
+      ev,
+      pad: HANDLE_PAD_PX / this.host.scale
+    })
+    return { ...base, eu, ev, handles }
   }
 
-  private beginNodeDrag(node: EditorNodeJSON, plane: PlanePoint): void {
+  private push3dPreview(): void {
+    const preview = this.host.previewNode
+    if (!preview) return
+
+    if (this.rotateNodeId && this.rotateMoved) {
+      const node = this.host.doc.getNode(this.rotateNodeId)
+      if (!node) return
+      preview(this.rotateNodeId, {
+        rotation: this.host.yawToRotation(this.rotateGhostYaw, node.transform.rotation)
+      })
+      return
+    }
+
+    if (this.liftNodeId && this.liftMoved) {
+      const node = this.host.doc.getNode(this.liftNodeId)
+      if (!node) return
+      const position: [number, number, number] = [...node.transform.position]
+      if (this.host.isElevation) position[2] = this.liftGhostOut
+      else position[1] = this.liftGhostOut
+      preview(this.liftNodeId, { position })
+      return
+    }
+
+    if (this.scaleNodeId && this.scaleMoved && this.scaleGhost && this.scaleStartFp) {
+      const baseW = Math.max(this.scaleStartFp.width, 1e-6)
+      preview(this.scaleNodeId, { uniformScale: this.scaleGhost.width / baseW })
+      return
+    }
+
+    if (this.dragNodeId && this.dragGhost && this.dragMoved) {
+      const node = this.host.doc.getNode(this.dragNodeId)
+      if (!node) return
+      preview(this.dragNodeId, {
+        position: this.host.positionFromPlane(
+          this.dragGhost.u,
+          this.dragGhost.v,
+          node.transform
+        )
+      })
+    }
+  }
+
+  private footprintFor(node: EditorNodeJSON): FootprintSpec {
+    if (node.id === this.scaleNodeId && this.scaleGhost) return this.scaleGhost
+    return this.host.itemFor(node)?.footprint ?? { width: 1, depth: 1, height: 1 }
+  }
+
+  private ghostItem(node: EditorNodeJSON, footprint: FootprintSpec): CatalogItem {
+    const item = this.host.itemFor(node)
+    if (item) return { ...item, footprint }
+    return {
+      id: node.catalogRef?.id ?? node.id,
+      version: node.catalogRef?.version ?? '0',
+      name: node.name ?? node.id,
+      placeableIn: [this.host.isElevation ? 'container' : 'scene'],
+      footprint
+    }
+  }
+
+  private beginHandle(node: EditorNodeJSON, kind: SelectionHandleKind, plane: PlanePoint): void {
+    if (kind === 'rotate') {
+      const layout = this.layoutFor(node)
+      this.rotateNodeId = node.id
+      this.rotateCenter = layout.center
+      this.rotateBaseYaw = layout.yaw
+      this.rotateGhostYaw = layout.yaw
+      this.rotateStartPointerAngle = planeHandleAngle(
+        plane.u - layout.center.u,
+        plane.v - layout.center.v,
+      )
+      this.rotateBeforeTransform = cloneTransform(node.transform)
+      this.rotateMoved = false
+      this.rotateColliding = false
+      this.host.requestRender()
+      return
+    }
+    if (kind === 'lift') {
+      this.liftNodeId = node.id
+      this.liftStartOut = this.host.isElevation
+        ? node.transform.position[2]
+        : node.transform.position[1]
+      this.liftStartV = plane.v
+      this.liftGhostOut = this.liftStartOut
+      this.liftMoved = false
+      this.host.requestRender()
+      return
+    }
+    if (kind === 'slideV') {
+      this.beginNodeDrag(node, plane, 'v')
+      return
+    }
+    const layout = this.layoutFor(node)
+    const fp = this.footprintFor(node)
+    this.scaleNodeId = node.id
+    this.scaleCenter = layout.center
+    this.scaleStartDist = Math.hypot(plane.u - layout.center.u, plane.v - layout.center.v)
+    if (this.scaleStartDist < 1e-4) {
+      this.scaleStartDist = Math.max(layout.eu, layout.ev, 0.05)
+    }
+    this.scaleStartFp = {
+      width: fp.width,
+      depth: fp.depth,
+      height: fp.height ?? fp.depth
+    }
+    this.scaleGhost = { ...this.scaleStartFp }
+    this.scaleMoved = false
+    this.scaleColliding = false
+    this.host.requestRender()
+  }
+
+  private beginNodeDrag(
+    node: EditorNodeJSON,
+    plane: PlanePoint,
+    axisLock: 'v' | null = null
+  ): void {
     this.host.doc.selection.set(node.id)
     const nodePlane = this.host.planeFromPosition(node.transform.position)
     this.dragNodeId = node.id
+    this.dragOrigin = { ...nodePlane }
+    this.dragAxisLock = axisLock
     this.dragOffset = { u: nodePlane.u - plane.u, v: nodePlane.v - plane.v }
     this.dragGhost = { ...nodePlane }
     this.dragColliding = false
@@ -340,7 +568,7 @@ export class SelectInteraction implements PointerInteraction {
     this.host.requestRender()
   }
 
-  private hitRotate(node: EditorNodeJSON, u: number, v: number): boolean {
-    return hitTestRotateHandle(this.layoutFor(node), u, v, this.host.scale)
+  private hitHandle(node: EditorNodeJSON, u: number, v: number): SelectionHandleKind | null {
+    return hitTestSelectionHandle(this.layoutFor(node).handles, u, v, this.host.scale)
   }
 }
