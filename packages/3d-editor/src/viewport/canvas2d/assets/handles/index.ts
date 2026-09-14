@@ -1,5 +1,5 @@
 /** 2D 选中四角手柄图标（SVG 内置） */
-import type { SelectionHandleKind } from '../utils/selection-handles'
+import type { SelectionHandleKind } from '../../utils/selection-handles'
 import rotateSvg from './handle-rotate.svg?raw'
 import liftSvg from './handle-lift.svg?raw'
 import scaleSvg from './handle-scale.svg?raw'

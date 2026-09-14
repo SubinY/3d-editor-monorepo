@@ -532,6 +532,7 @@ export class SelectInteraction implements PointerInteraction {
       this.beginNodeDrag(node, plane, 'v')
       return
     }
+    if (!this.host.canResizeNode(node)) return
     const layout = this.layoutFor(node)
     const fp = this.footprintFor(node)
     this.scaleNodeId = node.id
@@ -569,6 +570,8 @@ export class SelectInteraction implements PointerInteraction {
   }
 
   private hitHandle(node: EditorNodeJSON, u: number, v: number): SelectionHandleKind | null {
-    return hitTestSelectionHandle(this.layoutFor(node).handles, u, v, this.host.scale)
+    const kind = hitTestSelectionHandle(this.layoutFor(node).handles, u, v, this.host.scale)
+    if (kind === 'scale' && !this.host.canResizeNode(node)) return null
+    return kind
   }
 }

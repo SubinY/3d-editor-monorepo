@@ -1,6 +1,6 @@
-import type { CatalogProvider, ProceduralModelResolver } from '../catalog/types'
+import type { CatalogItem, CatalogProvider, ProceduralModelResolver } from '../catalog/types'
 import type { CreateDocumentOptions, EditorDocument } from '../document/EditorDocument'
-import type { EditorDocumentJSON } from '../document/types'
+import type { EditorDocumentJSON, EditorNodeJSON } from '../document/types'
 import type { PickCandidatesHandler } from '../viewport/canvas2d/types'
 import type { NodeInteractionHandler } from '../viewport/interaction-events'
 import type { Viewport2D } from '../viewport/canvas2d/Viewport2D'
@@ -50,6 +50,8 @@ export interface CreateEditorOptions {
     showNodeNames?: boolean
     /** 同一鼠标点命中多个节点时通知 Host；未设则选最上层 */
     onPickCandidates?: PickCandidatesHandler
+    /** 业务侧控制 2D 缩放手柄；默认允许 */
+    canResizeNode?: (node: EditorNodeJSON, item?: CatalogItem) => boolean
   }
   /**
    * Host 程序化模型：Catalog `model3d.type === 'procedural'` 时按 id 解析。

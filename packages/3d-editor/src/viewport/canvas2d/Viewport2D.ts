@@ -33,6 +33,7 @@ export class Viewport2D {
   private onWallSelect?: Viewport2DOptions['onWallSelect']
   private onWorkspaceSelect?: Viewport2DOptions['onWorkspaceSelect']
   private onPickCandidates?: Viewport2DOptions['onPickCandidates']
+  private canResizeNode?: Viewport2DOptions['canResizeNode']
   private snapEnabled: boolean
 
   private camera: Camera2D
@@ -61,6 +62,7 @@ export class Viewport2D {
     this.onWallSelect = options.onWallSelect
     this.onWorkspaceSelect = options.onWorkspaceSelect
     this.onPickCandidates = options.onPickCandidates
+    this.canResizeNode = options.canResizeNode
     this.snapEnabled = options.snapEnabled ?? true
     this.showNodeNames = options.showNodeNames ?? false
 
@@ -145,6 +147,7 @@ export class Viewport2D {
       positionFromPlane: (u, v, base, item) => self.positionFromPlane(u, v, base, item),
       footprintSize: item => self.footprintSize(item),
       itemFor: node => self.itemFor(node),
+      canResizeNode: node => self.nodeCanResize(node),
       nodeYaw: node => self.nodeYaw(node),
       yawToRotation: (yaw, base) => self.yawToRotation(yaw, base),
       requestRender: () => self.requestRender(),
@@ -364,6 +367,11 @@ export class Viewport2D {
     return undefined
   }
 
+  private nodeCanResize(node: EditorNodeJSON): boolean {
+    if (!this.canResizeNode) return true
+    return this.canResizeNode(node, this.itemFor(node)) !== false
+  }
+
   private nodeYaw(node: EditorNodeJSON): number {
     return this.isElevation ? node.transform.rotation[2] : node.transform.rotation[1]
   }
@@ -504,6 +512,7 @@ export class Viewport2D {
         dropGhost: this.place.dropGhost,
         footprintSize: item => this.footprintSize(item),
         itemFor: node => this.itemFor(node),
+        canResizeNode: node => this.nodeCanResize(node),
         planeFromPosition: pos => this.planeFromPosition(pos),
         showRulers: this.showRulers,
         rulerCursorSx: this.rulerCursorSx,

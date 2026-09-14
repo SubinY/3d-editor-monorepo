@@ -38,6 +38,13 @@ import { buildEnclosure } from './helpers/enclosure'
 import { instantiateProceduralModule } from './services/procedural-module-loader'
 import type { NodeInteractionHandler } from '../interaction-events'
 import { findNodePath, isObjectUnder } from './utils/node-path'
+import {
+  applyTransformWithPivot,
+  footprintHeightMeters,
+  mountFootprintPivot,
+  readTransformFromPivot
+} from './utils/footprint-pivot'
+import { fitObjectToFootprint } from './utils/fit-to-footprint'
 import { disposeObject3D } from './utils/dispose'
 import { bumpBuildToken, isBuildStale } from './utils/build-token'
 import { getAssetHandle } from '../../catalog/asset-handle'
@@ -254,18 +261,12 @@ export class Viewport3D {
         if (!path) return
         const nodeId = path.split('/')[0]
         const node = this.doc.getNode(nodeId)
-        if (!node) return
-        const result = this.doc.commands.transformNode(
-          nodeId,
-          {
-            position: [...attached.position.toArray()] as [number, number, number],
-            rotation: [attached.rotation.x, attached.rotation.y, attached.rotation.z],
-            scale: [...attached.scale.toArray()] as [number, number, number]
-          },
-          { source: 'viewport3d' }
-        )
+        const root = this.nodeRoots.get(nodeId)
+        if (!node || !root) return
+        const next = readTransformFromPivot(root)
+        const result = this.doc.commands.transformNode(nodeId, next, { source: 'viewport3d' })
         if (!result.ok) {
-          this.applyTransformToObject(attached, node.transform)
+          this.applyTransformToObject(root, node.transform)
         }
       })
     )
@@ -544,8 +545,8 @@ export class Viewport3D {
       }
       return
     }
-    if (content) root.add(content)
-
+    const item = this.doc.getCachedItem(node)
+    mountFootprintPivot(THREE, root, content, footprintHeightMeters(item))
     this.applyTransformToObject(root, node.transform)
     root.visible = node.visible !== false
 
@@ -624,7 +625,8 @@ export class Viewport3D {
       childObject.name = child.name ?? child.id
       childObject.userData.nodePath = childPath
       const content = await this.buildNodeContent(child, childPath, depth + 1)
-      if (content) childObject.add(content)
+      const childItem = this.doc.getCachedItem(child)
+      mountFootprintPivot(THREE, childObject, content, footprintHeightMeters(childItem))
       this.applyTransformToObject(childObject, child.transform)
       childObject.visible = child.visible !== false
       group.add(childObject)
@@ -747,7 +749,7 @@ export class Viewport3D {
             child.receiveShadow = true
           }
         })
-        return result.scene
+        return fitObjectToFootprint(result.scene, item.footprint)
       } catch (error) {
         console.warn(`[viewport3d] failed to load gltf "${spec.url}"`, error)
         return this.buildFootprintBox(item)
@@ -784,7 +786,9 @@ export class Viewport3D {
       }
       return this.buildFootprintBox(item)
     }
-    const [w, h, d] = spec.size
+    const w = item.footprint.width
+    const d = item.footprint.depth
+    const h = item.footprint.height ?? spec.size[1]
     const mesh = new THREE.Mesh(
       new THREE.BoxGeometry(w, h, d),
       new THREE.MeshStandardMaterial({ color: spec.color ?? '#4da3ff', roughness: 0.55, metalness: 0.25 })
@@ -819,7 +823,8 @@ export class Viewport3D {
     }
     const root = this.nodeRoots.get(id)
     if (!root) return
-    if (this.runtime.getAttachedObject() === root) {
+    const attached = this.runtime.getAttachedObject()
+    if (attached && (attached === root || isObjectUnder(attached, root))) {
       this.runtime.attachTransform(null)
     }
     this.runtime.scene.remove(root)
@@ -877,9 +882,7 @@ export class Viewport3D {
   }
 
   private applyTransformToObject(object: THREE.Object3D, transform: TransformJSON): void {
-    object.position.fromArray(transform.position)
-    object.rotation.set(transform.rotation[0], transform.rotation[1], transform.rotation[2])
-    object.scale.fromArray(transform.scale)
+    applyTransformWithPivot(object, transform)
   }
 
   /**

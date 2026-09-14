@@ -27,6 +27,7 @@ export interface Paint2DContext {
   dropGhost: DropGhost | null
   footprintSize: (item: CatalogItem | undefined) => { wu: number; wv: number }
   itemFor: (node: EditorNodeJSON) => CatalogItem | undefined
+  canResizeNode: (node: EditorNodeJSON) => boolean
   planeFromPosition: (pos: [number, number, number]) => PlanePoint
   /** 游标尺是否显示；鼠标当前屏幕坐标（像素） */
   showRulers?: boolean
@@ -413,7 +414,7 @@ function drawNodes(p: Paint2DContext): void {
     ctx.restore()
 
     if (selected && tool === 'select' && !readonly) {
-      drawSelectionHandles(p, node, denied)
+      drawSelectionHandles(p, node, !!denied)
     }
 
     if (p.showNodeNames && camera.scale > 14 && node.name) {
@@ -433,6 +434,7 @@ function drawSelectionHandles(
   const layout = p.select.layoutFor(node)
   const color = denied ? p.theme.nodeDenied : p.theme.nodeSelected
   for (const kind of ['rotate', 'lift', 'slideV', 'scale'] as const) {
+    if (kind === 'scale' && !p.canResizeNode(node)) continue
     const h = layout.handles[kind]
     const { sx, sy } = p.camera.worldToScreen(h.u, h.v)
     drawSelectionHandleButton(p.ctx, sx, sy, kind, color, p.theme)

@@ -33,6 +33,7 @@ export interface Viewport2DContext {
   ): [number, number, number]
   footprintSize(item: CatalogItem | undefined): { wu: number; wv: number }
   itemFor(node: EditorNodeJSON): CatalogItem | undefined
+  canResizeNode(node: EditorNodeJSON): boolean
   nodeYaw(node: EditorNodeJSON): number
   yawToRotation(yaw: number, base: TransformJSON['rotation']): [number, number, number]
   requestRender(): void

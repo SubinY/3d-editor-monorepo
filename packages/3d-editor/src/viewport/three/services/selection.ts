@@ -4,6 +4,7 @@ import type { EditorDocument } from '../../../document/EditorDocument'
 import type { NodeInteractionHandler } from '../../interaction-events'
 import type { ThreeRuntime } from '../runtime/ThreeRuntime'
 import { findNodePath } from '../utils/node-path'
+import { getFootprintPivot } from '../utils/footprint-pivot'
 import type { HoverHighlight } from './hover-highlight'
 
 const MOVE_THRESHOLD_PX = 5
@@ -56,7 +57,8 @@ export class SelectionService {
       return
     }
     const object = this.opts.nodeRoots.get(first)
-    this.opts.runtime.attachTransform(object ?? null)
+    const pivot = object ? getFootprintPivot(object) : undefined
+    this.opts.runtime.attachTransform(pivot ?? object ?? null)
   }
 
   handlePointerDown = (event: PointerEvent): void => {
