@@ -1,4 +1,4 @@
-/** 选择模式：点选、拖移、四角手柄（旋转/面外/平面纵向/缩放）、墙身/端点拖拽，写回 doc.commands */
+/** 选择模式：点选、拖移、四角手柄（旋转/面外/平面纵向/缩放）、墙身/端点拖拽、工作区顶点拖拽，写回 doc.commands */
 import type { CatalogItem, FootprintSpec } from '../../../catalog/types'
 import { rotatedExtents } from '../../../document/collision'
 import { cloneTransform } from '../../../document/defaults'
@@ -23,7 +23,7 @@ import {
 } from '../utils/selection-handles'
 import type { WallDragMode, WallDragPatch } from '../utils/wall-snap'
 import { applyWallDrag, hitWallDragTarget } from '../utils/wall-snap'
-import { hitWorkspace } from '../utils/workspace-hit'
+import { hitWorkspace, hitWorkspaceVertex, hitWorkspaceEdge, insertOutlineVertex } from '../utils/workspace-hit'
 import type { PlanePoint } from '../types'
 import type { PointerInteraction, Viewport2DContext } from './types'
 
@@ -81,11 +81,42 @@ export class SelectInteraction implements PointerInteraction {
   wallDragPatches: WallDragPatch[] = []
   wallDragMoved = false
 
+  /** 工作区顶点拖拽（预览 outline，松手写 setWorkspaceOutline） */
+  dragWorkspaceId: string | null = null
+  dragWorkspaceVertexIndex = -1
+  workspaceVertexOrigin: PlanePoint | null = null
+  workspaceOutlineBase: [number, number][] | null = null
+  workspaceOutlineGhost: [number, number][] | null = null
+  workspaceVertexMoved = false
+
+  /**
+   * 「边加点」模式目标工作区 id；非 null 时吞掉指针，点边插入后退出。
+   * 不放进 reset()，避免拖拽松手误清。
+   */
+  insertVertexWorkspaceId: string | null = null
+
   /** 多命中待定：按下未选，松手弹面板或拖移后开始拖 */
   private pendingPickHits: EditorNodeJSON[] | null = null
   private pendingPickDown: { x: number; y: number } | null = null
 
   constructor(private host: Viewport2DContext) {}
+
+  beginInsertVertex(workspaceId: string): void {
+    this.insertVertexWorkspaceId = workspaceId
+    this.host.onInsertWorkspaceVertexModeChange?.(true)
+    this.host.requestRender()
+  }
+
+  endInsertVertex(): void {
+    if (!this.insertVertexWorkspaceId) return
+    this.insertVertexWorkspaceId = null
+    this.host.onInsertWorkspaceVertexModeChange?.(false)
+    this.host.requestRender()
+  }
+
+  isInsertVertexMode(): boolean {
+    return this.insertVertexWorkspaceId != null
+  }
 
   reset(options?: { revertPreview?: boolean }): void {
     const previewId =
@@ -115,6 +146,12 @@ export class SelectInteraction implements PointerInteraction {
     this.wallDragOrigin = null
     this.wallDragPatches = []
     this.wallDragMoved = false
+    this.dragWorkspaceId = null
+    this.dragWorkspaceVertexIndex = -1
+    this.workspaceVertexOrigin = null
+    this.workspaceOutlineBase = null
+    this.workspaceOutlineGhost = null
+    this.workspaceVertexMoved = false
     this.pendingPickHits = null
     this.pendingPickDown = null
     if (options?.revertPreview !== false && previewId) {
@@ -123,7 +160,31 @@ export class SelectInteraction implements PointerInteraction {
   }
 
   onPointerDown(event: PointerEvent, plane: PlanePoint): boolean {
-    if (this.host.readonly || event.button !== 0) return false
+    if (this.host.readonly) return false
+
+    if (this.insertVertexWorkspaceId) {
+      if (event.button === 2) {
+        this.endInsertVertex()
+        return true
+      }
+      if (event.button !== 0) return false
+      const ws = this.host.doc.getWorkspace(this.insertVertexWorkspaceId)
+      if (!ws || this.host.isElevation) {
+        this.endInsertVertex()
+        return true
+      }
+      const edgeHit = hitWorkspaceEdge(ws.outline, plane.u, plane.v, this.host.scale)
+      if (edgeHit) {
+        const next = insertOutlineVertex(ws.outline, edgeHit.edgeIndex, edgeHit.t)
+        this.host.doc.commands.setWorkspaceOutline(ws.id, next)
+        this.endInsertVertex()
+        return true
+      }
+      this.host.requestRender()
+      return true
+    }
+
+    if (event.button !== 0) return false
     const { doc } = this.host
 
     const selectedId = doc.selection.first()
@@ -180,6 +241,30 @@ export class SelectInteraction implements PointerInteraction {
     }
 
     if (!this.host.isElevation) {
+      const vertexHit = hitWorkspaceVertex(
+        doc.getWorkspaces(),
+        plane.u,
+        plane.v,
+        this.host.scale
+      )
+      if (vertexHit) {
+        const ws = doc.getWorkspace(vertexHit.workspaceId)
+        doc.selection.set(vertexHit.workspaceId)
+        if (ws) this.host.onWorkspaceSelect?.(ws)
+        this.dragWorkspaceId = vertexHit.workspaceId
+        this.dragWorkspaceVertexIndex = vertexHit.vertexIndex
+        this.workspaceVertexOrigin = { ...plane }
+        this.workspaceOutlineBase = ws
+          ? ws.outline.map(p => [...p] as [number, number])
+          : null
+        this.workspaceOutlineGhost = this.workspaceOutlineBase
+          ? this.workspaceOutlineBase.map(p => [...p] as [number, number])
+          : null
+        this.workspaceVertexMoved = false
+        this.host.requestRender()
+        return true
+      }
+
       const wsId = hitWorkspace(doc.getWorkspaces(), plane.u, plane.v)
       if (wsId) {
         const ws = doc.getWorkspace(wsId)
@@ -277,6 +362,23 @@ export class SelectInteraction implements PointerInteraction {
         du,
         dv
       )
+      this.host.requestRender()
+      return true
+    }
+
+    if (
+      this.dragWorkspaceId &&
+      this.workspaceVertexOrigin &&
+      this.workspaceOutlineBase &&
+      this.dragWorkspaceVertexIndex >= 0
+    ) {
+      this.workspaceVertexMoved = true
+      const du = plane.u - this.workspaceVertexOrigin.u
+      const dv = plane.v - this.workspaceVertexOrigin.v
+      const base = this.workspaceOutlineBase[this.dragWorkspaceVertexIndex]
+      const next = this.workspaceOutlineBase.map(p => [...p] as [number, number])
+      next[this.dragWorkspaceVertexIndex] = [base[0] + du, base[1] + dv]
+      this.workspaceOutlineGhost = next
       this.host.requestRender()
       return true
     }
@@ -394,6 +496,18 @@ export class SelectInteraction implements PointerInteraction {
 
     if (this.dragWallId && this.wallDragMoved && this.wallDragPatches.length) {
       this.host.doc.commands.moveWalls(this.wallDragPatches)
+    }
+
+    if (
+      this.dragWorkspaceId &&
+      this.workspaceVertexMoved &&
+      this.workspaceOutlineGhost &&
+      this.workspaceOutlineGhost.length >= 3
+    ) {
+      this.host.doc.commands.setWorkspaceOutline(
+        this.dragWorkspaceId,
+        this.workspaceOutlineGhost
+      )
     }
 
     if (this.dragNodeId && this.dragGhost && this.dragMoved) {

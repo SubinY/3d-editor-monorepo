@@ -50,6 +50,8 @@ export interface CreateEditorOptions {
     showNodeNames?: boolean
     /** 同一鼠标点命中多个节点时通知 Host；未设则选最上层 */
     onPickCandidates?: PickCandidatesHandler
+    /** 工作区「边加点」模式开关变化 */
+    onInsertWorkspaceVertexModeChange?: (active: boolean) => void
     /** 业务侧控制 2D 缩放手柄；默认允许 */
     canResizeNode?: (node: EditorNodeJSON, item?: CatalogItem) => boolean
   }

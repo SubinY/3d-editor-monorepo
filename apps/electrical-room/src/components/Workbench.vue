@@ -87,6 +87,7 @@ const selectedNode = reactive({
 const nodeTwin = reactive<TwinProps>(emptyTwin())
 const selectedWall = shallowRef<WallJSON | null>(null)
 const selectedWorkspace = shallowRef<WorkspaceJSON | null>(null)
+const workspaceInsertVertexActive = ref(false)
 const boundsForm = reactive({ width: 0, depth: 0, height: 0 })
 const environment = shallowRef<EnvironmentJSON | null>(null)
 const liveCameraPose = shallowRef<LiveCameraPose | null>(null)
@@ -274,7 +275,10 @@ onMounted(async () => {
       canvas3d: el3d.value
     },
     viewport2d: {
-      onPickCandidates
+      onPickCandidates,
+      onInsertWorkspaceVertexModeChange: active => {
+        workspaceInsertVertexActive.value = active
+      }
     },
     viewport3d: {
       hoverOutline: true
@@ -662,6 +666,17 @@ function applyWorkspacePatch(patch: {
   }
 }
 
+function toggleInsertWorkspaceVertex() {
+  const id = selectedWorkspace.value?.id
+  if (!id || !session?.viewport2d) return
+  if (workspaceInsertVertexActive.value) {
+    session.viewport2d.cancelInsertWorkspaceVertex()
+    return
+  }
+  setTool('select')
+  session.viewport2d.beginInsertWorkspaceVertex(id)
+}
+
 function duplicateSelected() {
   const d = doc.value
   if (!d || !selectedNode.id) return
@@ -830,6 +845,7 @@ async function confirmPanelEdit(content: panel.PanelContentJSON) {
         :live-camera-pose="liveCameraPose"
         :perf-stats-visible="perfStatsVisible"
         :is-panel="isPanelSelected"
+        :workspace-insert-vertex-active="workspaceInsertVertexActive"
         @update:bounds="applyBounds"
         @update:name="applyNodeName"
         @update:transform="applyNodeTransform"
@@ -838,6 +854,7 @@ async function confirmPanelEdit(content: panel.PanelContentJSON) {
         @update:workspace="applyWorkspacePatch"
         @edit-panel="openPanelEditor"
         @edit-cabinet="editCabinet"
+        @toggle-insert-workspace-vertex="toggleInsertWorkspaceVertex"
         @remove="removeSelected"
         @apply-environment="applyEnvironment"
         @update:perf-stats-visible="setPerfStatsVisible"

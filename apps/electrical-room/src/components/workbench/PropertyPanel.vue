@@ -38,6 +38,8 @@ const props = defineProps<{
   selectedWorkspace: WorkspaceJSON | null
   environment: EnvironmentJSON | null
   isPanel?: boolean
+  /** 工作区边加点模式是否激活 */
+  workspaceInsertVertexActive?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -55,6 +57,7 @@ const emit = defineEmits<{
   ]
   'edit-panel': []
   'edit-cabinet': []
+  'toggle-insert-workspace-vertex': []
   remove: []
 }>()
 
@@ -287,6 +290,15 @@ function setCeilingPreset(id: string) {
               @change="v => patchWorkspace({ height: Number(v) })"
             />
           </el-form-item>
+          <el-form-item label="轮廓顶点">
+            <el-button
+              class="full"
+              :type="workspaceInsertVertexActive ? 'primary' : 'default'"
+              @click="emit('toggle-insert-workspace-vertex')"
+            >
+              {{ workspaceInsertVertexActive ? '取消加点（Esc）' : '新增节点' }}
+            </el-button>
+          </el-form-item>
 
           <div class="section-head">地面</div>
           <el-form-item label="显示">
@@ -357,6 +369,7 @@ function setCeilingPreset(id: string) {
       <p v-if="isScene" class="hint">
         画墙：左键连续落点，右键或 Esc 结束链。<br />
         画工作区：≥3 点后右键/Esc/双击/点回起点闭合；地面与天花按工作区轮廓。<br />
+        选中工作区可拖顶点改轮廓；「新增节点」后点高亮边插入顶点。<br />
         W 切换「选择 / 画墙」· Ctrl+Z / Ctrl+Shift+Z 撤销重做 · Delete 删除 · Esc
         结束工具态/清选中<br />
         门 / 窗 / 柱拖近墙体会自动贴墙；物件拖动时有对齐辅助线。<br />

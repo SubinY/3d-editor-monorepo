@@ -43,6 +43,8 @@ export interface Viewport2DContext {
   onWallSelect?: (wall: WallJSON) => void
   onWorkspaceSelect?: (workspace: WorkspaceJSON) => void
   onPickCandidates?: PickCandidatesHandler
+  /** 工作区「边加点」模式开关变化（Host 同步按钮态） */
+  onInsertWorkspaceVertexModeChange?: (active: boolean) => void
 }
 
 export interface PointerInteraction {

@@ -83,6 +83,8 @@ export interface Viewport2DOptions {
    * 未提供时保持「选最上层并拖」旧行为。
    */
   onPickCandidates?: PickCandidatesHandler
+  /** 工作区「边加点」模式开关变化 */
+  onInsertWorkspaceVertexModeChange?: (active: boolean) => void
   /** 业务侧：false 时不画/不拖 2D 缩放手柄。默认 true */
   canResizeNode?: (node: EditorNodeJSON, item?: CatalogItem) => boolean
 }

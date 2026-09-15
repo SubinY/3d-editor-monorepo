@@ -85,6 +85,8 @@ export class EditorSessionImpl implements EditorSession {
       snapEnabled: this.snapEnabled,
       showNodeNames: this.viewport2dOptions?.showNodeNames,
       onPickCandidates: this.viewport2dOptions?.onPickCandidates,
+      onInsertWorkspaceVertexModeChange:
+        this.viewport2dOptions?.onInsertWorkspaceVertexModeChange,
       canResizeNode: this.viewport2dOptions?.canResizeNode
     }
     this.viewport2d = new Viewport2D(el, options)

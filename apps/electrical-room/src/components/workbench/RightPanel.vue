@@ -22,6 +22,7 @@ const props = defineProps<{
   liveCameraPose?: LiveCameraPose | null
   perfStatsVisible?: boolean
   isPanel?: boolean
+  workspaceInsertVertexActive?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -40,6 +41,7 @@ const emit = defineEmits<{
   ]
   'edit-panel': []
   'edit-cabinet': []
+  'toggle-insert-workspace-vertex': []
   remove: []
   'apply-environment': [env: EnvironmentJSON]
   'update:perfStatsVisible': [value: boolean]
@@ -75,6 +77,7 @@ watch(
           :selected-workspace="selectedWorkspace"
           :environment="environment"
           :is-panel="isPanel"
+          :workspace-insert-vertex-active="workspaceInsertVertexActive"
           @update:bounds="emit('update:bounds')"
           @update:name="emit('update:name')"
           @update:transform="emit('update:transform')"
@@ -82,6 +85,7 @@ watch(
           @update:workspace="emit('update:workspace', $event)"
           @edit-panel="emit('edit-panel')"
           @edit-cabinet="emit('edit-cabinet')"
+          @toggle-insert-workspace-vertex="emit('toggle-insert-workspace-vertex')"
           @remove="emit('remove')"
         />
       </el-tab-pane>

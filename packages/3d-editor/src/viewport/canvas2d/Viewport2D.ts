@@ -33,6 +33,7 @@ export class Viewport2D {
   private onWallSelect?: Viewport2DOptions['onWallSelect']
   private onWorkspaceSelect?: Viewport2DOptions['onWorkspaceSelect']
   private onPickCandidates?: Viewport2DOptions['onPickCandidates']
+  private onInsertWorkspaceVertexModeChange?: Viewport2DOptions['onInsertWorkspaceVertexModeChange']
   private canResizeNode?: Viewport2DOptions['canResizeNode']
   private snapEnabled: boolean
 
@@ -62,6 +63,7 @@ export class Viewport2D {
     this.onWallSelect = options.onWallSelect
     this.onWorkspaceSelect = options.onWorkspaceSelect
     this.onPickCandidates = options.onPickCandidates
+    this.onInsertWorkspaceVertexModeChange = options.onInsertWorkspaceVertexModeChange
     this.canResizeNode = options.canResizeNode
     this.snapEnabled = options.snapEnabled ?? true
     this.showNodeNames = options.showNodeNames ?? false
@@ -89,6 +91,14 @@ export class Viewport2D {
     const onChange = () => this.requestRender()
     this.unsubscribers.push(this.doc.on('change', onChange))
     this.unsubscribers.push(this.doc.on('selection:changed', onChange))
+    this.unsubscribers.push(
+      this.doc.on('selection:changed', () => {
+        const id = this.select.insertVertexWorkspaceId
+        if (id && !this.doc.selection.get().includes(id)) {
+          this.cancelInsertWorkspaceVertex()
+        }
+      })
+    )
     this.unsubscribers.push(this.doc.on('bounds:updated', () => this.fitBounds()))
 
     this.canvas.addEventListener('pointerdown', this.onPointerDown)
@@ -142,6 +152,12 @@ export class Viewport2D {
       get onPickCandidates() {
         return self.onPickCandidates
       },
+      get onInsertWorkspaceVertexModeChange() {
+        return (active: boolean) => {
+          self.onInsertWorkspaceVertexModeChange?.(active)
+          self.syncCursor()
+        }
+      },
       clientToPlane: (x, y) => self.camera.clientToPlane(self.canvas, x, y),
       planeFromPosition: pos => self.planeFromPosition(pos),
       positionFromPlane: (u, v, base, item) => self.positionFromPlane(u, v, base, item),
@@ -184,20 +200,54 @@ export class Viewport2D {
   setTool(tool: Tool2D): void {
     if (this.readonly) return
     if ((tool === 'wall' || tool === 'workspace') && this.isElevation) return
+    if (tool !== 'select') this.cancelInsertWorkspaceVertex()
     this.tool = tool
     this.endWallChain()
     this.endWorkspaceChain()
-    this.canvas.style.cursor =
-      tool === 'wall' || tool === 'workspace'
-        ? 'crosshair'
-        : tool === 'pan'
-          ? 'grab'
-          : 'default'
+    this.syncCursor()
     this.requestRender()
   }
 
   getTool(): Tool2D {
     return this.tool
+  }
+
+  /**
+   * 进入工作区「边加点」：高亮边，点击边插入顶点后自动退出。
+   * Esc / 右键 / 取消选中 / 切工具 也会退出。
+   */
+  beginInsertWorkspaceVertex(workspaceId: string): void {
+    if (this.readonly || this.isElevation) return
+    const ws = this.doc.getWorkspace(workspaceId)
+    if (!ws || ws.outline.length < 3) return
+    this.tool = 'select'
+    this.endWallChain()
+    this.endWorkspaceChain()
+    this.select.beginInsertVertex(workspaceId)
+    this.doc.selection.set(workspaceId)
+    this.syncCursor()
+  }
+
+  cancelInsertWorkspaceVertex(): void {
+    this.select.endInsertVertex()
+    this.syncCursor()
+  }
+
+  isInsertWorkspaceVertexMode(): boolean {
+    return this.select.isInsertVertexMode()
+  }
+
+  private syncCursor(): void {
+    if (this.select.isInsertVertexMode()) {
+      this.canvas.style.cursor = 'crosshair'
+      return
+    }
+    this.canvas.style.cursor =
+      this.tool === 'wall' || this.tool === 'workspace'
+        ? 'crosshair'
+        : this.tool === 'pan'
+          ? 'grab'
+          : 'default'
   }
 
   endWallChain(): void {
@@ -464,6 +514,10 @@ export class Viewport2D {
   }
 
   private onKeyDown = (event: KeyboardEvent): void => {
+    if (event.key === 'Escape' && this.select.isInsertVertexMode()) {
+      this.cancelInsertWorkspaceVertex()
+      return
+    }
     if (event.key === 'Escape' && this.tool === 'wall') this.endWallChain()
     if (event.key === 'Escape' && this.tool === 'workspace') {
       this.finishOrCancelWorkspace()

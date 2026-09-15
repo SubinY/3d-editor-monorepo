@@ -48,6 +48,7 @@ export function paintScene(p: Paint2DContext, width: number, height: number): vo
   if (!p.isElevation) {
     drawFloors(p)
     drawWalls(p)
+    drawWorkspaceInsertEdges(p)
   }
   drawNodes(p)
   drawChainGhost(p)
@@ -131,20 +132,24 @@ function drawBounds(p: Paint2DContext): void {
 }
 
 function drawFloors(p: Paint2DContext): void {
-  const { ctx, camera, theme, doc } = p
+  const { ctx, camera, theme, doc, select, tool, readonly } = p
   const selection = doc.selection.get()
 
   doc.getWorkspaces().forEach(ws => {
     if (!ws.floor?.visible || ws.outline.length < 3) return
+    const ghost =
+      select.dragWorkspaceId === ws.id ? select.workspaceOutlineGhost : null
+    const outline = ghost ?? ws.outline
+    if (outline.length < 3) return
     const color = ws.floor.color || theme.floor
     const selected = selection.includes(ws.id)
     ctx.fillStyle = color
     ctx.globalAlpha = selected ? 0.55 : 0.4
     ctx.beginPath()
-    const first = camera.worldToScreen(ws.outline[0][0], ws.outline[0][1])
+    const first = camera.worldToScreen(outline[0][0], outline[0][1])
     ctx.moveTo(first.sx, first.sy)
-    for (let i = 1; i < ws.outline.length; i++) {
-      const pt = camera.worldToScreen(ws.outline[i][0], ws.outline[i][1])
+    for (let i = 1; i < outline.length; i++) {
+      const pt = camera.worldToScreen(outline[i][0], outline[i][1])
       ctx.lineTo(pt.sx, pt.sy)
     }
     ctx.closePath()
@@ -155,6 +160,53 @@ function drawFloors(p: Paint2DContext): void {
     ctx.setLineDash(selected ? [] : [6, 4])
     ctx.stroke()
     ctx.setLineDash([])
+
+    if (selected && tool === 'select' && !readonly) {
+      drawWorkspaceVertexHandles(p, outline)
+    }
+  })
+}
+
+function drawWorkspaceInsertEdges(p: Paint2DContext): void {
+  const id = p.select.insertVertexWorkspaceId
+  if (!id || p.readonly) return
+  const ws = p.doc.getWorkspace(id)
+  if (!ws || ws.outline.length < 3) return
+  const { ctx, camera, theme } = p
+  const outline = ws.outline
+  ctx.save()
+  ctx.strokeStyle = theme.wallSelected
+  ctx.lineWidth = 3.5
+  ctx.lineJoin = 'round'
+  ctx.lineCap = 'round'
+  ctx.setLineDash([8, 8])
+  ctx.beginPath()
+  const first = camera.worldToScreen(outline[0][0], outline[0][1])
+  ctx.moveTo(first.sx, first.sy)
+  for (let i = 1; i < outline.length; i++) {
+    const pt = camera.worldToScreen(outline[i][0], outline[i][1])
+    ctx.lineTo(pt.sx, pt.sy)
+  }
+  ctx.closePath()
+  ctx.stroke()
+  ctx.setLineDash([])
+  ctx.restore()
+}
+
+function drawWorkspaceVertexHandles(
+  p: Paint2DContext,
+  outline: [number, number][]
+): void {
+  const { ctx, camera, theme } = p
+  outline.forEach(pt => {
+    const s = camera.worldToScreen(pt[0], pt[1])
+    ctx.fillStyle = theme.wallSelected
+    ctx.beginPath()
+    ctx.arc(s.sx, s.sy, 5, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.strokeStyle = 'rgba(255,255,255,0.9)'
+    ctx.lineWidth = 1.5
+    ctx.stroke()
   })
 }
 
