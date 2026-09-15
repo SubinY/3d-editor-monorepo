@@ -29,7 +29,8 @@ import type { PointerInteraction, Viewport2DContext } from './types'
 
 const SOURCE = 'viewport2d'
 const MOVE_THRESHOLD_PX = 5
-const HANDLE_PAD_PX = 0
+/** 四角手柄相对 AABB 外扩（屏幕像素），避免贴住虚线框角 */
+const HANDLE_PAD_PX = 6
 
 export interface NodeSelectLayout extends NodeLayout {
   eu: number
@@ -90,8 +91,8 @@ export class SelectInteraction implements PointerInteraction {
   workspaceVertexMoved = false
 
   /**
-   * 「边加点」模式目标工作区 id；非 null 时吞掉指针，点边插入后退出。
-   * 不放进 reset()，避免拖拽松手误清。
+   * 「边加点」模式目标工作区 id；非 null 时吞掉指针，可连续点边插入。
+   * 退出：Esc / 取消按钮；切工具或取消选中也会退出。不放进 reset()，避免拖拽松手误清。
    */
   insertVertexWorkspaceId: string | null = null
 
@@ -163,10 +164,7 @@ export class SelectInteraction implements PointerInteraction {
     if (this.host.readonly) return false
 
     if (this.insertVertexWorkspaceId) {
-      if (event.button === 2) {
-        this.endInsertVertex()
-        return true
-      }
+      if (event.button === 2) return true
       if (event.button !== 0) return false
       const ws = this.host.doc.getWorkspace(this.insertVertexWorkspaceId)
       if (!ws || this.host.isElevation) {
@@ -177,7 +175,7 @@ export class SelectInteraction implements PointerInteraction {
       if (edgeHit) {
         const next = insertOutlineVertex(ws.outline, edgeHit.edgeIndex, edgeHit.t)
         this.host.doc.commands.setWorkspaceOutline(ws.id, next)
-        this.endInsertVertex()
+        this.host.requestRender()
         return true
       }
       this.host.requestRender()

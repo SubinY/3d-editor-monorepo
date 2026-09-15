@@ -213,8 +213,8 @@ export class Viewport2D {
   }
 
   /**
-   * 进入工作区「边加点」：高亮边，点击边插入顶点后自动退出。
-   * Esc / 右键 / 取消选中 / 切工具 也会退出。
+   * 进入工作区「边加点」：高亮边，可连续点击边插入顶点。
+   * Esc / 取消按钮 / 取消选中 / 切工具 退出；点边插入后保持模式。
    */
   beginInsertWorkspaceVertex(workspaceId: string): void {
     if (this.readonly || this.isElevation) return
