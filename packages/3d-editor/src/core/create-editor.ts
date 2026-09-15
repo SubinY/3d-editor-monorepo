@@ -106,7 +106,6 @@ export class EditorSessionImpl implements EditorSession {
       document: this.document,
       catalog: this.catalog,
       readonly: this.viewport3dOptions?.readonly,
-      onInteraction: this.viewport3dOptions?.onInteraction,
       transformModes: this.transformModes,
       transformMode: this.transformMode,
       snapEnabled: this.snapEnabled,

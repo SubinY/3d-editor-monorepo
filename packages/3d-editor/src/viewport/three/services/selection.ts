@@ -1,7 +1,9 @@
 /** 3D 拾取写 selection，并同步 gizmo 附着；识别 click / dblclick / longpress / hover */
 import type * as THREE from 'three'
 import type { EditorDocument } from '../../../document/EditorDocument'
-import type { NodeInteractionHandler } from '../../interaction-events'
+import type {
+  NodeInteractionEvent,
+} from '../../interaction-events'
 import type { ThreeRuntime } from '../runtime/ThreeRuntime'
 import { findNodePath } from '../utils/node-path'
 import { getFootprintPivot } from '../utils/footprint-pivot'
@@ -21,7 +23,8 @@ export interface SelectionServiceOptions {
   pathObjects: Map<string, THREE.Object3D>
   hoverOutline: boolean
   hoverHighlight: HoverHighlight
-  onInteraction?: NodeInteractionHandler
+  /** Viewport 扇出到 onInteraction 订阅者 */
+  emitInteraction?: (event: NodeInteractionEvent) => void
 }
 
 /** 3D 点击拾取 → Document selection / Host 回调；selection → gizmo */
@@ -231,7 +234,7 @@ export class SelectionService {
   ): void {
     const nodeId = path.split('/')[0]
     const node = this.opts.doc.getNode(nodeId)
-    this.opts.onInteraction?.({
+    this.opts.emitInteraction?.({
       type,
       nodePath: path,
       nodeId,

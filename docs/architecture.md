@@ -103,7 +103,7 @@ schema 只有 `structure.walls`（`a` / `b` / `height` / `thickness`），没有
 
 | 层 | 职责 |
 |----|------|
-| `@mh/3d-editor` | Document、`props` 不透明、`setNodeVisualState`、`onInteraction` |
+| `@mh/3d-editor` | Document、`props` 不透明、`setNodeVisualState`、`viewport3d.onInteraction` 订阅 |
 | `@mh/3d-editor-twin` | `props.twin` 读写、`DataSource` 接口、规则求值、`TwinPlayer` |
 | Host | 点位字典、色板、MQTT/WS/HTTP 实现、KPI / 告警壳 |
 

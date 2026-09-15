@@ -2,7 +2,6 @@ import type { CatalogItem, CatalogProvider, ProceduralModelResolver } from '../c
 import type { CreateDocumentOptions, EditorDocument } from '../document/EditorDocument'
 import type { EditorDocumentJSON, EditorNodeJSON } from '../document/types'
 import type { PickCandidatesHandler } from '../viewport/canvas2d/types'
-import type { NodeInteractionHandler } from '../viewport/interaction-events'
 import type { Viewport2D } from '../viewport/canvas2d/Viewport2D'
 import type { Viewport3D } from '../viewport/three/Viewport3D'
 
@@ -37,8 +36,6 @@ export interface CreateEditorOptions {
   }
   viewport3d?: {
     readonly?: boolean
-    /** 3D 指针交互统一出口（click / dblclick / longpress / hover） */
-    onInteraction?: NodeInteractionHandler
     /** 左下角性能 Info（物体/顶点/三角形/渲染时间）；默认 false */
     perfStats?: boolean
     /** 鼠标悬停描边；默认不显示 */

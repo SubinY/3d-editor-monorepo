@@ -40,6 +40,7 @@ const bootError = ref('')
 
 let session: EditorSession | undefined
 let player: TwinPlayer | undefined
+let unsubInteraction: (() => void) | undefined
 
 const legendItems = (Object.keys(DEVICE_STATUS_META) as DeviceStatus[]).map(status => ({
   status,
@@ -75,9 +76,6 @@ onMounted(async () => {
     viewport3d: {
       readonly: true,
       hoverOutline: false,
-      onInteraction: (event: NodeInteractionEvent) => {
-        lastInteraction.value = `${event.type} → ${event.nodePath}`
-      }
     },
     procedural: {
       resolvers: createProceduralResolvers()
@@ -85,6 +83,10 @@ onMounted(async () => {
   })
 
   if (!session.viewport3d) return
+
+  unsubInteraction = session.viewport3d.onInteraction((event: NodeInteractionEvent) => {
+    lastInteraction.value = `${event.type} → ${event.nodePath}`
+  })
 
   const resolveNested = async (node: TwinDocumentNode) => {
     const ref = (node as { catalogRef?: { id: string; version: string } }).catalogRef
@@ -134,6 +136,8 @@ onMounted(async () => {
 })
 
 onBeforeUnmount(() => {
+  unsubInteraction?.()
+  unsubInteraction = undefined
   player?.stop()
   player = undefined
   session?.dispose()

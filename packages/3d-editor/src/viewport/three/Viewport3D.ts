@@ -60,9 +60,8 @@ import {
 export interface Viewport3DOptions {
   document: EditorDocument
   catalog?: CatalogProvider
-  /** 只读预览：无 gizmo、不写 document；交互经 onInteraction 通知 Host */
+  /** 只读预览：无 gizmo、不写 document；交互经 onInteraction 订阅通知 Host */
   readonly?: boolean
-  onInteraction?: NodeInteractionHandler
   transformModes?: TransformMode[]
   transformMode?: TransformMode
   snapEnabled?: boolean
@@ -112,8 +111,8 @@ export class Viewport3D {
   private doc: EditorDocument
   private catalog?: CatalogProvider
   private readonly readonly: boolean
-  private onInteraction?: NodeInteractionHandler
   private proceduralResolvers: ProceduralModelResolver[]
+  private interactionHandlers = new Set<NodeInteractionHandler>()
 
   private nodeRoots = new Map<string, THREE.Object3D>()
   private pathObjects = new Map<string, THREE.Object3D>()
@@ -153,7 +152,6 @@ export class Viewport3D {
     this.doc = options.document
     this.catalog = options.catalog ?? options.document.getCatalog()
     this.readonly = options.readonly ?? false
-    this.onInteraction = options.onInteraction
     this.proceduralResolvers = options.proceduralResolvers ?? []
 
     this.runtime = new ThreeRuntime({
@@ -206,7 +204,9 @@ export class Viewport3D {
       pathObjects: this.pathObjects,
       hoverOutline,
       hoverHighlight: this.hoverHighlight,
-      onInteraction: this.onInteraction
+      emitInteraction: (event) => {
+        for (const handler of this.interactionHandlers) handler(event)
+      }
     })
 
     // document → 3D
@@ -1065,6 +1065,15 @@ export class Viewport3D {
 
   // -- 生命周期 -----------------------------------------------------------------
 
+  /**
+   * 3D 指针交互订阅（click / dblclick / longpress / hover）。
+   * 对齐 onCameraPoseChange：创建后挂载，返回取消订阅。
+   */
+  onInteraction(handler: NodeInteractionHandler): () => void {
+    this.interactionHandlers.add(handler)
+    return () => this.interactionHandlers.delete(handler)
+  }
+
   /** Orbit 交互位姿变化（滚轮/右键平移/旋转等） */
   onCameraPoseChange(handler: (pose: {
     position: [number, number, number]
@@ -1076,6 +1085,7 @@ export class Viewport3D {
 
   dispose(): void {
     this.disposed = true
+    this.interactionHandlers.clear()
     this.floorApplyToken++
     this.ceilingApplyToken++
     this.wallApplyToken++
