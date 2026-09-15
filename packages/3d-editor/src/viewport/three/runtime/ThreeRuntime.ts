@@ -267,14 +267,19 @@ export class ThreeRuntime {
    * 按 defaultView 写入相机。
    * applyPose=false：只改类型 / 投影 / 距离限制，保留当前 Orbit 位姿。
    */
-  applyDefaultView(view: DefaultViewJSON, options?: { applyPose?: boolean }): void {
+  applyView(
+    view: DefaultViewJSON,
+    options?: { applyPose?: boolean; up?: [number, number, number] }
+  ): void {
     const applyPose = options?.applyPose !== false
     const mode = view.type === 'orthographic' ? 'orthographic' : 'orbit'
 
     this.suppressPoseEvents = true
-    this.setCameraMode(mode)
+    this.setProjection(mode)
 
     if (applyPose) {
+      const up = options?.up ?? [0, 1, 0]
+      this._camera.up.set(up[0], up[1], up[2])
       this._camera.position.set(view.position[0], view.position[1], view.position[2])
       this.orbit.target.set(view.target[0], view.target[1], view.target[2])
     }
@@ -299,7 +304,7 @@ export class ThreeRuntime {
   }
 
   /** 切换旋转 / 正交，保留当前位置与 target */
-  setCameraMode(mode: CameraViewType): void {
+  setProjection(mode: CameraViewType): void {
     if (mode === this.cameraMode) {
       this.applyOrbitPolicy(mode)
       return
@@ -341,7 +346,7 @@ export class ThreeRuntime {
     this.orbit.update()
   }
 
-  getCameraMode(): CameraViewType {
+  getProjection(): CameraViewType {
     return this.cameraMode
   }
 

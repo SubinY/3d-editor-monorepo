@@ -471,7 +471,7 @@ function onKeyDown(event: KeyboardEvent) {
 
   if ((event.key === 'f' || event.key === 'F') && !mod) {
     event.preventDefault()
-    session?.viewport3d?.focusSelection()
+    session?.viewport3d?.look({ at: 'selection' })
   }
 }
 
@@ -740,11 +740,15 @@ function applyEnvironment(env: EnvironmentJSON) {
 }
 
 function enterIndoorView() {
-  const view = session?.viewport3d?.enterIndoorView({ persist: true })
-  if (view && doc.value) {
+  session?.viewport3d?.look({ at: 'indoor', persist: true })
+  if (doc.value) {
     liveCameraPose.value = null
     environment.value = cloneEnvironment(doc.value.environment)
   }
+}
+
+function lookTop() {
+  session?.viewport3d?.look({ at: 'top' })
 }
 
 function openPanelEditor() {
@@ -859,6 +863,7 @@ async function confirmPanelEdit(content: panel.PanelContentJSON) {
         @apply-environment="applyEnvironment"
         @update:perf-stats-visible="setPerfStatsVisible"
         @enter-indoor="enterIndoorView"
+        @look-top="lookTop"
       />
     </div>
 

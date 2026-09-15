@@ -23,6 +23,7 @@ const emit = defineEmits<{
   apply: [env: EnvironmentJSON]
   'update:perfStatsVisible': [value: boolean]
   'enter-indoor': []
+  'look-top': []
 }>()
 
 const section = ref<EnvSectionId>('camera')
@@ -90,6 +91,7 @@ const navItems: Array<{ id: EnvSectionId; icon: typeof Camera; title: string }> 
         :live-camera-pose="liveCameraPose"
         @commit="commit"
         @enter-indoor="emit('enter-indoor')"
+        @look-top="emit('look-top')"
       />
       <LightSection v-show="section === 'light'" :form="form" @commit="commit" />
       <HelpersSection

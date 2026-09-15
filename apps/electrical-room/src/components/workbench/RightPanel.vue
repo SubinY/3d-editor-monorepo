@@ -46,6 +46,7 @@ const emit = defineEmits<{
   'apply-environment': [env: EnvironmentJSON]
   'update:perfStatsVisible': [value: boolean]
   'enter-indoor': []
+  'look-top': []
 }>()
 
 const activeTab = ref('props')
@@ -107,6 +108,7 @@ watch(
           @apply="emit('apply-environment', $event)"
           @update:perf-stats-visible="emit('update:perfStatsVisible', $event)"
           @enter-indoor="emit('enter-indoor')"
+          @look-top="emit('look-top')"
         />
         <el-empty v-else description="编辑器未就绪" :image-size="48" />
       </el-tab-pane>

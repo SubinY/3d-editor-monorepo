@@ -82,12 +82,8 @@ export type {
   PickCandidatesHandler
 } from './viewport/canvas2d/types'
 export type { Viewport2D } from './viewport/canvas2d/Viewport2D'
-export type {
-  Viewport3D,
-  Viewport3DOptions,
-  FocusCameraOptions,
-  EnterIndoorViewOptions
-} from './viewport/three/Viewport3D'
+export type { Viewport3D, Viewport3DOptions } from './viewport/three/Viewport3D'
+export type { CameraLookTarget, CameraLookOptions } from './viewport/three/types'
 export type { ProceduralCreateFn } from './viewport/three/services/procedural-module-loader'
 export type {
   InteractionEventType,

@@ -11,6 +11,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   commit: []
   'enter-indoor': []
+  'look-top': []
 }>()
 
 function absorbLivePose() {
@@ -240,8 +241,13 @@ function setRadius(value: number | undefined) {
         进入室内视角
       </el-button>
     </el-form-item>
+    <el-form-item label="俯瞰">
+      <el-button type="primary" plain size="small" @click="emit('look-top')">
+        正上方俯瞰
+      </el-button>
+    </el-form-item>
     <p class="hint">
-      透视/正交是投影模式；「进入室内视角」会把相机放到房间内（orbit），与投影切换独立。
+      透视/正交是投影模式；「进入室内视角」会把相机放到房间内（orbit）；「正上方俯瞰」走 look({ at: 'top' })，默认正交。
     </p>
     <p class="hint">
       目标=注视点；半径=眼睛到目标的距离（滚轮改的就是它）。视场角=镜头广角，与半径独立：广角变大画面更“撑开”，滚轮拉近又会把物体放大——两者可互相补偿，所以改完

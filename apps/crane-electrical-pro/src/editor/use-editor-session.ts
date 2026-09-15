@@ -148,7 +148,7 @@ export function useEditorSession(): EditorSessionApi {
   }
 
   function focusSelection() {
-    session.value?.viewport3d?.focusSelection()
+    session.value?.viewport3d?.look({ at: 'selection' })
   }
 
   function persist() {

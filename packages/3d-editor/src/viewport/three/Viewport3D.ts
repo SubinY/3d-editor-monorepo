@@ -49,10 +49,8 @@ import { disposeObject3D } from './utils/dispose'
 import { bumpBuildToken, isBuildStale } from './utils/build-token'
 import { getAssetHandle } from '../../catalog/asset-handle'
 import { runProceduralResolvers } from '../../catalog/run-procedural-resolvers'
-import {
-  createIndoorDefaultView,
-  type CreateIndoorDefaultViewOptions
-} from './utils/indoor-view'
+import { resolveLookIntent } from './utils/look'
+import type { CameraLookOptions, CameraLookTarget } from './types'
 import { cloneEnvironment } from '../../document/defaults'
 import {
   composePreviewTransform,
@@ -74,16 +72,6 @@ export interface Viewport3DOptions {
   hoverOutline?: boolean
   /** Host 程序化模型解析链（model3d.type === 'procedural'） */
   proceduralResolvers?: ProceduralModelResolver[]
-}
-
-export interface FocusCameraOptions {
-  /** 框住包围盒的余量倍数；默认 1.4 */
-  padding?: number
-}
-
-export type EnterIndoorViewOptions = CreateIndoorDefaultViewOptions & {
-  /** 是否写回 document.environment.defaultView；默认 false */
-  persist?: boolean
 }
 
 /** 嵌套解析深度上限（D2：scene → container → 元件） */
@@ -300,8 +288,7 @@ export class Viewport3D {
       this.lastCameraPoseKey === null ||
       (poseChanged && !this.runtime.poseNear(view.position, view.target))
 
-    this.runtime.applyDefaultView(view, { applyPose })
-    this.lastCameraPoseKey = poseKey
+    this.applyLookView(view, applyPose)
   }
 
   private fallbackDefaultView(): DefaultViewJSON {
@@ -930,60 +917,58 @@ export class Viewport3D {
     this.selection.setHoverOutlineEnabled(enabled)
   }
 
-  /** 聚焦当前 Document 选中（取首个 id） */
-  focusSelection(options?: FocusCameraOptions): void {
-    const id = this.doc.selection.get()[0]
-    if (!id) return
-    this.focusNode(id, options)
-  }
-
-  /** 路径寻址聚焦：顶层 nodeId 或 `父/子` */
-  focusNode(nodePath: string, options?: FocusCameraOptions): void {
-    const object = this.pathObjects.get(nodePath) ?? this.nodeRoots.get(nodePath)
-    if (!object) return
-    this.runtime.focusObject(object, options?.padding ?? 1.4)
-  }
-
   /** Host 覆盖层 / 动态贴图：取节点根 Object3D */
   getNodeObject(nodeId: string): THREE.Object3D | undefined {
     return this.nodeRoots.get(nodeId) ?? this.pathObjects.get(nodeId)
   }
 
-  setCameraMode(mode: CameraViewType): void {
-    this.runtime.setCameraMode(mode)
-  }
-
-  getCameraMode(): CameraViewType {
-    return this.runtime.getCameraMode()
-  }
-
-  /** 应用 defaultView；缺省用 document.environment.defaultView */
-  applyDefaultView(view?: DefaultViewJSON, options?: { applyPose?: boolean }): void {
-    const next = view ?? this.doc.environment.defaultView ?? this.fallbackDefaultView()
-    const type = next.type === 'orthographic' ? 'orthographic' : 'orbit'
-    const poseKey = `${type}|${next.position.join(',')}|${next.target.join(',')}`
-    const applyPose = options?.applyPose ?? true
-    this.runtime.applyDefaultView(next, { applyPose })
-    this.lastCameraPoseKey = poseKey
+  getProjection(): CameraViewType {
+    return this.runtime.getProjection()
   }
 
   /**
-   * 进入室内预设视角（仍为 orbit/ortho，仅位姿与距离限制）。
-   * persist=true 时写入 document.environment.defaultView（计入历史）。
+   * 3D 相机唯一写入口：复位 / 俯瞰 / 聚焦节点 / 室内预设。
+   * persist 仅 `at:'indoor'` 且显式 true 时写回 defaultView。
    */
-  enterIndoorView(options?: EnterIndoorViewOptions): DefaultViewJSON {
-    const { persist = false, ...viewOpts } = options ?? {}
-    const view = createIndoorDefaultView(this.doc.bounds, {
-      fov: this.doc.environment.defaultView?.fov ?? viewOpts.fov ?? 60,
-      ...viewOpts
-    })
-    this.applyDefaultView(view, { applyPose: true })
-    if (persist) {
+  look(target: CameraLookTarget, options?: CameraLookOptions): void {
+    const pose = this.runtime.getCameraPose()
+    const intent = resolveLookIntent(
+      target,
+      {
+        defaultView: this.doc.environment.defaultView ?? this.fallbackDefaultView(),
+        bounds: this.doc.bounds,
+        currentTarget: pose.target,
+        currentRadius: pose.radius,
+        currentProjection: this.runtime.getProjection(),
+        selectedId: this.doc.selection.get()[0]
+      },
+      options
+    )
+    if (intent.action === 'noop') return
+    if (intent.action === 'focus') {
+      if (intent.projection) this.runtime.setProjection(intent.projection)
+      const object = this.pathObjects.get(intent.path) ?? this.nodeRoots.get(intent.path)
+      if (!object) return
+      this.runtime.focusObject(object, intent.padding)
+      return
+    }
+    this.applyLookView(intent.view, intent.applyPose, intent.up)
+    if (intent.persist) {
       const env = cloneEnvironment(this.doc.environment)
-      env.defaultView = view
+      env.defaultView = intent.view
       this.doc.commands.setEnvironment(env)
     }
-    return view
+  }
+
+  private applyLookView(
+    view: DefaultViewJSON,
+    applyPose: boolean,
+    up?: [number, number, number]
+  ): void {
+    const type = view.type === 'orthographic' ? 'orthographic' : 'orbit'
+    const poseKey = `${type}|${view.position.join(',')}|${view.target.join(',')}`
+    this.runtime.applyView(view, { applyPose, up })
+    this.lastCameraPoseKey = poseKey
   }
 
   // -- 运行时可视状态（监控预览） --------------------------------------------------

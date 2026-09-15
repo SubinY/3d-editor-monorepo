@@ -244,7 +244,7 @@ function onFit2d() {
 
 function setCamera3dMode(mode: 'orbit' | 'orthographic') {
   camera3dMode.value = mode
-  api.session.value?.viewport3d?.setCameraMode(mode)
+  api.session.value?.viewport3d?.look({ at: 'home' }, { projection: mode, applyPose: false })
 
   const d = api.doc.value
   if (!d) return
@@ -264,8 +264,8 @@ function setCamera3dMode(mode: 'orbit' | 'orthographic') {
 }
 
 function enterIndoorView() {
-  api.session.value?.viewport3d?.enterIndoorView({ persist: false })
-  camera3dMode.value = api.session.value?.viewport3d?.getCameraMode() ?? 'orbit'
+  api.session.value?.viewport3d?.look({ at: 'indoor', persist: false })
+  camera3dMode.value = api.session.value?.viewport3d?.getProjection() ?? 'orbit'
   refreshEnvironment()
 }
 

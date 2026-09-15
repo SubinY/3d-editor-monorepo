@@ -108,7 +108,7 @@ function fitRuntimeCamera() {
   const first = cabinets[0]
   runtime.selectDevice(first.nodeId)
   doc.selection.set(first.nodeId)
-  session?.viewport3d?.focusSelection({ padding: 4.2 })
+  session?.viewport3d?.look({ at: 'selection' }, { padding: 4.2 })
 }
 
 onMounted(async () => {
@@ -193,7 +193,7 @@ watch(selectedNodeId, () => {
 function onSelectDevice(nodeId: string) {
   runtime.selectDevice(nodeId)
   session?.document.selection.set(nodeId)
-  session?.viewport3d?.focusSelection()
+  session?.viewport3d?.look({ at: 'selection' })
 }
 
 function onSelectAlarm(deviceCode: string) {

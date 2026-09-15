@@ -177,18 +177,26 @@ env.helpers.enclosure = 'none'
 doc.commands.setEnvironment(env)
 ```
 
-### ?? / ?? ? ??
+### 3D 相机 `look`
 
-| API | ?? |
-|-----|------|
-| `viewport3d.setCameraMode('orbit' \| 'orthographic')` | ????????? / ????? |
-| `createIndoorDefaultView(bounds)` / `viewport3d.enterIndoorView()` | **????**????????? maxDistance????? `orbit` |
+Host 只调 `viewport3d.look(...)`，不要改 Three 相机或 Orbit。
+
+| `at` | 含义 |
+|------|------|
+| `home` | 文档 `environment.defaultView`（复位） |
+| `pose` | 显式 `DefaultViewJSON` |
+| `top` | 正上方俯瞰，默认正交 + 框住场景 |
+| `node` / `selection` | 框住节点 |
+| `indoor` | 室内预设；`persist: true` 才写回 `defaultView` |
 
 ```ts
-// ???????????? document?persist: true ??? defaultView?
-editor.viewport3d?.enterIndoorView({ persist: false })
-// ????????????
-editor.viewport3d?.setCameraMode('orthographic')
+editor.viewport3d?.look({ at: 'home' })
+editor.viewport3d?.look({ at: 'top' })
+editor.viewport3d?.look({ at: 'node', path: cabinetId })
+editor.viewport3d?.look({ at: 'selection' }, { padding: 1.4 })
+editor.viewport3d?.look({ at: 'indoor', persist: false })
+// 只切正交、不改当前位姿
+editor.viewport3d?.look({ at: 'home' }, { projection: 'orthographic', applyPose: false })
 ```
 
-????????? + floor/ceiling ?? + `enterIndoorView`?
+`createIndoorDefaultView(bounds)` 仍可用于手搓 `DefaultViewJSON`。只读投影：`getProjection()`。
