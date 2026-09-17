@@ -51,7 +51,8 @@ export function hitTestSelectionHandle(
   v: number,
   scale: number
 ): SelectionHandleKind | null {
-  const threshold = Math.max(0.12, 14 / scale)
+  // 与 draw-selection-handles HANDLE_R=10 对齐，不做额外放大
+  const threshold = 10 / scale
   let best: SelectionHandleKind | null = null
   let bestDist = threshold
   for (const kind of SELECTION_HANDLE_KINDS) {
