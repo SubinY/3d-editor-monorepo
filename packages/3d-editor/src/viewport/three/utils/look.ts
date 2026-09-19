@@ -10,6 +10,8 @@ export interface LookContext {
   currentRadius: number
   currentProjection: CameraViewType
   selectedId?: string
+  /** front 正交视窗宽高比；省略则 1 */
+  aspect?: number
 }
 
 export type LookIntent =
@@ -65,6 +67,48 @@ export function createTopDefaultView(ctx: {
   }
 }
 
+const FRONT_DEFAULT_PADDING = 1.15
+const FRONT_PERSPECTIVE_FOV = 50
+
+/** 正面（+Z）：柜体中心，正交默认；fov 为垂直视窗高度（米） */
+export function createFrontDefaultView(ctx: {
+  bounds: BoundsJSON
+  aspect: number
+  padding?: number
+  projection?: CameraViewType
+}): { view: DefaultViewJSON; up: [number, number, number] } {
+  const width = Math.max(ctx.bounds.width, 0.1)
+  const depth = Math.max(ctx.bounds.depth, 0.1)
+  const height = Math.max(ctx.bounds.height ?? 2, 0.1)
+  const aspect = Math.max(ctx.aspect, 0.2)
+  const padding = ctx.padding ?? FRONT_DEFAULT_PADDING
+  const projection = ctx.projection ?? 'orthographic'
+  const target: [number, number, number] = [0, height * 0.5, 0]
+  const orthoSize = Math.max(height, width / aspect) * padding
+  const radius =
+    projection === 'orthographic'
+      ? Math.max(depth * 0.5 + orthoSize * 0.5, depth + 0.4, 1)
+      : (() => {
+          const halfFov = Math.tan((FRONT_PERSPECTIVE_FOV * Math.PI) / 180 / 2)
+          const distH = (height * 0.5 * padding) / halfFov
+          const distW = (width * 0.5 * padding) / (halfFov * aspect)
+          return Math.max(distH, distW, depth * 0.5 + 0.4)
+        })()
+  const pose = cameraPoseAlongAxis(target, radius, 'z', 1)
+  const diagonal = Math.hypot(width, depth, height)
+  return {
+    view: {
+      type: projection,
+      position: pose.position,
+      target,
+      fov: projection === 'orthographic' ? Math.max(orthoSize, 0.2) : FRONT_PERSPECTIVE_FOV,
+      minDistance: 0.2,
+      maxDistance: Math.max(diagonal * 1.2, radius * 2, 8)
+    },
+    up: pose.up
+  }
+}
+
 export function resolveLookIntent(
   target: CameraLookTarget,
   ctx: LookContext,
@@ -107,6 +151,16 @@ export function resolveLookIntent(
       fit: target.fit ?? 'scene',
       currentTarget: ctx.currentTarget,
       currentRadius: ctx.currentRadius,
+      projection: options?.projection ?? 'orthographic'
+    })
+    return { action: 'apply', view, applyPose: true, up }
+  }
+
+  if (target.at === 'front') {
+    const { view, up } = createFrontDefaultView({
+      bounds: ctx.bounds,
+      aspect: ctx.aspect ?? 1,
+      padding: options?.padding ?? FRONT_DEFAULT_PADDING,
       projection: options?.projection ?? 'orthographic'
     })
     return { action: 'apply', view, applyPose: true, up }

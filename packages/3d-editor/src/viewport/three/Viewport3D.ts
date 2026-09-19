@@ -49,8 +49,8 @@ import { disposeObject3D } from './utils/dispose'
 import { bumpBuildToken, isBuildStale } from './utils/build-token'
 import { getAssetHandle } from '../../catalog/asset-handle'
 import { runProceduralResolvers } from '../../catalog/run-procedural-resolvers'
-import { resolveLookIntent } from './utils/look'
-import type { CameraLookOptions, CameraLookTarget } from './types'
+import { resolveLookIntent, createFrontDefaultView, createTopDefaultView } from './utils/look'
+import type { CameraLookOptions, CameraLookTarget, CaptureSnapshopOptions } from './types'
 import { cloneEnvironment } from '../../document/defaults'
 import {
   composePreviewTransform,
@@ -932,6 +932,7 @@ export class Viewport3D {
    */
   look(target: CameraLookTarget, options?: CameraLookOptions): void {
     const pose = this.runtime.getCameraPose()
+    const dom = this.runtime.domElement
     const intent = resolveLookIntent(
       target,
       {
@@ -940,7 +941,8 @@ export class Viewport3D {
         currentTarget: pose.target,
         currentRadius: pose.radius,
         currentProjection: this.runtime.getProjection(),
-        selectedId: this.doc.selection.get()[0]
+        selectedId: this.doc.selection.get()[0],
+        aspect: dom.clientWidth / Math.max(dom.clientHeight, 1)
       },
       options
     )
@@ -958,6 +960,109 @@ export class Viewport3D {
       env.defaultView = intent.view
       this.doc.commands.setEnvironment(env)
     }
+  }
+
+  /**
+   * 离屏静帧 PNG：临时相机 + RenderTarget，不改用户 Orbit / 主画布。
+   * 默认正面正交 512×768；hideHelpers 藏网格与 TransformControls。
+   */
+  async captureSnapshop(options?: CaptureSnapshopOptions): Promise<Blob> {
+    if (this.disposed) throw new Error('Viewport3D is disposed')
+
+    const width = Math.max(1, Math.floor(options?.width ?? 512))
+    const height = Math.max(1, Math.floor(options?.height ?? 768))
+    const aspect = width / height
+    const at = options?.at ?? 'front'
+    const projection = options?.projection
+    const padding = options?.padding
+    const hideHelpers = options?.hideHelpers !== false
+
+    const { view, up } = this.resolveCaptureView(at, aspect, projection, padding)
+    const camera = this.createCaptureCamera(view, aspect, up)
+
+    const grid = this.runtime.scene.getObjectByName('infinite-grid')
+    const gridWasVisible = grid?.visible
+    const transform = this.runtime.transform
+    const transformWasVisible = transform?.visible
+
+    if (hideHelpers) {
+      if (grid) grid.visible = false
+      if (transform) transform.visible = false
+    }
+
+    try {
+      const pixels = this.runtime.renderOffscreen(camera, width, height)
+      return await rgbaPixelsToPngBlob(pixels, width, height)
+    } finally {
+      if (hideHelpers) {
+        if (grid && gridWasVisible != null) grid.visible = gridWasVisible
+        if (transform && transformWasVisible != null) {
+          transform.visible = transformWasVisible
+        }
+      }
+    }
+  }
+
+  private resolveCaptureView(
+    at: 'front' | 'home' | 'top',
+    aspect: number,
+    projection?: CameraViewType,
+    padding?: number
+  ): { view: DefaultViewJSON; up?: [number, number, number] } {
+    if (at === 'front') {
+      return createFrontDefaultView({
+        bounds: this.doc.bounds,
+        aspect,
+        padding,
+        projection: projection ?? 'orthographic'
+      })
+    }
+    if (at === 'top') {
+      const pose = this.runtime.getCameraPose()
+      return createTopDefaultView({
+        bounds: this.doc.bounds,
+        fit: 'scene',
+        currentTarget: pose.target,
+        currentRadius: pose.radius,
+        projection: projection ?? 'orthographic'
+      })
+    }
+    const home = this.doc.environment.defaultView ?? this.fallbackDefaultView()
+    const view =
+      projection != null ? { ...home, type: projection } : { ...home }
+    return { view }
+  }
+
+  private createCaptureCamera(
+    view: DefaultViewJSON,
+    aspect: number,
+    up?: [number, number, number]
+  ): THREE.PerspectiveCamera | THREE.OrthographicCamera {
+    const near = 0.1
+    const far = 2000
+    const camUp = up ?? [0, 1, 0]
+    if (view.type === 'orthographic') {
+      const orthoSize = Math.max(view.fov ?? 1, 0.2)
+      const cam = new THREE.OrthographicCamera(
+        (-orthoSize * aspect) / 2,
+        (orthoSize * aspect) / 2,
+        orthoSize / 2,
+        -orthoSize / 2,
+        near,
+        far
+      )
+      cam.up.set(camUp[0], camUp[1], camUp[2])
+      cam.position.set(view.position[0], view.position[1], view.position[2])
+      cam.lookAt(view.target[0], view.target[1], view.target[2])
+      cam.updateProjectionMatrix()
+      return cam
+    }
+    const cam = new THREE.PerspectiveCamera(view.fov ?? 50, aspect, near, far)
+    cam.up.set(camUp[0], camUp[1], camUp[2])
+    cam.position.set(view.position[0], view.position[1], view.position[2])
+    cam.lookAt(view.target[0], view.target[1], view.target[2])
+    cam.updateProjectionMatrix()
+    return cam
   }
 
   private applyLookView(
@@ -1125,6 +1230,32 @@ export class Viewport3D {
 function shellEnvKey(env: EnvironmentJSON): string {
   return JSON.stringify({
     wall: env.wall
+  })
+}
+
+/** WebGL readPixels 原点左下；翻转后写入 canvas → PNG Blob */
+function rgbaPixelsToPngBlob(
+  pixels: Uint8Array,
+  width: number,
+  height: number
+): Promise<Blob> {
+  const canvas = document.createElement('canvas')
+  canvas.width = width
+  canvas.height = height
+  const ctx = canvas.getContext('2d')
+  if (!ctx) return Promise.reject(new Error('2d context unavailable'))
+  const imageData = ctx.createImageData(width, height)
+  const row = width * 4
+  for (let y = 0; y < height; y++) {
+    const src = (height - 1 - y) * row
+    imageData.data.set(pixels.subarray(src, src + row), y * row)
+  }
+  ctx.putImageData(imageData, 0, 0)
+  return new Promise((resolve, reject) => {
+    canvas.toBlob(blob => {
+      if (!blob) reject(new Error('PNG encode failed'))
+      else resolve(blob)
+    }, 'image/png')
   })
 }
 

@@ -186,12 +186,14 @@ Host 只调 `viewport3d.look(...)`，不要改 Three 相机或 Orbit。
 | `home` | 文档 `environment.defaultView`（复位） |
 | `pose` | 显式 `DefaultViewJSON` |
 | `top` | 正上方俯瞰，默认正交 + 框住场景 |
+| `front` | 正面（+Z），默认正交 + 框住 bounds |
 | `node` / `selection` | 框住节点 |
 | `indoor` | 室内预设；`persist: true` 才写回 `defaultView` |
 
 ```ts
 editor.viewport3d?.look({ at: 'home' })
 editor.viewport3d?.look({ at: 'top' })
+editor.viewport3d?.look({ at: 'front' })
 editor.viewport3d?.look({ at: 'node', path: cabinetId })
 editor.viewport3d?.look({ at: 'selection' }, { padding: 1.4 })
 editor.viewport3d?.look({ at: 'indoor', persist: false })
@@ -199,7 +201,20 @@ editor.viewport3d?.look({ at: 'indoor', persist: false })
 editor.viewport3d?.look({ at: 'home' }, { projection: 'orthographic', applyPose: false })
 ```
 
-`createIndoorDefaultView(bounds)` 仍可用于手搓 `DefaultViewJSON`。只读投影：`getProjection()`。
+`createIndoorDefaultView(bounds)` / `createFrontDefaultView(bounds, { aspect })` 仍可用于手搓 `DefaultViewJSON`。只读投影：`getProjection()`。
+
+### 离屏静帧 `captureSnapshop`
+
+固定分辨率 PNG，不改用户 Orbit / 主画布尺寸。默认正面正交 512×768。
+
+```ts
+const blob = await editor.viewport3d?.captureSnapshop({
+  at: 'front',
+  projection: 'orthographic',
+  width: 512,
+  height: 768
+})
+```
 
 ### 3D 交互 `onInteraction`
 

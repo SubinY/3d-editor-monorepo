@@ -27,6 +27,7 @@ export { runProceduralResolvers } from './catalog/run-procedural-resolvers'
 /** AI / 远程 procedural ESM；Host 也可走 createEditor.procedural */
 export { instantiateProceduralModule } from './viewport/three/services/procedural-module-loader'
 export { createIndoorDefaultView } from './viewport/three/utils/indoor-view'
+export { createFrontDefaultView } from './viewport/three/utils/look'
 
 export type {
   CreateEditorOptions,
@@ -83,7 +84,11 @@ export type {
 } from './viewport/canvas2d/types'
 export type { Viewport2D } from './viewport/canvas2d/Viewport2D'
 export type { Viewport3D, Viewport3DOptions } from './viewport/three/Viewport3D'
-export type { CameraLookTarget, CameraLookOptions } from './viewport/three/types'
+export type {
+  CameraLookTarget,
+  CameraLookOptions,
+  CaptureSnapshopOptions
+} from './viewport/three/types'
 export type { ProceduralCreateFn } from './viewport/three/services/procedural-module-loader'
 export type {
   InteractionEventType,

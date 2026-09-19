@@ -264,6 +264,37 @@ export class ThreeRuntime {
   }
 
   /**
+   * 离屏渲染到固定分辨率：不改主画布 size / Orbit。
+   * 返回 RGBA 像素（WebGL 原点左下；调用方负责 Y 翻转）。
+   */
+  renderOffscreen(
+    camera: THREE.Camera,
+    width: number,
+    height: number
+  ): Uint8Array {
+    const w = Math.max(1, Math.floor(width))
+    const h = Math.max(1, Math.floor(height))
+    const target = new THREE.WebGLRenderTarget(w, h, {
+      samples: 4
+    })
+    const prevTarget = this.renderer.getRenderTarget()
+    const prevXrEnabled = this.renderer.xr.enabled
+    this.renderer.xr.enabled = false
+    try {
+      this.renderer.setRenderTarget(target)
+      this.renderer.clear()
+      this.renderer.render(this.scene, camera)
+      const pixels = new Uint8Array(w * h * 4)
+      this.renderer.readRenderTargetPixels(target, 0, 0, w, h, pixels)
+      return pixels
+    } finally {
+      this.renderer.setRenderTarget(prevTarget)
+      this.renderer.xr.enabled = prevXrEnabled
+      target.dispose()
+    }
+  }
+
+  /**
    * 按 defaultView 写入相机。
    * applyPose=false：只改类型 / 投影 / 距离限制，保留当前 Orbit 位姿。
    */
