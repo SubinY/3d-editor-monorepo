@@ -18,7 +18,7 @@ export interface HitTestNodeOpts {
 
 /**
  * 收集包含鼠标点的全部节点，绘制顺序后置为上（数组尾 → 头）。
- * 命中盒与碰撞/绘制一致：三轴旋转后的轴对齐投影 AABB。
+ * 命中盒是平面投影方框，供 2D 点选；体积碰撞在 document/collision。
  */
 export function hitTestNodes(opts: HitTestNodeOpts): EditorNodeJSON[] {
   const { nodes, u, v, isElevation, planeFromPosition, itemFor } = opts

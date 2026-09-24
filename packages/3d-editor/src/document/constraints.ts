@@ -29,7 +29,7 @@ export interface ConstraintRule {
 }
 
 /**
- * 约束引擎（可选扩展点，MVP 主路径是内建 AABB 碰撞）。
+ * 约束引擎（可选扩展点，主路径是内建空间盒碰撞）。
  * Host 不注册任何规则时，place/transform 仅做碰撞检测。
  * 时机：交互强制；loadDocument 只产出警告不阻塞。
  */

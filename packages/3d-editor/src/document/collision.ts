@@ -1,25 +1,54 @@
 import type { CatalogItem, FootprintSpec } from '../catalog/types'
-import type { DocumentKind, EditorNodeJSON, TransformJSON } from './types'
+import type { EditorNodeJSON, TransformJSON } from './types'
 
 /**
- * MVP 碰撞：
- * - scene：俯视 XZ（footprint width×depth×height 经三轴旋转后投影）
- * - container：立面 XY（同上，投影到 XY）
- * 同层级节点间检测；墙体不参与。
+ * 碰撞：footprint 宽×深×高的空间盒，绕几何中心旋转（与 3D 枢轴一致）。
+ * position 是底面中心；中心在世界 Y 上抬半高。同层级节点间检测；墙体不参与。
+ * rotatedExtents 只给 2D 绘制 / 点选 / 边界投影，不参与碰撞结论。
  */
 
 export type CollisionPlane = 'xz' | 'xy'
 
-export interface AABB {
-  minU: number
-  maxU: number
-  minV: number
-  maxV: number
+const OVERLAP_TOLERANCE = 1e-4
+
+type Vec3 = [number, number, number]
+
+interface OBB {
+  center: Vec3
+  axes: [Vec3, Vec3, Vec3]
+  half: Vec3
+}
+
+interface WorldAabb {
+  min: Vec3
+  max: Vec3
+}
+
+function rotationMatrix(rotation: [number, number, number]) {
+  const [rx, ry, rz] = rotation
+  const cx = Math.cos(rx)
+  const sx = Math.sin(rx)
+  const cy = Math.cos(ry)
+  const sy = Math.sin(ry)
+  const cz = Math.cos(rz)
+  const sz = Math.sin(rz)
+  // R = Rz * Ry * Rx（Three.js 默认 Euler 'XYZ'）
+  return {
+    r00: cy * cz,
+    r01: sx * sy * cz - cx * sz,
+    r02: cx * sy * cz + sx * sz,
+    r10: cy * sz,
+    r11: sx * sy * sz + cx * cz,
+    r12: cx * sy * sz - sx * cz,
+    r20: -sy,
+    r21: sx * cy,
+    r22: cx * cy
+  }
 }
 
 /**
- * OBB → 平面 AABB 投影半径（SAT / 旋转矩阵行绝对值）。
- * Euler XYZ（与 Three.js Object3D.rotation 一致）。
+ * OBB → 平面 AABB 投影半径。
+ * 2D 绘制、点选、bounds 用；碰撞结论走 nodeOBB。
  */
 export function rotatedExtents(
   footprint: FootprintSpec,
@@ -29,24 +58,7 @@ export function rotatedExtents(
   const hw = footprint.width / 2
   const hh = (footprint.height ?? footprint.depth) / 2
   const hd = footprint.depth / 2
-  const [rx, ry, rz] = rotation
-  const cx = Math.cos(rx)
-  const sx = Math.sin(rx)
-  const cy = Math.cos(ry)
-  const sy = Math.sin(ry)
-  const cz = Math.cos(rz)
-  const sz = Math.sin(rz)
-
-  // R = Rz * Ry * Rx（Three.js 默认 Euler 'XYZ' 的矩阵元素）
-  const r00 = cy * cz
-  const r01 = sx * sy * cz - cx * sz
-  const r02 = cx * sy * cz + sx * sz
-  const r10 = cy * sz
-  const r11 = sx * sy * sz + cx * cz
-  const r12 = cx * sy * sz - sx * cz
-  const r20 = -sy
-  const r21 = sx * cy
-  const r22 = cx * cy
+  const { r00, r01, r02, r10, r11, r12, r20, r21, r22 } = rotationMatrix(rotation)
 
   if (plane === 'xy') {
     return {
@@ -60,35 +72,91 @@ export function rotatedExtents(
   }
 }
 
-export function planeForKind(kind: DocumentKind): CollisionPlane {
-  return kind === 'container' ? 'xy' : 'xz'
+function footprintHeight(footprint: FootprintSpec): number {
+  return footprint.height ?? footprint.depth ?? 1
 }
 
-export function nodeAABB(
-  transform: TransformJSON,
-  item: CatalogItem | undefined,
-  plane: CollisionPlane = 'xz'
-): AABB | undefined {
+/** 底面 position + 世界 Y 半高；半尺寸含 scale。旋转绕该中心，与 footprint 枢轴一致。 */
+function nodeOBB(transform: TransformJSON, item: CatalogItem | undefined): OBB | undefined {
   if (!item) return undefined
-  const { eu, ev } = rotatedExtents(item.footprint, transform.rotation, plane)
-  if (plane === 'xy') {
-    const sizeV = item.footprint.height ?? item.footprint.depth
-    const [x, y] = transform.position
-    // position.y 约定为元件底边高度；碰撞盒按立面中心抬高半高
-    const cy = y + sizeV / 2
-    return { minU: x - eu, maxU: x + eu, minV: cy - ev, maxV: cy + ev }
+  const height = footprintHeight(item.footprint)
+  const [sx, sy, sz] = transform.scale
+  const half: Vec3 = [
+    (item.footprint.width * Math.abs(sx)) / 2,
+    (height * Math.abs(sy)) / 2,
+    (item.footprint.depth * Math.abs(sz)) / 2
+  ]
+  const m = rotationMatrix(transform.rotation)
+  const [x, y, z] = transform.position
+  return {
+    center: [x, y + height / 2, z],
+    axes: [
+      [m.r00, m.r10, m.r20],
+      [m.r01, m.r11, m.r21],
+      [m.r02, m.r12, m.r22]
+    ],
+    half
   }
-  const [x, , z] = transform.position
-  return { minU: x - eu, maxU: x + eu, minV: z - ev, maxV: z + ev }
 }
 
-export function aabbOverlap(a: AABB, b: AABB, tolerance = 1e-4): boolean {
+function obbAabb(box: OBB): WorldAabb {
+  const e: Vec3 = [0, 0, 0]
+  for (let i = 0; i < 3; i++) {
+    e[0] += Math.abs(box.axes[i][0]) * box.half[i]
+    e[1] += Math.abs(box.axes[i][1]) * box.half[i]
+    e[2] += Math.abs(box.axes[i][2]) * box.half[i]
+  }
+  return {
+    min: [box.center[0] - e[0], box.center[1] - e[1], box.center[2] - e[2]],
+    max: [box.center[0] + e[0], box.center[1] + e[1], box.center[2] + e[2]]
+  }
+}
+
+function aabbOverlap3(a: WorldAabb, b: WorldAabb): boolean {
   return (
-    a.minU < b.maxU - tolerance &&
-    a.maxU > b.minU + tolerance &&
-    a.minV < b.maxV - tolerance &&
-    a.maxV > b.minV + tolerance
+    a.min[0] < b.max[0] - OVERLAP_TOLERANCE &&
+    a.max[0] > b.min[0] + OVERLAP_TOLERANCE &&
+    a.min[1] < b.max[1] - OVERLAP_TOLERANCE &&
+    a.max[1] > b.min[1] + OVERLAP_TOLERANCE &&
+    a.min[2] < b.max[2] - OVERLAP_TOLERANCE &&
+    a.max[2] > b.min[2] + OVERLAP_TOLERANCE
   )
+}
+
+function dot(a: Vec3, b: Vec3): number {
+  return a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
+}
+
+function cross(a: Vec3, b: Vec3): Vec3 {
+  return [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]]
+}
+
+function support(box: OBB, axis: Vec3): number {
+  return (
+    box.half[0] * Math.abs(dot(box.axes[0], axis)) +
+    box.half[1] * Math.abs(dot(box.axes[1], axis)) +
+    box.half[2] * Math.abs(dot(box.axes[2], axis))
+  )
+}
+
+/** 15 轴分离：有一条轴上的投影分开就不撞。 */
+function obbOverlap(a: OBB, b: OBB): boolean {
+  const delta: Vec3 = [b.center[0] - a.center[0], b.center[1] - a.center[1], b.center[2] - a.center[2]]
+  const axes: Vec3[] = [a.axes[0], a.axes[1], a.axes[2], b.axes[0], b.axes[1], b.axes[2]]
+  for (let i = 0; i < 3; i++) {
+    for (let j = 0; j < 3; j++) {
+      const c = cross(a.axes[i], b.axes[j])
+      const len2 = dot(c, c)
+      if (len2 < 1e-10) continue
+      const inv = 1 / Math.sqrt(len2)
+      axes.push([c[0] * inv, c[1] * inv, c[2] * inv])
+    }
+  }
+  for (const axis of axes) {
+    const dist = Math.abs(dot(delta, axis))
+    if (dist >= support(a, axis) + support(b, axis) - OVERLAP_TOLERANCE) return false
+  }
+  return true
 }
 
 export interface CollisionHit {
@@ -101,16 +169,17 @@ export function findCollision(
   transform: TransformJSON,
   item: CatalogItem | undefined,
   excludeId: string | undefined,
-  resolveItem: (node: EditorNodeJSON) => CatalogItem | undefined,
-  plane: CollisionPlane = 'xz'
+  resolveItem: (node: EditorNodeJSON) => CatalogItem | undefined
 ): CollisionHit | undefined {
-  const box = nodeAABB(transform, item, plane)
+  const box = nodeOBB(transform, item)
   if (!box) return undefined
+  const loose = obbAabb(box)
   for (const other of siblings) {
     if (other.id === excludeId) continue
-    const otherBox = nodeAABB(other.transform, resolveItem(other), plane)
+    const otherBox = nodeOBB(other.transform, resolveItem(other))
     if (!otherBox) continue
-    if (aabbOverlap(box, otherBox)) {
+    if (!aabbOverlap3(loose, obbAabb(otherBox))) continue
+    if (obbOverlap(box, otherBox)) {
       return { nodeId: other.id, nodeName: other.name }
     }
   }

@@ -161,7 +161,7 @@ describe('约束引擎', () => {
   })
 })
 
-describe('AABB 碰撞（MVP 内建）', () => {
+describe('空间盒碰撞', () => {
   it('放置重叠位置被拒绝，错开后允许', () => {
     const doc = createSceneDoc()
     doc.commands.placeItem(cabinetItem, { position: [0, 0, 0] })
@@ -189,6 +189,30 @@ describe('AABB 碰撞（MVP 内建）', () => {
     doc.commands.placeItem(cabinetItem, { position: [0, 0, 0] })
     const overlap = doc.commands.placeItem(cabinetItem, { position: [0.1, 0, 0] })
     expect(overlap.node).toBeDefined()
+  })
+
+  it('同地面投影、高度错开时允许叠放', () => {
+    const doc = createSceneDoc()
+    doc.commands.placeItem(cabinetItem, { position: [0, 0, 0] })
+    const stacked = doc.commands.placeItem(cabinetItem, { position: [0.3, 2, 0] })
+    expect(stacked.node).toBeDefined()
+    const sunk = doc.commands.placeItem(cabinetItem, { position: [0.3, 1, 0] })
+    expect(sunk.denied).toContain('collision')
+  })
+
+  it('绕 Y 转后沿窄边错开时允许，即使地面投影方框仍重叠', () => {
+    const doc = createSceneDoc()
+    const yaw = Math.PI / 4
+    doc.commands.placeItem(cabinetItem, {
+      position: [0, 0, 0],
+      rotation: [0, yaw, 0]
+    })
+    const offset = 0.85 * Math.SQRT1_2
+    const apart = doc.commands.placeItem(cabinetItem, {
+      position: [offset, 0, -offset],
+      rotation: [0, yaw, 0]
+    })
+    expect(apart.node).toBeDefined()
   })
 
   it('container 立面碰撞用宽×高（XY）', () => {

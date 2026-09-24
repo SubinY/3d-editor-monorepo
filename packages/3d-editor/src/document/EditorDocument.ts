@@ -269,8 +269,7 @@ export class EditorDocument {
       transform,
       item,
       options?.excludeId,
-      node => this.getCachedItem(node),
-      this.kind === 'container' ? 'xy' : 'xz'
+      node => this.getCachedItem(node)
     )
   }
 
