@@ -265,7 +265,7 @@ export class ThreeRuntime {
 
   /**
    * 离屏渲染到固定分辨率：不改主画布 size / Orbit。
-   * 返回 RGBA 像素（WebGL 原点左下；调用方负责 Y 翻转）。
+   * 返回线性 RGBA（Three r160 非 XR RenderTarget 不做 sRGB；调用方负责编码与 Y 翻转）。
    */
   renderOffscreen(
     camera: THREE.Camera,

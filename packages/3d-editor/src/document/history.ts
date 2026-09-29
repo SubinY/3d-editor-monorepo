@@ -111,7 +111,6 @@ export class DocumentHistory {
   }
 
   isDirty(): boolean {
-    console.log('isDirty', this.cleanValid, this.cursor, this.cleanCursor)
     if (!this.cleanValid) return true
     return this.cursor !== this.cleanCursor
   }

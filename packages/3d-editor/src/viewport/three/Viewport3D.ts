@@ -1233,7 +1233,17 @@ function shellEnvKey(env: EnvironmentJSON): string {
   })
 }
 
-/** WebGL readPixels 原点左下；翻转后写入 canvas → PNG Blob */
+/**
+ * Three r160 画到非 XR RenderTarget 时强制 LinearSRGB，主画布才做 sRGB。
+ * 读回的是线性字节，按 sRGB 写入 PNG 会把橙色压成暗红。
+ */
+function linearByteToSrgb(byte: number): number {
+  const c = byte / 255
+  const encoded = c <= 0.0031308 ? c * 12.92 : 1.055 * Math.pow(c, 1 / 2.4) - 0.055
+  return Math.min(255, Math.max(0, Math.round(encoded * 255)))
+}
+
+/** WebGL readPixels 原点左下；线性 → sRGB 后翻转写入 canvas → PNG Blob */
 function rgbaPixelsToPngBlob(
   pixels: Uint8Array,
   width: number,
@@ -1246,9 +1256,16 @@ function rgbaPixelsToPngBlob(
   if (!ctx) return Promise.reject(new Error('2d context unavailable'))
   const imageData = ctx.createImageData(width, height)
   const row = width * 4
+  const dst = imageData.data
   for (let y = 0; y < height; y++) {
     const src = (height - 1 - y) * row
-    imageData.data.set(pixels.subarray(src, src + row), y * row)
+    const dest = y * row
+    for (let x = 0; x < row; x += 4) {
+      dst[dest + x] = linearByteToSrgb(pixels[src + x] ?? 0)
+      dst[dest + x + 1] = linearByteToSrgb(pixels[src + x + 1] ?? 0)
+      dst[dest + x + 2] = linearByteToSrgb(pixels[src + x + 2] ?? 0)
+      dst[dest + x + 3] = pixels[src + x + 3] ?? 255
+    }
   }
   ctx.putImageData(imageData, 0, 0)
   return new Promise((resolve, reject) => {
