@@ -1,7 +1,7 @@
 import type { CatalogItem, CatalogProvider, FootprintSpec } from '../catalog/types'
 import { catalogKey } from '../catalog/types'
 import { createId } from '../utils/id'
-import { findCollision, type CollisionHit } from './collision'
+import { findCollision, type CollisionHit, type MeshBounds } from './collision'
 import { ConstraintEngine, type ConstraintResult } from './constraints'
 import {
   DocumentEmitter,
@@ -45,6 +45,10 @@ function readFootprintOverride(
   }
   if (height != null && (!Number.isFinite(height) || height <= 0)) return undefined
   return { width, depth, height }
+}
+
+function footprintKey(fp: FootprintSpec): string {
+  return `${fp.width}|${fp.depth}|${fp.height ?? ''}`
 }
 
 function cloneFootprint(fp: FootprintSpec): FootprintSpec {
@@ -149,6 +153,8 @@ export class EditorDocument {
   private walls: WallJSON[] = []
   private workspaces: WorkspaceJSON[] = []
   private nodeIndex = new Map<string, EditorNodeJSON>()
+  /** 可见网格盒，按测量时的 footprint 尺寸配对；尺寸变了就先退回整盒。 */
+  private nodeMeshBounds = new Map<string, { bounds: MeshBounds; key: string }>()
   private emitter = new DocumentEmitter()
   private itemCache = new Map<string, CatalogItem>()
   private catalog?: CatalogProvider
@@ -269,8 +275,29 @@ export class EditorDocument {
       transform,
       item,
       options?.excludeId,
-      node => this.getCachedItem(node)
+      node => this.getCachedItem(node),
+      id => {
+        if (id === options?.excludeId) return this.meshBoundsFor(id, item)
+        const node = this.nodeIndex.get(id)
+        return this.meshBoundsFor(id, node ? this.getCachedItem(node) : undefined)
+      }
     )
+  }
+
+  /** 视口建完网格后写入。bounds 是节点根局部、未变换时的可见 AABB。 */
+  setNodeMeshBounds(id: string, bounds: MeshBounds, footprint: FootprintSpec): void {
+    this.nodeMeshBounds.set(id, { bounds, key: footprintKey(footprint) })
+  }
+
+  clearNodeMeshBounds(id: string): void {
+    this.nodeMeshBounds.delete(id)
+  }
+
+  private meshBoundsFor(id: string, item: CatalogItem | undefined): MeshBounds | undefined {
+    const rec = this.nodeMeshBounds.get(id)
+    if (!rec || !item) return undefined
+    if (rec.key !== footprintKey(item.footprint)) return undefined
+    return rec.bounds
   }
 
   private indexNode(node: EditorNodeJSON): void {
@@ -279,6 +306,7 @@ export class EditorDocument {
 
   private unindexNode(node: EditorNodeJSON): void {
     this.nodeIndex.delete(node.id)
+    this.nodeMeshBounds.delete(node.id)
   }
 
   private insertNodeInternal(node: EditorNodeJSON, source?: string): void {

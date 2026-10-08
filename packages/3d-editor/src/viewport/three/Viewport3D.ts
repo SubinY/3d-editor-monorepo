@@ -534,6 +534,7 @@ export class Viewport3D {
     }
     const item = this.doc.getCachedItem(node)
     mountFootprintPivot(THREE, root, content, footprintHeightMeters(item))
+    this.captureNodeMeshBounds(node.id, root, item)
     this.applyTransformToObject(root, node.transform)
     root.visible = node.visible !== false
 
@@ -817,6 +818,7 @@ export class Viewport3D {
     this.runtime.scene.remove(root)
     this.nodeRoots.delete(id)
     this.lastAppliedProps.delete(id)
+    this.doc.clearNodeMeshBounds(id)
     const pickIdx = this.pickables.indexOf(root)
     if (pickIdx >= 0) this.pickables.splice(pickIdx, 1)
     Array.from(this.pathObjects.keys())
@@ -870,6 +872,32 @@ export class Viewport3D {
 
   private applyTransformToObject(object: THREE.Object3D, transform: TransformJSON): void {
     applyTransformWithPivot(object, transform)
+  }
+
+  /** 根仍在原点时量可见网格，供碰撞贴合外壳而不是 footprint 空档。 */
+  private captureNodeMeshBounds(
+    id: string,
+    root: THREE.Object3D,
+    item: { footprint: { width: number; depth: number; height?: number } } | undefined
+  ): void {
+    if (!item) {
+      this.doc.clearNodeMeshBounds(id)
+      return
+    }
+    root.updateMatrixWorld(true)
+    const box = new THREE.Box3().setFromObject(root)
+    if (box.isEmpty()) {
+      this.doc.clearNodeMeshBounds(id)
+      return
+    }
+    this.doc.setNodeMeshBounds(
+      id,
+      {
+        min: [box.min.x, box.min.y, box.min.z],
+        max: [box.max.x, box.max.y, box.max.z]
+      },
+      item.footprint
+    )
   }
 
   /**

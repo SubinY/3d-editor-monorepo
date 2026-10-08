@@ -2,8 +2,9 @@ import type { CatalogItem, FootprintSpec } from '../catalog/types'
 import type { EditorNodeJSON, TransformJSON } from './types'
 
 /**
- * 碰撞：footprint 宽×深×高的空间盒，绕几何中心旋转（与 3D 枢轴一致）。
- * position 是底面中心；中心在世界 Y 上抬半高。同层级节点间检测；墙体不参与。
+ * 碰撞：优先用视口量到的可见网格盒（根局部、未变换），否则退回 footprint 整盒。
+ * 旋转和缩放都绕 footprint 几何中心（与 3D 枢轴一致）。
+ * position 是底面中心。同层级节点间检测；墙体不参与。
  * rotatedExtents 只给 2D 绘制 / 点选 / 边界投影，不参与碰撞结论。
  */
 
@@ -20,6 +21,12 @@ interface OBB {
 }
 
 interface WorldAabb {
+  min: Vec3
+  max: Vec3
+}
+
+/** 节点根局部、未做节点旋转/缩放时的可见网格 AABB。 */
+export interface MeshBounds {
   min: Vec3
   max: Vec3
 }
@@ -76,20 +83,52 @@ function footprintHeight(footprint: FootprintSpec): number {
   return footprint.height ?? footprint.depth ?? 1
 }
 
-/** 底面 position + 世界 Y 半高；半尺寸含 scale。旋转绕该中心，与 footprint 枢轴一致。 */
-function nodeOBB(transform: TransformJSON, item: CatalogItem | undefined): OBB | undefined {
+/**
+ * 底面 position + 枢轴（footprint 半高）。
+ * 有可见网格盒时半尺寸和中心取该盒；否则用 footprint 整盒。缩放绕枢轴。
+ */
+function nodeOBB(
+  transform: TransformJSON,
+  item: CatalogItem | undefined,
+  mesh?: MeshBounds
+): OBB | undefined {
   if (!item) return undefined
   const height = footprintHeight(item.footprint)
   const [sx, sy, sz] = transform.scale
-  const half: Vec3 = [
-    (item.footprint.width * Math.abs(sx)) / 2,
-    (height * Math.abs(sy)) / 2,
-    (item.footprint.depth * Math.abs(sz)) / 2
-  ]
+  const pivotY = height / 2
+  let half: Vec3
+  let local: Vec3
+  if (
+    mesh &&
+    mesh.max[0] > mesh.min[0] &&
+    mesh.max[1] > mesh.min[1] &&
+    mesh.max[2] > mesh.min[2]
+  ) {
+    const cx = (mesh.min[0] + mesh.max[0]) / 2
+    const cy = (mesh.min[1] + mesh.max[1]) / 2
+    const cz = (mesh.min[2] + mesh.max[2]) / 2
+    half = [
+      ((mesh.max[0] - mesh.min[0]) * Math.abs(sx)) / 2,
+      ((mesh.max[1] - mesh.min[1]) * Math.abs(sy)) / 2,
+      ((mesh.max[2] - mesh.min[2]) * Math.abs(sz)) / 2
+    ]
+    local = [cx * sx, (cy - pivotY) * sy, cz * sz]
+  } else {
+    half = [
+      (item.footprint.width * Math.abs(sx)) / 2,
+      (height * Math.abs(sy)) / 2,
+      (item.footprint.depth * Math.abs(sz)) / 2
+    ]
+    local = [0, 0, 0]
+  }
   const m = rotationMatrix(transform.rotation)
   const [x, y, z] = transform.position
   return {
-    center: [x, y + height / 2, z],
+    center: [
+      x + m.r00 * local[0] + m.r01 * local[1] + m.r02 * local[2],
+      y + pivotY + m.r10 * local[0] + m.r11 * local[1] + m.r12 * local[2],
+      z + m.r20 * local[0] + m.r21 * local[1] + m.r22 * local[2]
+    ],
     axes: [
       [m.r00, m.r10, m.r20],
       [m.r01, m.r11, m.r21],
@@ -169,14 +208,15 @@ export function findCollision(
   transform: TransformJSON,
   item: CatalogItem | undefined,
   excludeId: string | undefined,
-  resolveItem: (node: EditorNodeJSON) => CatalogItem | undefined
+  resolveItem: (node: EditorNodeJSON) => CatalogItem | undefined,
+  resolveMesh?: (nodeId: string) => MeshBounds | undefined
 ): CollisionHit | undefined {
-  const box = nodeOBB(transform, item)
+  const box = nodeOBB(transform, item, excludeId ? resolveMesh?.(excludeId) : undefined)
   if (!box) return undefined
   const loose = obbAabb(box)
   for (const other of siblings) {
     if (other.id === excludeId) continue
-    const otherBox = nodeOBB(other.transform, resolveItem(other))
+    const otherBox = nodeOBB(other.transform, resolveItem(other), resolveMesh?.(other.id))
     if (!otherBox) continue
     if (!aabbOverlap3(loose, obbAabb(otherBox))) continue
     if (obbOverlap(box, otherBox)) {
