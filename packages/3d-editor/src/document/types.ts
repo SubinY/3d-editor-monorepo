@@ -53,7 +53,10 @@ export interface TransformJSON {
    * - container 2D：主要改 x/y（立面：宽×高；y=物件底边离地高度）
    */
   position: [number, number, number]
-  /** euler (rad) */
+  /**
+   * 弧度。正值为顺时针，绕固定世界轴，顺序先 X、再 Y、再 Z。
+   * 不兼容旧的右手 XYZ 存盘。交给 Three 时在枢轴上取负（order ZYX）。
+   */
   rotation: [number, number, number]
   scale: [number, number, number]
 }

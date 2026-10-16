@@ -31,7 +31,11 @@ export interface MeshBounds {
   max: Vec3
 }
 
-function rotationMatrix(rotation: [number, number, number]) {
+/**
+ * 存盘角：顺时针世界轴，先 X、再 Y、再 Z。
+ * 等价于右手角取负后 R = Rz·Ry·Rx。
+ */
+export function rotationMatrix(rotation: [number, number, number]) {
   const [rx, ry, rz] = rotation
   const cx = Math.cos(rx)
   const sx = Math.sin(rx)
@@ -39,16 +43,15 @@ function rotationMatrix(rotation: [number, number, number]) {
   const sy = Math.sin(ry)
   const cz = Math.cos(rz)
   const sz = Math.sin(rz)
-  // R = Rz * Ry * Rx（Three.js 默认 Euler 'XYZ'）
   return {
     r00: cy * cz,
-    r01: sx * sy * cz - cx * sz,
-    r02: cx * sy * cz + sx * sz,
-    r10: cy * sz,
-    r11: sx * sy * sz + cx * cz,
-    r12: cx * sy * sz - sx * cz,
-    r20: -sy,
-    r21: sx * cy,
+    r01: sx * sy * cz + cx * sz,
+    r02: -cx * sy * cz + sx * sz,
+    r10: -cy * sz,
+    r11: -sx * sy * sz + cx * cz,
+    r12: cx * sy * sz + sx * cz,
+    r20: sy,
+    r21: -sx * cy,
     r22: cx * cy
   }
 }

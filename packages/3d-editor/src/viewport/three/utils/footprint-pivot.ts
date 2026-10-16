@@ -3,6 +3,23 @@ import type { Object3D } from 'three'
 import type { CatalogItem } from '../../../catalog/types'
 import type { TransformJSON } from '../../../document/types'
 
+/**
+ * 存盘旋转是顺时针世界轴。Three 为右手系：order ZYX 且三轴取负，
+ * 等价于先绕世界 X、再世界 Y、再世界 Z 的顺时针转。
+ */
+export function applyDocumentRotation(
+  object: Object3D,
+  rotation: TransformJSON['rotation']
+): void {
+  object.rotation.order = 'ZYX'
+  object.rotation.set(-rotation[0], -rotation[1], -rotation[2])
+}
+
+/** 从已施加的 Three 欧拉读回存盘角（ZYX 取负的逆） */
+export function readDocumentRotation(object: Object3D): TransformJSON['rotation'] {
+  return [-object.rotation.x, -object.rotation.y, -object.rotation.z]
+}
+
 export const FOOTPRINT_PIVOT_NAME = '__footprintPivot'
 
 export function footprintHeightMeters(item?: CatalogItem): number {
@@ -49,7 +66,7 @@ export function applyTransformWithPivot(root: Object3D, transform: TransformJSON
   const pivot = getFootprintPivot(root)
   if (!pivot) {
     root.position.fromArray(transform.position)
-    root.rotation.set(transform.rotation[0], transform.rotation[1], transform.rotation[2])
+    applyDocumentRotation(root, transform.rotation)
     root.scale.fromArray(transform.scale)
     return
   }
@@ -58,7 +75,7 @@ export function applyTransformWithPivot(root: Object3D, transform: TransformJSON
   root.rotation.set(0, 0, 0)
   root.scale.set(1, 1, 1)
   pivot.position.set(0, pivotY, 0)
-  pivot.rotation.set(transform.rotation[0], transform.rotation[1], transform.rotation[2])
+  applyDocumentRotation(pivot, transform.rotation)
   pivot.scale.fromArray(transform.scale)
 }
 
@@ -72,13 +89,13 @@ export function readTransformFromPivot(root: Object3D): {
   if (!pivot) {
     return {
       position: root.position.toArray() as [number, number, number],
-      rotation: [root.rotation.x, root.rotation.y, root.rotation.z],
+      rotation: readDocumentRotation(root),
       scale: root.scale.toArray() as [number, number, number]
     }
   }
   return {
     position: root.position.toArray() as [number, number, number],
-    rotation: [pivot.rotation.x, pivot.rotation.y, pivot.rotation.z],
+    rotation: readDocumentRotation(pivot),
     scale: pivot.scale.toArray() as [number, number, number]
   }
 }

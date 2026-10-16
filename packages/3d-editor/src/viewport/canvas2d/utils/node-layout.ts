@@ -19,16 +19,15 @@ export function planeHandleAngle(du: number, dv: number): number {
 }
 
 /**
- * document yaw → 2D 平面显示角。
- * 立面 / 俯视均取反：canvas 的 ctx.rotate 与 Three 右手系在「面朝相机」时方向相反，
- * 取反后 2D 所见与 3D 一致（避免 2D 右转、3D 左转）。
+ * document yaw（顺时针世界角分量）→ 2D 平面显示角。
+ * yaw 已与 canvas `ctx.rotate` 同向（顺时针），不再取反。
  */
 export function yawToDisplayAngle(yaw: number, _isElevation?: boolean): number {
-  return -yaw
+  return yaw
 }
 
 export function displayAngleToYaw(displayAngle: number, _isElevation?: boolean): number {
-  return -displayAngle
+  return displayAngle
 }
 
 export function computeNodeLayout(opts: {

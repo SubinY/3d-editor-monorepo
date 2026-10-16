@@ -455,7 +455,6 @@ function drawNodes(p: Paint2DContext): void {
     const pad = selected ? 3 : 0
     ctx.strokeRect(-w / 2 - pad, -d / 2 - pad, w + pad * 2, d + pad * 2)
     ctx.setLineDash([])
-    // 朝向短划：用平面 yaw 指示（AABB 本身轴对齐）
     const yaw = isElevation ? rotation[2] : rotation[1]
     const tip = yawToDisplayAngle(yaw, isElevation)
     const tipLen = Math.min(10, d / 4)

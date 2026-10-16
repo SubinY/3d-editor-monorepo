@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import * as THREE from 'three'
 import {
+  applyDocumentRotation,
   applyTransformWithPivot,
   bakePivotTranslation,
   getFootprintPivot,
@@ -49,5 +50,31 @@ describe('footprint-pivot', () => {
     expect(next.position).toEqual([1, 0.1, -2])
     expect(next.rotation[2]).toBeCloseTo(0.5)
     expect(root.rotation.z).toBeCloseTo(0)
+  })
+
+  it('写入存盘角后读回不变，Three 上是 ZYX 取负', () => {
+    const root = new THREE.Group()
+    mountFootprintPivot(THREE, root, new THREE.Group(), 1)
+    const stored: [number, number, number] = [0, 0, Math.PI / 2]
+    applyTransformWithPivot(root, {
+      position: [0, 0, 0],
+      rotation: stored,
+      scale: [1, 1, 1]
+    })
+    const pivot = getFootprintPivot(root)!
+    expect(pivot.rotation.order).toBe('ZYX')
+    expect(pivot.rotation.z).toBeCloseTo(-Math.PI / 2)
+    expect(readTransformFromPivot(root).rotation[2]).toBeCloseTo(Math.PI / 2)
+
+    const applied = new THREE.Object3D()
+    applyDocumentRotation(applied, [Math.PI / 2, Math.PI / 2, 0])
+    const expected = new THREE.Object3D()
+    expected.rotateOnWorldAxis(new THREE.Vector3(1, 0, 0), -Math.PI / 2)
+    expected.rotateOnWorldAxis(new THREE.Vector3(0, 1, 0), -Math.PI / 2)
+    applied.updateMatrix()
+    expected.updateMatrix()
+    for (let i = 0; i < 16; i++) {
+      expect(applied.matrix.elements[i]).toBeCloseTo(expected.matrix.elements[i], 5)
+    }
   })
 })

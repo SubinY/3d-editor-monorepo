@@ -6,6 +6,7 @@ import { TransformControls } from 'three/examples/jsm/controls/TransformControls
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
 import { clone as cloneGltfGraph } from 'three/examples/jsm/utils/SkeletonUtils.js'
 import { DEFAULT_TRANSLATION_SNAP } from '../../../core/interaction'
+import { applyDocumentRotation, readDocumentRotation } from '../utils/footprint-pivot'
 import {
   cameraPoseAlongAxis,
   WorldViewGizmo,
@@ -64,6 +65,8 @@ export class ThreeRuntime {
   private container: HTMLElement
   private loopId: number | null = null
   private transformBefore?: TransformSnapshot
+  /** 旋转环拖拽起点：存盘顺时针世界角。只改被拖的那一轴 */
+  private rotateDragStart?: [number, number, number]
   private transformEndHandlers = new Set<TransformEndHandler>()
   private cameraPoseHandlers = new Set<CameraPoseHandler>()
   private frameHandlers = new Set<FrameHandler>()
@@ -600,7 +603,14 @@ export class ThreeRuntime {
     this.orbit.enabled = !isDragging
     const object = this.transform?.object as THREE.Object3D | undefined
     if (isDragging) {
-      if (object) this.transformBefore = this.captureTransform(object)
+      if (object) {
+        this.transformBefore = this.captureTransform(object)
+        if (this.getTransformMode() === 'rotate') {
+          this.rotateDragStart = readDocumentRotation(object)
+        } else {
+          this.rotateDragStart = undefined
+        }
+      }
       return
     }
     if (object && this.transformBefore) {
@@ -609,12 +619,40 @@ export class ThreeRuntime {
       this.transformEndHandlers.forEach(handler => handler(payload))
     }
     this.transformBefore = undefined
+    this.rotateDragStart = undefined
     // 松手后再刷一次，覆盖仅改 visible/同步路径漏标的情况
     this.markShadowNeedsUpdate()
   }
 
   private handleTransformObjectChange = (): void => {
+    this.applyClockwiseWorldAxisRotate()
     this.markShadowNeedsUpdate()
+  }
+
+  /**
+   * X/Y/Z 环：只改对应存盘分量（顺时针为正），再上屏。
+   * TransformControls.rotationAngle 为右手，取负后加到存盘角。
+   */
+  private applyClockwiseWorldAxisRotate(): void {
+    const controls = this.transform
+    const object = controls?.object as THREE.Object3D | undefined
+    const start = this.rotateDragStart
+    if (!controls || !object || !start || this.getTransformMode() !== 'rotate') return
+
+    const gizmo = controls as TransformControls & {
+      axis: string | null
+      rotationAngle: number
+    }
+    const axis = gizmo.axis
+    if (axis !== 'X' && axis !== 'Y' && axis !== 'Z') return
+
+    const stored: [number, number, number] = [start[0], start[1], start[2]]
+    const delta = -gizmo.rotationAngle
+    if (axis === 'X') stored[0] += delta
+    else if (axis === 'Y') stored[1] += delta
+    else stored[2] += delta
+
+    applyDocumentRotation(object, stored)
   }
 
   private handleGizmoPointerDown = (event: PointerEvent): void => {

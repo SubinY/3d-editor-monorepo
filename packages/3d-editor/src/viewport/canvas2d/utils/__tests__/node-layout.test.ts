@@ -17,23 +17,21 @@ describe('planeHandleAngle / yaw display mapping', () => {
     expect(right - start).toBeGreaterThan(0)
   })
 
-  it('elevation and scene both negate yaw so 2D matches Three appearance', () => {
-    expect(yawToDisplayAngle(0.5, true)).toBeCloseTo(-0.5)
-    expect(yawToDisplayAngle(0.5, false)).toBeCloseTo(-0.5)
-    expect(displayAngleToYaw(-0.5, true)).toBeCloseTo(0.5)
+  it('yaw 已是顺时针世界角，与显示角同号', () => {
+    expect(yawToDisplayAngle(0.5, true)).toBeCloseTo(0.5)
+    expect(yawToDisplayAngle(0.5, false)).toBeCloseTo(0.5)
+    expect(displayAngleToYaw(0.5, true)).toBeCloseTo(0.5)
   })
 
-  it('elevation: right drag increases display φ and maps to decreasing document yaw (Three CCW visual)', () => {
+  it('elevation: 右拖增加显示角，文档 yaw 同步增加（顺时针）', () => {
     const baseYaw = 0
     const start = planeHandleAngle(0, 1)
     const pointer = planeHandleAngle(0.3, 1)
     const nextDisplay =
       yawToDisplayAngle(baseYaw, true) + (pointer - start)
     const nextYaw = displayAngleToYaw(nextDisplay, true)
-    // display φ↑ when mouse right; document yaw = -display ⇒ yaw↓
     expect(nextDisplay).toBeGreaterThan(0)
-    expect(nextYaw).toBeLessThan(0)
-    // 2D draws ctx.rotate(-yaw); yaw<0 ⇒ rotate positive on canvas y-down ⇒ CW = mouse right
+    expect(nextYaw).toBeGreaterThan(0)
     expect(yawToDisplayAngle(nextYaw, true)).toBeCloseTo(nextDisplay)
   })
 

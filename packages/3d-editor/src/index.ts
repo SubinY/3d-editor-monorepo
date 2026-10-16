@@ -1,11 +1,12 @@
-// @mh/3d-editor ?? ???????
-// ?????createEditor?EditorDocumentJSON ? Host ???
+// @mh/3d-editor —— 对外公共包入口
+// 运行时用：createEditor；EditorDocumentJSON 由 Host 落库。
 
 export { createEditor } from './core/create-editor'
 export { createMemoryCatalog } from './catalog/MemoryCatalog'
 export { buildPublishBundle, createPackCatalog } from './catalog/publish'
 export { CATALOG_ITEM_MIME } from './viewport/canvas2d/types'
 export { SCHEMA_VERSION } from './document/types'
+export { applyDocumentRotation } from './viewport/three/utils/footprint-pivot'
 export {
   createDefaultEnvironment,
   createDefaultFloor,
