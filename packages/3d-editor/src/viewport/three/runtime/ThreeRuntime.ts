@@ -79,6 +79,13 @@ export class ThreeRuntime {
   private viewGizmo = new WorldViewGizmo()
   /** 与 TransformControls 同开关：readonly 预览不画、不拦指针 */
   private readonly viewGizmoEnabled: boolean
+  /**
+   * 只读预览：关抗锯齿和软阴影，像素比锁 1。
+   * 没有取景回调、脉冲、轨道拖拽或显式重绘请求时停掉渲染循环。
+   */
+  private readonly previewQuality: boolean
+  private renderRequested = true
+  private orbitInteracting = false
   private perfStats: PerfStatsOverlay
   private gizmoPointer: {
     pointerId: number
@@ -109,16 +116,19 @@ export class ThreeRuntime {
     // logarithmicDepthBuffer：创建时一次性选定，运行时不可改。
     // 关：电房尺度够用，自定义 ShaderMaterial 不必依赖 log 深度编码。
     // 若以后 far/near 比值很大且远处 z-fight，可再打开；打开后自定义 shader 需 `#include <logdepthbuf_*>`。
+    this.previewQuality = options.enableTransform === false
     this.renderer = new THREE.WebGLRenderer({
-      antialias: true,
+      antialias: true, // !this.previewQuality,
       alpha: true,
       logarithmicDepthBuffer: false
     })
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
+    this.renderer.setPixelRatio(
+      this.previewQuality ? 1 : Math.min(window.devicePixelRatio, 2)
+    )
     this.renderer.setSize(options.container.clientWidth, options.container.clientHeight)
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping
     this.renderer.toneMappingExposure = 1.05
-    this.renderer.shadowMap.enabled = true
+    this.renderer.shadowMap.enabled = !this.previewQuality
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap
     // 静态场景不每帧重渲阴影；结构变化时由 Viewport3D 置 needsUpdate
     this.renderer.shadowMap.autoUpdate = false
@@ -128,6 +138,10 @@ export class ThreeRuntime {
     this.orbit = new OrbitControls(this._camera, this.renderer.domElement)
     this.orbit.enableDamping = false
     this.orbit.addEventListener('change', this.handleOrbitChange)
+    if (this.previewQuality) {
+      this.orbit.addEventListener('start', this.handleOrbitGestureStart)
+      this.orbit.addEventListener('end', this.handleOrbitGestureEnd)
+    }
 
     if (options.enableTransform !== false) {
       this.transform = new TransformControls(this._camera, this.renderer.domElement)
@@ -158,6 +172,7 @@ export class ThreeRuntime {
 
   setPerfStatsVisible(visible: boolean): void {
     this.perfStats.setVisible(visible)
+    if (visible) this.requestRender()
   }
 
   isPerfStatsVisible(): boolean {
@@ -218,7 +233,14 @@ export class ThreeRuntime {
   /** 每帧渲染前回调（视觉脉冲等）；返回取消订阅 */
   onFrame(handler: FrameHandler): () => void {
     this.frameHandlers.add(handler)
+    this.kickLoop()
     return () => this.frameHandlers.delete(handler)
+  }
+
+  /** 场景或悬停变化后请求一帧。编辑模式循环不停，这次调用只打标 */
+  requestRender(): void {
+    this.renderRequested = true
+    this.kickLoop()
   }
 
   attachTransform(object: THREE.Object3D | null): void {
@@ -264,6 +286,7 @@ export class ThreeRuntime {
   /** 场景结构变化后请求下一帧重渲阴影贴图（配合 autoUpdate=false） */
   markShadowNeedsUpdate(): void {
     this.renderer.shadowMap.needsUpdate = true
+    this.requestRender()
   }
 
   /**
@@ -502,6 +525,10 @@ export class ThreeRuntime {
     this.perfStats.dispose()
     this.gizmoPointer = null
     this.orbit.removeEventListener('change', this.handleOrbitChange)
+    if (this.previewQuality) {
+      this.orbit.removeEventListener('start', this.handleOrbitGestureStart)
+      this.orbit.removeEventListener('end', this.handleOrbitGestureEnd)
+    }
     if (this.transform) {
       this.transform.removeEventListener('dragging-changed', this.handleDraggingChanged)
       this.transform.removeEventListener('objectChange', this.handleTransformObjectChange)
@@ -546,24 +573,47 @@ export class ThreeRuntime {
     this._camera.updateProjectionMatrix()
   }
 
-  private startLoop(): void {
-    const step = () => {
-      const nowMs = performance.now()
-      if (this.frameHandlers.size > 0) {
-        this.frameHandlers.forEach(handler => handler(nowMs))
-      }
-      this.orbit.update()
+  private kickLoop(): void {
+    if (this.loopId !== null) return
+    this.loopId = requestAnimationFrame(this.step)
+  }
+
+  private step = (): void => {
+    const nowMs = performance.now()
+    const hadFrameHandlers = this.frameHandlers.size > 0
+    if (hadFrameHandlers) {
+      this.frameHandlers.forEach(handler => handler(nowMs))
+    }
+    this.orbit.update()
+    const statsVisible = this.perfStats.isVisible()
+    const draw =
+      !this.previewQuality ||
+      this.renderRequested ||
+      this.orbitInteracting ||
+      hadFrameHandlers ||
+      statsVisible
+    if (draw) {
+      this.renderRequested = false
       const t0 = performance.now()
       this.renderer.render(this.scene, this._camera)
       if (this.viewGizmoEnabled) {
         this.viewGizmo.syncFromCamera(this._camera, this.orbit.target)
         this.viewGizmo.render(this.renderer)
       }
-      const renderMs = performance.now() - t0
-      this.perfStats.update(this.renderer, renderMs)
-      this.loopId = requestAnimationFrame(step)
+      this.perfStats.update(this.renderer, performance.now() - t0)
     }
-    this.loopId = requestAnimationFrame(step)
+    const keep =
+      !this.previewQuality ||
+      this.orbitInteracting ||
+      this.frameHandlers.size > 0 ||
+      this.renderRequested ||
+      statsVisible
+    this.loopId = keep ? requestAnimationFrame(this.step) : null
+  }
+
+  private startLoop(): void {
+    this.renderRequested = true
+    this.kickLoop()
   }
 
   private stopLoop(): void {
@@ -582,6 +632,7 @@ export class ThreeRuntime {
       this.syncOrthoFrustum()
     }
     this.renderer.setSize(width, height)
+    this.requestRender()
   }
 
   private captureTransform(object: THREE.Object3D): TransformSnapshot {
@@ -592,7 +643,18 @@ export class ThreeRuntime {
     }
   }
 
+  private handleOrbitGestureStart = (): void => {
+    this.orbitInteracting = true
+    this.requestRender()
+  }
+
+  private handleOrbitGestureEnd = (): void => {
+    this.orbitInteracting = false
+    this.requestRender()
+  }
+
   private handleOrbitChange = (): void => {
+    if (this.previewQuality) this.requestRender()
     if (this.suppressPoseEvents || this.cameraPoseHandlers.size === 0) return
     const pose = this.getCameraPose()
     this.cameraPoseHandlers.forEach(handler => handler(pose))

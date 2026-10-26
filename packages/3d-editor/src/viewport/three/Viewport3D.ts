@@ -126,6 +126,8 @@ export class Viewport3D {
   private unsubscribers: Array<() => void> = []
   private disposed = false
   private visualStates = new Map<string, VisualState>()
+  /** 只在确有脉冲时订阅帧回调，只读预览才能在静止时停渲染 */
+  private unsubPulse: (() => void) | undefined
   /** 临时色，避免每帧 new Color */
   private readonly pulseHighlight = new THREE.Color()
   private selection: SelectionService
@@ -266,7 +268,6 @@ export class Viewport3D {
     dom.addEventListener('pointerleave', this.selection.handlePointerLeave)
     window.addEventListener('resize', this.handleHoverResize)
     this.handleHoverResize()
-    this.unsubscribers.push(this.runtime.onFrame(this.tickVisualPulse))
   }
 
   // -- 环境 / 相机 -------------------------------------------------------------
@@ -1116,6 +1117,8 @@ export class Viewport3D {
       this.visualStates.set(nodePath, state)
     }
     this.applyVisualState(nodePath, state)
+    this.syncPulseFrame()
+    this.runtime.requestRender()
   }
 
   clearVisualStates(): void {
@@ -1123,6 +1126,23 @@ export class Viewport3D {
       this.applyVisualState(path, { color: null })
     })
     this.visualStates.clear()
+    this.syncPulseFrame()
+    this.runtime.requestRender()
+  }
+
+  /** 无脉冲时卸掉帧回调，避免只读预览空转 */
+  private syncPulseFrame(): void {
+    const needsPulse = Array.from(this.visualStates.values()).some(
+      state => state.pulse === true && state.color != null
+    )
+    if (needsPulse && !this.unsubPulse) {
+      this.unsubPulse = this.runtime.onFrame(this.tickVisualPulse)
+      return
+    }
+    if (!needsPulse && this.unsubPulse) {
+      this.unsubPulse()
+      this.unsubPulse = undefined
+    }
   }
 
   /** 对 pulse 节点按 sine 调制 intensity；无脉冲时零成本 */
@@ -1218,6 +1238,8 @@ export class Viewport3D {
 
   dispose(): void {
     this.disposed = true
+    this.unsubPulse?.()
+    this.unsubPulse = undefined
     this.interactionHandlers.clear()
     this.floorApplyToken++
     this.ceilingApplyToken++

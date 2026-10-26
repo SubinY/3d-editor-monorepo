@@ -178,9 +178,11 @@ export class SelectionService {
     this.hoverPath = nextPath
     if (!nextPath) {
       this.opts.hoverHighlight.clear()
+      this.opts.runtime.requestRender()
       return
     }
     this.applyHover(nextPath)
+    this.opts.runtime.requestRender()
     this.emit('hover', nextPath, event, { x: event.clientX, y: event.clientY, button: event.button })
   }
 
@@ -202,6 +204,7 @@ export class SelectionService {
     if (this.hoverPath === null) return
     this.hoverPath = null
     this.opts.hoverHighlight.clear()
+    this.opts.runtime.requestRender()
   }
 
   private clearHoverRaf(): void {
