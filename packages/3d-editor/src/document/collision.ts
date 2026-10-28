@@ -214,12 +214,42 @@ export function findCollision(
   resolveItem: (node: EditorNodeJSON) => CatalogItem | undefined,
   resolveMesh?: (nodeId: string) => MeshBounds | undefined
 ): CollisionHit | undefined {
-  const box = nodeOBB(transform, item, excludeId ? resolveMesh?.(excludeId) : undefined)
+  return findPoseCollision(
+    siblings,
+    excludeId ?? '',
+    transform,
+    item,
+    node => node.transform,
+    resolveItem,
+    resolveMesh,
+    excludeId
+  )
+}
+
+/**
+ * 用给定位姿检测 subject。poseOf 可返回同批节点的最终位姿，避免半成品碰撞。
+ * subjectId 为空时不跳过任何兄弟（单节点检测走 excludeId）。
+ */
+export function findPoseCollision(
+  siblings: EditorNodeJSON[],
+  subjectId: string,
+  transform: TransformJSON,
+  item: CatalogItem | undefined,
+  poseOf: (node: EditorNodeJSON) => TransformJSON,
+  resolveItem: (node: EditorNodeJSON) => CatalogItem | undefined,
+  resolveMesh?: (nodeId: string) => MeshBounds | undefined,
+  meshSubjectId?: string,
+  /** 刚体同批：这些 id 不参与互检 */
+  skipIds?: ReadonlySet<string>
+): CollisionHit | undefined {
+  const meshId = meshSubjectId ?? subjectId
+  const box = nodeOBB(transform, item, meshId ? resolveMesh?.(meshId) : undefined)
   if (!box) return undefined
   const loose = obbAabb(box)
   for (const other of siblings) {
-    if (other.id === excludeId) continue
-    const otherBox = nodeOBB(other.transform, resolveItem(other), resolveMesh?.(other.id))
+    if (subjectId && other.id === subjectId) continue
+    if (skipIds?.has(other.id)) continue
+    const otherBox = nodeOBB(poseOf(other), resolveItem(other), resolveMesh?.(other.id))
     if (!otherBox) continue
     if (!aabbOverlap3(loose, obbAabb(otherBox))) continue
     if (obbOverlap(box, otherBox)) {

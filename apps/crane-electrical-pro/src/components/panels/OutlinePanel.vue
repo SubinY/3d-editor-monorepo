@@ -12,13 +12,17 @@ export type OutlineNode = {
 
 const props = defineProps<{
   nodes: OutlineNode[]
-  selectedId: string
+  selectedIds: string[]
 }>()
 
 const emit = defineEmits<{
-  select: [id: string]
+  select: [id: string, additive: boolean]
   'toggle-visible': [id: string, visible: boolean]
 }>()
+
+function onSelect(event: MouseEvent, id: string) {
+  emit('select', id, event.ctrlKey || event.metaKey)
+}
 
 const collapsed = ref<Record<string, boolean>>({
   structure: false,
@@ -80,8 +84,8 @@ const groups = computed(() => {
         <li v-for="node in group.nodes" :key="node.id">
           <div
             class="row"
-            :class="{ active: selectedId === node.id }"
-            @click="emit('select', node.id)"
+            :class="{ active: selectedIds.includes(node.id) }"
+            @click="onSelect($event, node.id)"
           >
             <span class="name">{{ node.name }}</span>
             <button

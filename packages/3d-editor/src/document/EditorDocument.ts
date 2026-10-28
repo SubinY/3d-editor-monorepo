@@ -1,7 +1,16 @@
 import type { CatalogItem, CatalogProvider, FootprintSpec } from '../catalog/types'
 import { catalogKey } from '../catalog/types'
 import { createId } from '../utils/id'
-import { findCollision, type CollisionHit, type MeshBounds } from './collision'
+import {
+  applyPlaneDelta,
+  alignPlaneForKind,
+  planAlign,
+  planDistribute,
+  type AlignMode,
+  type AlignReference,
+  type DistributeAxis
+} from './align'
+import { findCollision, findPoseCollision, type CollisionHit, type MeshBounds } from './collision'
 import { ConstraintEngine, type ConstraintResult } from './constraints'
 import {
   DocumentEmitter,
@@ -95,12 +104,31 @@ export interface DuplicateOptions {
 
 export interface TransformOptions {
   source?: string
+  /**
+   * 刚体平移：同批节点保持相对位置，彼此不检测。
+   * 仍与批外节点碰撞。对齐/分布不要开。
+   */
+  rigid?: boolean
 }
 
 export interface TransformResult {
   ok: boolean
   denied?: string
   transform?: TransformJSON
+}
+
+export interface NodeTransformUpdate {
+  id: string
+  next: Partial<TransformJSON>
+}
+
+export interface AlignNodesOptions extends TransformOptions {
+  reference?: AlignReference
+}
+
+export interface DuplicateNodesResult {
+  nodes?: EditorNodeJSON[]
+  denied?: string
 }
 
 export interface ValidationWarning {
@@ -284,6 +312,41 @@ export class EditorDocument {
     )
   }
 
+  /**
+   * 按最终位姿整批检测。
+   * rigid 时同批节点互不检测，只和批外节点比。
+   */
+  checkProposedTransforms(
+    proposed: Array<{ id: string; transform: TransformJSON }>,
+    options?: { rigid?: boolean }
+  ): CollisionHit | undefined {
+    if (!this.collisionEnabled || proposed.length === 0) return undefined
+    const pose = new Map(proposed.map(item => [item.id, item.transform]))
+    const poseOf = (node: EditorNodeJSON) => pose.get(node.id) ?? node.transform
+    const skipIds = options?.rigid ? new Set(proposed.map(item => item.id)) : undefined
+    for (const item of proposed) {
+      const node = this.nodeIndex.get(item.id)
+      if (!node) continue
+      const catalogItem = this.getCachedItem(node)
+      const hit = findPoseCollision(
+        this.nodes,
+        item.id,
+        item.transform,
+        catalogItem,
+        poseOf,
+        n => this.getCachedItem(n),
+        id => {
+          const other = this.nodeIndex.get(id)
+          return this.meshBoundsFor(id, other ? this.getCachedItem(other) : undefined)
+        },
+        item.id,
+        skipIds
+      )
+      if (hit) return hit
+    }
+    return undefined
+  }
+
   /** 视口建完网格后写入。bounds 是节点根局部、未变换时的可见 AABB。 */
   setNodeMeshBounds(id: string, bounds: MeshBounds, footprint: FootprintSpec): void {
     this.nodeMeshBounds.set(id, { bounds, key: footprintKey(footprint) })
@@ -291,6 +354,23 @@ export class EditorDocument {
 
   clearNodeMeshBounds(id: string): void {
     this.nodeMeshBounds.delete(id)
+  }
+
+  private nodesForAlign(ids: string[]): EditorNodeJSON[] {
+    const seen = new Set<string>()
+    const nodes: EditorNodeJSON[] = []
+    for (const id of ids) {
+      if (seen.has(id)) continue
+      const node = this.nodeIndex.get(id)
+      if (!node) continue
+      seen.add(id)
+      nodes.push(node)
+    }
+    return nodes
+  }
+
+  private footprintForAlign(node: EditorNodeJSON): FootprintSpec {
+    return this.getCachedItem(node)?.footprint ?? { width: 1, depth: 1, height: 1 }
   }
 
   private meshBoundsFor(id: string, item: CatalogItem | undefined): MeshBounds | undefined {
@@ -440,6 +520,165 @@ export class EditorDocument {
         redo: () => this.applyTransformInternal(id, finalTransform)
       })
       return { ok: true, transform: cloneTransform(finalTransform) }
+    },
+
+    /**
+     * 先算完全部目标位姿并整批校验，全部通过才写入，历史只有一条。
+     */
+    transformNodes: (updates: NodeTransformUpdate[], options?: TransformOptions): TransformResult => {
+      const byId = new Map<string, Partial<TransformJSON>>()
+      for (const update of updates) byId.set(update.id, update.next)
+      if (byId.size === 0) return { ok: true }
+
+      const prepared: Array<{
+        id: string
+        before: TransformJSON
+        after: TransformJSON
+      }> = []
+
+      for (const [id, next] of byId) {
+        const node = this.nodeIndex.get(id)
+        if (!node) return { ok: false, denied: 'node-not-found' }
+        const before = cloneTransform(node.transform)
+        const target: TransformJSON = {
+          position: next.position ? [...next.position] : [...before.position],
+          rotation: next.rotation ? [...next.rotation] : [...before.rotation],
+          scale: next.scale ? [...next.scale] : [...before.scale]
+        }
+        const verdict: ConstraintResult = this.constraints.evaluate(
+          { operation: 'transform', node, transform: target, item: this.getCachedItem(node) },
+          this
+        )
+        if (!verdict.allowed) return { ok: false, denied: verdict.reason }
+        prepared.push({ id, before, after: cloneTransform(verdict.transform ?? target) })
+      }
+
+      const hit = this.checkProposedTransforms(
+        prepared.map(item => ({ id: item.id, transform: item.after })),
+        { rigid: options?.rigid }
+      )
+      if (hit) return { ok: false, denied: `collision:${hit.nodeName ?? hit.nodeId}` }
+
+      const changed = prepared.filter(
+        item => JSON.stringify(item.before) !== JSON.stringify(item.after)
+      )
+      if (changed.length === 0) return { ok: true }
+
+      const source = options?.source
+      for (const item of changed) this.applyTransformInternal(item.id, item.after, source)
+      this.history.push({
+        label: changed.length === 1 ? `transform ${changed[0].id}` : `transform ${changed.length} nodes`,
+        undo: () => {
+          for (let i = changed.length - 1; i >= 0; i -= 1) {
+            this.applyTransformInternal(changed[i].id, changed[i].before)
+          }
+        },
+        redo: () => {
+          for (const item of changed) this.applyTransformInternal(item.id, item.after)
+        }
+      })
+      return { ok: true, transform: cloneTransform(changed[changed.length - 1].after) }
+    },
+
+    alignNodes: (
+      ids: string[],
+      mode: AlignMode,
+      options?: AlignNodesOptions
+    ): TransformResult => {
+      const nodes = this.nodesForAlign(ids)
+      if (nodes.length < 2) return { ok: false, denied: 'need-selection' }
+      const plane = alignPlaneForKind(this.kind)
+      const reference = options?.reference ?? 'bounds'
+      const deltas = planAlign(
+        nodes.map(node => ({
+          id: node.id,
+          transform: node.transform,
+          footprint: this.footprintForAlign(node)
+        })),
+        mode,
+        reference,
+        plane
+      )
+      return this.commands.transformNodes(
+        deltas.map(delta => ({
+          id: delta.id,
+          next: {
+            position: applyPlaneDelta(
+              this.nodeIndex.get(delta.id)!.transform,
+              delta.du,
+              delta.dv,
+              plane
+            ).position
+          }
+        })),
+        options
+      )
+    },
+
+    distributeNodes: (ids: string[], axis: DistributeAxis, options?: TransformOptions): TransformResult => {
+      const nodes = this.nodesForAlign(ids)
+      if (nodes.length < 3) return { ok: false, denied: 'need-selection' }
+      const plane = alignPlaneForKind(this.kind)
+      const deltas = planDistribute(
+        nodes.map(node => ({
+          id: node.id,
+          transform: node.transform,
+          footprint: this.footprintForAlign(node)
+        })),
+        axis,
+        plane
+      )
+      return this.commands.transformNodes(
+        deltas.map(delta => ({
+          id: delta.id,
+          next: {
+            position: applyPlaneDelta(
+              this.nodeIndex.get(delta.id)!.transform,
+              delta.du,
+              delta.dv,
+              plane
+            ).position
+          }
+        })),
+        options
+      )
+    },
+
+    removeNodes: (ids: string[], options?: TransformOptions): boolean => {
+      const existing = [...new Set(ids)].filter(id => this.nodeIndex.has(id))
+      if (existing.length === 0) return false
+      this.history.transaction(
+        existing.length === 1 ? `remove ${existing[0]}` : `remove ${existing.length} nodes`,
+        () => {
+          for (const id of existing) this.commands.removeNode(id, options)
+        }
+      )
+      return true
+    },
+
+    duplicateNodes: (ids: string[], options?: DuplicateOptions): DuplicateNodesResult => {
+      const existing = [...new Set(ids)].filter(id => this.nodeIndex.has(id))
+      if (existing.length === 0) return { denied: 'node-not-found' }
+      const created: EditorNodeJSON[] = []
+      let denied: string | undefined
+      this.history.transaction('duplicate nodes', () => {
+        for (const id of existing) {
+          const result = this.commands.duplicateNode(id, { ...options, select: false })
+          if (!result.node) {
+            denied = result.denied ?? 'duplicate-failed'
+            return
+          }
+          created.push(result.node)
+        }
+      })
+      if (denied) {
+        if (created.length > 0) this.history.undo()
+        return { denied }
+      }
+      if (options?.select !== false && created.length > 0) {
+        this.selection.set(created.map(node => node.id))
+      }
+      return { nodes: created }
     },
 
     removeNode: (id: string, options?: TransformOptions): boolean => {

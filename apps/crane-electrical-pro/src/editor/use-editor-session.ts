@@ -131,7 +131,12 @@ export function useEditorSession(): EditorSessionApi {
   function removeSelected() {
     const d = doc.value
     if (!d) return
-    const id = d.selection.first()
+    const nodeIds = d.selection.get().filter(id => d.getNode(id))
+    if (nodeIds.length > 1) {
+      d.commands.removeNodes(nodeIds)
+      return
+    }
+    const id = nodeIds[0] ?? d.selection.first()
     if (!id) return
     if (d.getNode(id)) {
       d.commands.removeNode(id)

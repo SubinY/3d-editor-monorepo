@@ -8,6 +8,7 @@ import type { ThreeRuntime } from '../runtime/ThreeRuntime'
 import { findNodePath } from '../utils/node-path'
 import { getFootprintPivot } from '../utils/footprint-pivot'
 import type { HoverHighlight } from './hover-highlight'
+import { SelectionOutlines } from './selection-outlines'
 
 const MOVE_THRESHOLD_PX = 5
 const LONGPRESS_MS = 500
@@ -23,6 +24,7 @@ export interface SelectionServiceOptions {
   pathObjects: Map<string, THREE.Object3D>
   hoverOutline: boolean
   hoverHighlight: HoverHighlight
+  selectionOutlines: SelectionOutlines
   /** Viewport 扇出到 onInteraction 订阅者 */
   emitInteraction?: (event: NodeInteractionEvent) => void
 }
@@ -43,6 +45,7 @@ export class SelectionService {
     this.clearLongPressTimer()
     this.clearHoverRaf()
     this.clearHover()
+    this.opts.selectionOutlines.dispose()
   }
 
   setHoverOutlineEnabled(enabled: boolean): void {
@@ -51,7 +54,13 @@ export class SelectionService {
   }
 
   syncGizmo(ids: string[]): void {
+    this.syncOutlines(ids)
     if (this.opts.readonly) return
+    // 多选不提供 Gizmo，只保留轮廓
+    if (ids.length !== 1) {
+      this.opts.runtime.attachTransform(null)
+      return
+    }
     const first = ids[0]
     const node = first ? this.opts.doc.getNode(first) : undefined
     // 隐藏节点不挂 gizmo，避免对不可见对象做变换
@@ -62,6 +71,25 @@ export class SelectionService {
     const object = this.opts.nodeRoots.get(first)
     const pivot = object ? getFootprintPivot(object) : undefined
     this.opts.runtime.attachTransform(pivot ?? object ?? null)
+  }
+
+  private syncOutlines(ids: string[]): void {
+    const primary = ids[0]
+    const entries = []
+    for (const id of ids) {
+      const node = this.opts.doc.getNode(id)
+      if (!node || node.visible === false) continue
+      const root = this.opts.nodeRoots.get(id)
+      if (!root) continue
+      const nested: THREE.Object3D[] = []
+      const prefix = `${id}/`
+      this.opts.pathObjects.forEach((obj, path) => {
+        if (path.startsWith(prefix)) nested.push(obj)
+      })
+      entries.push({ id, root, nested, primary: id === primary })
+    }
+    this.opts.selectionOutlines.sync(entries)
+    this.opts.runtime.requestRender()
   }
 
   handlePointerDown = (event: PointerEvent): void => {
@@ -84,7 +112,7 @@ export class SelectionService {
       const pick = this.pickAt(down.x, down.y)
       if (!pick) return
       this.longPressFired = true
-      this.applySelection(pick.path)
+      this.applySelection(pick.path, event.ctrlKey || event.metaKey)
       this.emit('longpress', pick.path, event, down)
     }, LONGPRESS_MS)
   }
@@ -148,7 +176,7 @@ export class SelectionService {
       return
     }
 
-    this.applySelection(pick.path)
+    this.applySelection(pick.path, event.ctrlKey || event.metaKey)
 
     const now = performance.now()
     const isDbl =
@@ -223,9 +251,14 @@ export class SelectionService {
     return { path }
   }
 
-  private applySelection(path: string): void {
+  private applySelection(path: string, additive: boolean): void {
     if (this.opts.readonly) return
     const rootId = path.split('/')[0]
+    const node = this.opts.doc.getNode(rootId)
+    if (additive && node) {
+      this.opts.doc.selection.toggle(rootId)
+      return
+    }
     this.opts.doc.selection.set(rootId)
   }
 

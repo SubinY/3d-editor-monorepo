@@ -3,7 +3,10 @@ import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, shallowR
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { CATALOG_ITEM_MIME, cloneEnvironment, createEditor } from '@mh/3d-editor'
 import type {
+  AlignMode,
+  AlignReference,
   CatalogItem,
+  DistributeAxis,
   DocumentKind,
   EditorDocument,
   EditorDocumentJSON,
@@ -74,6 +77,7 @@ const systemGroups = ref<AssetGroup[]>([])
 const mineItems = ref<CatalogItem[]>([])
 const layerNodes = ref<LayerTreeItem[]>([])
 const selectedId = ref('')
+const selectedIds = ref<string[]>([])
 
 const selectedNode = reactive({
   id: '',
@@ -179,10 +183,12 @@ async function refreshLayers() {
   if (!d) {
     layerNodes.value = []
     selectedId.value = ''
+    selectedIds.value = []
     return
   }
   layerNodes.value = await Promise.all(d.getNodes().map(node => mapLayerItem(node, d)))
-  selectedId.value = d.selection.first() ?? ''
+  selectedIds.value = d.selection.get()
+  selectedId.value = selectedIds.value[0] ?? ''
 }
 
 function syncTwinFrom(next: TwinProps) {
@@ -197,10 +203,18 @@ function syncTwinFrom(next: TwinProps) {
 
 function refreshSelected() {
   const d = doc.value
-  const id = d?.selection.first()
+  const ids = d?.selection.get() ?? []
+  const nodeIds = d ? ids.filter(sid => d.getNode(sid)) : []
+  selectedIds.value = ids
   selectedWall.value = null
   selectedWorkspace.value = null
-  selectedId.value = id ?? ''
+  selectedId.value = (nodeIds[0] ?? ids[0]) ?? ''
+  if (nodeIds.length > 1) {
+    selectedNode.id = ''
+    syncTwinFrom(emptyTwin())
+    return
+  }
+  const id = nodeIds[0] ?? ids[0]
   if (!d || !id) {
     selectedNode.id = ''
     syncTwinFrom(emptyTwin())
@@ -594,8 +608,33 @@ function onAssetDragEnd() {
   session?.viewport2d?.endExternalDrag()
 }
 
-function selectLayer(id: string) {
-  doc.value?.selection.set(id)
+function selectLayer(id: string, additive = false) {
+  const d = doc.value
+  if (!d) return
+  if (additive && d.getNode(id)) d.selection.toggle(id)
+  else d.selection.set(id)
+}
+
+const nodeSelectionCount = computed(() => {
+  const d = doc.value
+  if (!d) return 0
+  return selectedIds.value.filter(id => d.getNode(id)).length
+})
+
+function onAlign(mode: AlignMode, reference: AlignReference) {
+  const d = doc.value
+  if (!d) return
+  const ids = d.selection.get().filter(id => d.getNode(id))
+  const result = d.commands.alignNodes(ids, mode, { reference })
+  if (result.denied) showToast(deniedMessage(result.denied), 'error')
+}
+
+function onDistribute(axis: DistributeAxis) {
+  const d = doc.value
+  if (!d) return
+  const ids = d.selection.get().filter(id => d.getNode(id))
+  const result = d.commands.distributeNodes(ids, axis)
+  if (result.denied) showToast(deniedMessage(result.denied), 'error')
 }
 
 function toggleNodeVisible(id: string, visible: boolean) {
@@ -629,8 +668,13 @@ function applyNodeTwin(next: TwinProps) {
 function removeSelected() {
   const d = doc.value
   if (!d) return
-  if (selectedNode.id) {
-    d.commands.removeNode(selectedNode.id)
+  const nodeIds = d.selection.get().filter(id => d.getNode(id))
+  if (nodeIds.length > 1) {
+    d.commands.removeNodes(nodeIds)
+    return
+  }
+  if (nodeIds.length === 1) {
+    d.commands.removeNode(nodeIds[0])
     return
   }
   if (selectedWall.value) {
@@ -679,8 +723,21 @@ function toggleInsertWorkspaceVertex() {
 
 function duplicateSelected() {
   const d = doc.value
-  if (!d || !selectedNode.id) return
-  const result = d.commands.duplicateNode(selectedNode.id)
+  if (!d) return
+  const nodeIds = d.selection.get().filter(id => d.getNode(id))
+  if (nodeIds.length > 1) {
+    const result = d.commands.duplicateNodes(nodeIds)
+    if (result.denied) {
+      showToast(deniedMessage(result.denied), 'error')
+      return
+    }
+    showToast('已复制')
+    return
+  }
+  if (!selectedNode.id && nodeIds.length !== 1) return
+  const id = nodeIds[0] ?? selectedNode.id
+  if (!id) return
+  const result = d.commands.duplicateNode(id)
   if (result.denied) {
     showToast(deniedMessage(result.denied), 'error')
     return
@@ -808,6 +865,7 @@ async function confirmPanelEdit(content: panel.PanelContentJSON) {
         :mine-items="mineItems"
         :nodes="layerNodes"
         :selected-id="selectedId"
+        :selected-ids="selectedIds"
         @drag-start="onAssetDragStart"
         @drag-end="onAssetDragEnd"
         @select-layer="selectLayer"
@@ -841,6 +899,7 @@ async function confirmPanelEdit(content: panel.PanelContentJSON) {
         :is-scene="isScene"
         :bounds-form="boundsForm"
         :selected-node="selectedNode"
+        :selection-count="nodeSelectionCount"
         :selected-wall="selectedWall"
         :selected-workspace="selectedWorkspace"
         :node-twin="nodeTwin"
@@ -860,6 +919,8 @@ async function confirmPanelEdit(content: panel.PanelContentJSON) {
         @edit-cabinet="editCabinet"
         @toggle-insert-workspace-vertex="toggleInsertWorkspaceVertex"
         @remove="removeSelected"
+        @align="onAlign"
+        @distribute="onDistribute"
         @apply-environment="applyEnvironment"
         @update:perf-stats-visible="setPerfStatsVisible"
         @enter-indoor="enterIndoorView"

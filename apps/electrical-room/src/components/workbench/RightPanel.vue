@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
 import { Setting, Monitor, DataLine } from '@element-plus/icons-vue'
-import type { EnvironmentJSON, WallJSON, WorkspaceJSON } from '@mh/3d-editor'
+import type { AlignMode, AlignReference, DistributeAxis, EnvironmentJSON, WallJSON, WorkspaceJSON } from '@mh/3d-editor'
+import AlignStrip from './AlignStrip.vue'
 import type { ViewMode } from './types'
 import PropertyPanel from './PropertyPanel.vue'
 import DataPanel from './DataPanel.vue'
@@ -14,6 +15,7 @@ const props = defineProps<{
   isScene: boolean
   boundsForm: BoundsForm
   selectedNode: SelectedNodeForm
+  selectionCount?: number
   selectedWall: WallJSON | null
   selectedWorkspace: WorkspaceJSON | null
   nodeTwin: TwinProps
@@ -43,6 +45,8 @@ const emit = defineEmits<{
   'edit-cabinet': []
   'toggle-insert-workspace-vertex': []
   remove: []
+  align: [mode: AlignMode, reference: AlignReference]
+  distribute: [axis: DistributeAxis]
   'apply-environment': [env: EnvironmentJSON]
   'update:perfStatsVisible': [value: boolean]
   'enter-indoor': []
@@ -70,6 +74,12 @@ watch(
             属性
           </span>
         </template>
+        <AlignStrip
+          v-if="(selectionCount ?? 0) >= 2"
+          :count="selectionCount ?? 0"
+          @align="(mode, reference) => emit('align', mode, reference)"
+          @distribute="emit('distribute', $event)"
+        />
         <PropertyPanel
           :is-scene="isScene"
           :bounds-form="boundsForm"

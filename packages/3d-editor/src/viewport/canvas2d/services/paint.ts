@@ -51,6 +51,7 @@ export function paintScene(p: Paint2DContext, width: number, height: number): vo
     drawWorkspaceInsertEdges(p)
   }
   drawNodes(p)
+  drawMarquee(p)
   drawChainGhost(p)
   drawWorkspaceGhost(p)
   drawDropGhost(p)
@@ -306,6 +307,28 @@ function drawWallDimension(p: Paint2DContext, wall: WallJSON): void {
   ctx.restore()
 }
 
+function drawMarquee(p: Paint2DContext): void {
+  const box = p.select.marquee
+  if (!box) return
+  const { ctx, camera, theme } = p
+  const a = camera.worldToScreen(box.a.u, box.a.v)
+  const b = camera.worldToScreen(box.b.u, box.b.v)
+  const x = Math.min(a.sx, b.sx)
+  const y = Math.min(a.sy, b.sy)
+  const w = Math.abs(a.sx - b.sx)
+  const h = Math.abs(a.sy - b.sy)
+  ctx.save()
+  ctx.fillStyle = theme.nodeSelected
+  ctx.globalAlpha = 0.15
+  ctx.fillRect(x, y, w, h)
+  ctx.globalAlpha = 1
+  ctx.strokeStyle = theme.nodeSelected
+  ctx.lineWidth = 1
+  ctx.setLineDash([4, 3])
+  ctx.strokeRect(x + 0.5, y + 0.5, w, h)
+  ctx.restore()
+}
+
 function drawChainGhost(p: Paint2DContext): void {
   const { chainLast, chainCursor } = p.wall
   if (!chainLast) return
@@ -407,6 +430,9 @@ function drawDropGhost(p: Paint2DContext): void {
 function drawNodes(p: Paint2DContext): void {
   const { ctx, camera, doc, theme, select, tool, readonly, isElevation } = p
   const selection = doc.selection.get()
+  const selectedNodeIds = selection.filter(id => doc.getNode(id))
+  const multiNode = selectedNodeIds.length > 1
+  const primaryId = selectedNodeIds[0]
   const planeKind = isElevation ? 'xy' : 'xz'
   doc.getNodes().forEach(node => {
     if (node.visible === false) return
@@ -427,8 +453,10 @@ function drawNodes(p: Paint2DContext): void {
     const sizeV = isElevation ? drawFp.height ?? drawFp.depth : drawFp.depth
 
     let plane = p.planeFromPosition(node.transform.position)
-    const dragging = node.id === select.dragNodeId && select.dragGhost
-    if (dragging) plane = select.dragGhost!
+    const preview = select.previewPlane(node.id)
+    const dragging = preview != null || (node.id === select.dragNodeId && select.dragGhost != null && select.dragMoved)
+    if (preview) plane = preview
+    else if (node.id === select.dragNodeId && select.dragGhost && select.dragMoved) plane = select.dragGhost
 
     const cv = isElevation ? plane.v + sizeV / 2 : plane.v
     const { sx, sy } = camera.worldToScreen(plane.u, cv)
@@ -451,7 +479,7 @@ function drawNodes(p: Paint2DContext): void {
       : selected
         ? theme.nodeSelected
         : 'rgba(255,255,255,0.35)'
-    if (selected) ctx.setLineDash([6, 4])
+    if (selected && node.id !== primaryId) ctx.setLineDash([6, 4])
     const pad = selected ? 3 : 0
     ctx.strokeRect(-w / 2 - pad, -d / 2 - pad, w + pad * 2, d + pad * 2)
     ctx.setLineDash([])
@@ -464,7 +492,7 @@ function drawNodes(p: Paint2DContext): void {
     ctx.stroke()
     ctx.restore()
 
-    if (selected && tool === 'select' && !readonly) {
+    if (selected && !multiNode && tool === 'select' && !readonly) {
       drawSelectionHandles(p, node, !!denied)
     }
 

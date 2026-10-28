@@ -2,12 +2,21 @@
 import { computed, nextTick, onMounted, onBeforeUnmount, reactive, ref, watch } from 'vue'
 import { useMessage } from 'naive-ui'
 import { CATALOG_ITEM_MIME, cloneEnvironment } from '@mh/3d-editor'
-import type { CatalogItem, EnvironmentJSON, Tool2D, TransformMode } from '@mh/3d-editor'
+import type {
+  AlignMode,
+  AlignReference,
+  CatalogItem,
+  DistributeAxis,
+  EnvironmentJSON,
+  Tool2D,
+  TransformMode
+} from '@mh/3d-editor'
 import { storeToRefs } from 'pinia'
 import MainLayout from '@/components/layout/MainLayout.vue'
 import ResourcePanel from '@/components/panels/ResourcePanel.vue'
 import OutlinePanel from '@/components/panels/OutlinePanel.vue'
 import type { OutlineNode } from '@/components/panels/OutlinePanel.vue'
+import AlignStrip from '@/components/panels/AlignStrip.vue'
 import PropertyPanel from '@/components/panels/PropertyPanel.vue'
 import type { SelectedForm } from '@/components/panels/PropertyPanel.vue'
 import PanelEditorModal from '@/components/panels/PanelEditorModal.vue'
@@ -30,6 +39,12 @@ const scaleLabel = ref('1:—')
 
 const outlineNodes = ref<OutlineNode[]>([])
 const selectedId = ref('')
+const selectedIds = ref<string[]>([])
+const nodeSelectionCount = computed(() => {
+  const d = api.doc.value
+  if (!d) return 0
+  return selectedIds.value.filter(id => d.getNode(id)).length
+})
 const selected = reactive<SelectedForm>({
   id: '',
   name: '',
@@ -99,13 +114,21 @@ function refreshOutline() {
     }
   })
   outlineNodes.value = [...walls, ...nodes]
-  selectedId.value = d.selection.first() ?? ''
+  selectedIds.value = d.selection.get()
+  selectedId.value = selectedIds.value[0] ?? ''
 }
 
 function refreshSelected() {
   const d = api.doc.value
-  const id = d?.selection.first()
-  selectedId.value = id ?? ''
+  const ids = d?.selection.get() ?? []
+  selectedIds.value = ids
+  const nodeIds = d ? ids.filter(id => d.getNode(id)) : []
+  selectedId.value = (nodeIds[0] ?? ids[0]) ?? ''
+  if (nodeIds.length > 1) {
+    selected.id = ''
+    return
+  }
+  const id = nodeIds[0] ?? ids[0]
   if (!d || !id) {
     selected.id = ''
     return
@@ -346,8 +369,25 @@ function onDragEnd() {
   api.session.value?.viewport2d?.endExternalDrag()
 }
 
-function selectLayer(id: string) {
-  api.doc.value?.selection.set(id)
+function selectLayer(id: string, additive = false) {
+  const d = api.doc.value
+  if (!d) return
+  if (additive && d.getNode(id)) d.selection.toggle(id)
+  else d.selection.set(id)
+}
+
+function onAlign(mode: AlignMode, reference: AlignReference) {
+  const d = api.doc.value
+  if (!d) return
+  const ids = d.selection.get().filter(id => d.getNode(id))
+  d.commands.alignNodes(ids, mode, { reference })
+}
+
+function onDistribute(axis: DistributeAxis) {
+  const d = api.doc.value
+  if (!d) return
+  const ids = d.selection.get().filter(id => d.getNode(id))
+  d.commands.distributeNodes(ids, axis)
 }
 
 function toggleVisible(id: string, visible: boolean) {
@@ -447,7 +487,7 @@ function publish() {
     <template #left-outline>
       <OutlinePanel
         :nodes="outlineNodes"
-        :selected-id="selectedId"
+        :selected-ids="selectedIds"
         @select="selectLayer"
         @toggle-visible="toggleVisible"
       />
@@ -466,6 +506,12 @@ function publish() {
       />
     </template>
     <template #right-property>
+      <AlignStrip
+        v-if="nodeSelectionCount >= 2"
+        :count="nodeSelectionCount"
+        @align="onAlign"
+        @distribute="onDistribute"
+      />
       <PropertyPanel
         :selected="selected"
         :is-panel="isPanelSelected"

@@ -62,8 +62,14 @@ export type {
   EditorDocument,
   PlaceResult,
   PlaceOptions,
-  DuplicateOptions
+  DuplicateOptions,
+  DuplicateNodesResult,
+  TransformResult,
+  TransformOptions,
+  NodeTransformUpdate,
+  AlignNodesOptions
 } from './document/EditorDocument'
+export type { AlignMode, AlignReference, DistributeAxis } from './document/align'
 export type {
   CatalogItem,
   CatalogCategory,

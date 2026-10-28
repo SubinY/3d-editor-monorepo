@@ -13,6 +13,7 @@ import {
   type NodeLayout
 } from '../utils/node-layout'
 import { hitTestNodes } from '../utils/hit-test'
+import { nodesInMarquee, rectFromPoints } from '../utils/marquee'
 import {
   computeSelectionHandles,
   hitTestSelectionHandle,
@@ -41,6 +42,9 @@ export interface NodeSelectLayout extends NodeLayout {
 /** 选择 / 平移 / 四角手柄 / 墙拖 */
 export class SelectInteraction implements PointerInteraction {
   dragNodeId: string | null = null
+  /** 多选拖动时的节点集合（含锚点）。空表示单节点拖。 */
+  dragCohort: string[] = []
+  private cohortStarts = new Map<string, PlanePoint>()
   dragGhost: PlanePoint | null = null
   dragOffset: PlanePoint = { u: 0, v: 0 }
   dragOrigin: PlanePoint | null = null
@@ -100,6 +104,16 @@ export class SelectInteraction implements PointerInteraction {
   private pendingPickHits: EditorNodeJSON[] | null = null
   private pendingPickDown: { x: number; y: number } | null = null
 
+  /** 已越过阈值的框选矩形（平面坐标） */
+  marquee: { a: PlanePoint; b: PlanePoint } | null = null
+  private marqueeDown: {
+    x: number
+    y: number
+    plane: PlanePoint
+    additive: boolean
+    workspaceId: string | null
+  } | null = null
+
   constructor(private host: Viewport2DContext) {}
 
   beginInsertVertex(workspaceId: string): void {
@@ -120,9 +134,16 @@ export class SelectInteraction implements PointerInteraction {
   }
 
   reset(options?: { revertPreview?: boolean }): void {
-    const previewId =
-      this.dragNodeId ?? this.rotateNodeId ?? this.liftNodeId ?? this.scaleNodeId
+    const previewIds = [
+      this.dragNodeId,
+      ...this.dragCohort,
+      this.rotateNodeId,
+      this.liftNodeId,
+      this.scaleNodeId
+    ].filter((id): id is string => Boolean(id))
     this.dragNodeId = null
+    this.dragCohort = []
+    this.cohortStarts.clear()
     this.dragGhost = null
     this.dragOrigin = null
     this.dragAxisLock = null
@@ -155,8 +176,15 @@ export class SelectInteraction implements PointerInteraction {
     this.workspaceVertexMoved = false
     this.pendingPickHits = null
     this.pendingPickDown = null
-    if (options?.revertPreview !== false && previewId) {
-      this.host.previewNode?.(previewId, null)
+    this.marquee = null
+    this.marqueeDown = null
+    if (options?.revertPreview !== false) {
+      const seen = new Set<string>()
+      for (const id of previewIds) {
+        if (seen.has(id)) continue
+        seen.add(id)
+        this.host.previewNode?.(id, null)
+      }
     }
   }
 
@@ -185,9 +213,9 @@ export class SelectInteraction implements PointerInteraction {
     if (event.button !== 0) return false
     const { doc } = this.host
 
-    const selectedId = doc.selection.first()
-    if (selectedId) {
-      const selected = doc.getNode(selectedId)
+    const selectedNodes = this.selectedNodeIds()
+    if (selectedNodes.length === 1) {
+      const selected = doc.getNode(selectedNodes[0])
       if (selected) {
         const kind = this.hitHandle(selected, plane.u, plane.v)
         if (kind) {
@@ -214,6 +242,16 @@ export class SelectInteraction implements PointerInteraction {
     }
 
     if (hits[0]) {
+      if (event.ctrlKey || event.metaKey) {
+        doc.selection.toggle(hits[0].id)
+        this.host.requestRender()
+        return true
+      }
+      const nodeIds = this.selectedNodeIds()
+      if (nodeIds.length > 1 && nodeIds.includes(hits[0].id)) {
+        this.beginCohortDrag(nodeIds, hits[0], plane)
+        return true
+      }
       this.beginNodeDrag(hits[0], plane)
       return true
     }
@@ -263,23 +301,34 @@ export class SelectInteraction implements PointerInteraction {
         return true
       }
 
-      const wsId = hitWorkspace(doc.getWorkspaces(), plane.u, plane.v)
-      if (wsId) {
-        const ws = doc.getWorkspace(wsId)
-        doc.selection.set(wsId)
-        if (ws) this.host.onWorkspaceSelect?.(ws)
-        this.host.requestRender()
-        return true
-      }
     }
 
-    doc.selection.clear()
+    const workspaceId = this.host.isElevation
+      ? null
+      : hitWorkspace(doc.getWorkspaces(), plane.u, plane.v) ?? null
+    this.marqueeDown = {
+      x: event.clientX,
+      y: event.clientY,
+      plane: { ...plane },
+      additive: event.ctrlKey || event.metaKey,
+      workspaceId
+    }
+    this.marquee = null
     this.host.requestRender()
     return true
   }
 
   onPointerMove(event: PointerEvent, plane: PlanePoint): boolean {
     if (this.host.readonly) return false
+
+    if (this.marqueeDown) {
+      const moved = Math.hypot(event.clientX - this.marqueeDown.x, event.clientY - this.marqueeDown.y)
+      if (moved > MOVE_THRESHOLD_PX) {
+        this.marquee = { a: this.marqueeDown.plane, b: { ...plane } }
+        this.host.requestRender()
+      }
+      return true
+    }
 
     if (this.pendingPickHits && this.pendingPickDown) {
       const moved = Math.hypot(
@@ -381,6 +430,27 @@ export class SelectInteraction implements PointerInteraction {
       return true
     }
 
+    if (this.dragNodeId && this.dragCohort.length > 1 && this.dragOrigin) {
+      this.dragMoved = true
+      let next = { u: plane.u + this.dragOffset.u, v: plane.v + this.dragOffset.v }
+      let du = next.u - this.dragOrigin.u
+      let dv = next.v - this.dragOrigin.v
+      if (this.host.snapEnabled) {
+        const snapped = this.snapCohort(this.dragCohort, du, dv)
+        du = snapped.du
+        dv = snapped.dv
+        this.alignGuides = snapped.guides
+        next = { u: this.dragOrigin.u + du, v: this.dragOrigin.v + dv }
+      } else {
+        this.alignGuides = []
+      }
+      this.dragGhost = next
+      this.dragColliding = this.cohortCollides(this.dragCohort)
+      this.push3dPreview()
+      this.host.requestRender()
+      return true
+    }
+
     if (this.dragNodeId) {
       this.dragMoved = true
       let next = { u: plane.u + this.dragOffset.u, v: plane.v + this.dragOffset.v }
@@ -440,6 +510,24 @@ export class SelectInteraction implements PointerInteraction {
     if (this.host.readonly) {
       this.reset()
       return false
+    }
+
+    if (this.marqueeDown) {
+      const down = this.marqueeDown
+      const rect = this.marquee
+      this.marqueeDown = null
+      this.marquee = null
+      if (rect) {
+        this.applyMarquee(rect.a, rect.b, down.additive)
+      } else if (down.workspaceId) {
+        const ws = this.host.doc.getWorkspace(down.workspaceId)
+        this.host.doc.selection.set(down.workspaceId)
+        if (ws) this.host.onWorkspaceSelect?.(ws)
+      } else {
+        this.host.doc.selection.clear()
+      }
+      this.host.requestRender()
+      return true
     }
 
     if (this.pendingPickHits && this.pendingPickDown) {
@@ -509,14 +597,32 @@ export class SelectInteraction implements PointerInteraction {
     }
 
     if (this.dragNodeId && this.dragGhost && this.dragMoved) {
-      const node = this.host.doc.getNode(this.dragNodeId)
-      if (node) {
-        const result = this.host.doc.commands.transformNode(
-          this.dragNodeId,
-          { position: this.host.positionFromPlane(this.dragGhost.u, this.dragGhost.v, node.transform) },
-          { source: SOURCE }
-        )
+      if (this.dragCohort.length > 1) {
+        const updates = this.dragCohort.flatMap(id => {
+          const node = this.host.doc.getNode(id)
+          const at = this.previewPlane(id)
+          if (!node || !at) return []
+          return [
+            {
+              id,
+              next: {
+                position: this.host.positionFromPlane(at.u, at.v, node.transform)
+              }
+            }
+          ]
+        })
+        const result = this.host.doc.commands.transformNodes(updates, { source: SOURCE, rigid: true })
         if (!result.ok && result.denied) this.host.onDenied?.(result.denied)
+      } else {
+        const node = this.host.doc.getNode(this.dragNodeId)
+        if (node) {
+          const result = this.host.doc.commands.transformNode(
+            this.dragNodeId,
+            { position: this.host.positionFromPlane(this.dragGhost.u, this.dragGhost.v, node.transform) },
+            { source: SOURCE }
+          )
+          if (!result.ok && result.denied) this.host.onDenied?.(result.denied)
+        }
       }
     }
 
@@ -530,7 +636,9 @@ export class SelectInteraction implements PointerInteraction {
     const wu = fp.width
     const wv = this.host.isElevation ? (fp.height ?? fp.depth) : fp.depth
     let plane = this.host.planeFromPosition(node.transform.position)
-    if (node.id === this.dragNodeId && this.dragGhost) plane = this.dragGhost
+    const preview = this.previewPlane(node.id)
+    if (preview) plane = preview
+    else if (node.id === this.dragNodeId && this.dragGhost) plane = this.dragGhost
     const yaw =
       node.id === this.rotateNodeId && this.rotateMoved ? this.rotateGhostYaw : this.host.nodeYaw(node)
     const rotation = this.host.yawToRotation(yaw, node.transform.rotation)
@@ -583,16 +691,30 @@ export class SelectInteraction implements PointerInteraction {
     }
 
     if (this.dragNodeId && this.dragGhost && this.dragMoved) {
-      const node = this.host.doc.getNode(this.dragNodeId)
-      if (!node) return
-      preview(this.dragNodeId, {
-        position: this.host.positionFromPlane(
-          this.dragGhost.u,
-          this.dragGhost.v,
-          node.transform
-        )
-      })
+      const ids = this.dragCohort.length > 1 ? this.dragCohort : [this.dragNodeId]
+      for (const id of ids) {
+        const node = this.host.doc.getNode(id)
+        const at = ids.length > 1 ? this.previewPlane(id) : this.dragGhost
+        if (!node || !at) continue
+        preview(id, {
+          position: this.host.positionFromPlane(at.u, at.v, node.transform)
+        })
+      }
     }
+  }
+
+  /** 拖动预览平面坐标。未发生位移时返回 null。 */
+  previewPlane(nodeId: string): PlanePoint | null {
+    if (!this.dragMoved || !this.dragGhost || !this.dragOrigin || !this.dragNodeId) return null
+    if (nodeId === this.dragNodeId && this.dragCohort.length <= 1) return { ...this.dragGhost }
+    const start =
+      nodeId === this.dragNodeId
+        ? this.dragOrigin
+        : this.cohortStarts.get(nodeId)
+    if (!start || (nodeId !== this.dragNodeId && !this.cohortStarts.has(nodeId))) return null
+    const du = this.dragGhost.u - this.dragOrigin.u
+    const dv = this.dragGhost.v - this.dragOrigin.v
+    return { u: start.u + du, v: start.v + dv }
   }
 
   private footprintFor(node: EditorNodeJSON): FootprintSpec {
@@ -664,11 +786,130 @@ export class SelectInteraction implements PointerInteraction {
     this.host.requestRender()
   }
 
+  private applyMarquee(a: PlanePoint, b: PlanePoint, additive: boolean): void {
+    const ids = nodesInMarquee({
+      nodes: this.host.doc.getNodes(),
+      rect: rectFromPoints(a, b),
+      isElevation: this.host.isElevation,
+      planeFromPosition: pos => this.host.planeFromPosition(pos),
+      itemFor: node => this.host.itemFor(node)
+    })
+    if (!additive) {
+      this.host.doc.selection.set(ids)
+      return
+    }
+    const next = this.host.doc.selection.get()
+    for (const id of ids) {
+      if (!next.includes(id)) next.push(id)
+    }
+    this.host.doc.selection.set(next)
+  }
+
+  private selectedNodeIds(): string[] {
+    return this.host.doc.selection.get().filter(id => this.host.doc.getNode(id))
+  }
+
+  private beginCohortDrag(ids: string[], anchor: EditorNodeJSON, plane: PlanePoint): void {
+    this.dragCohort = [...ids]
+    this.cohortStarts.clear()
+    for (const id of ids) {
+      const node = this.host.doc.getNode(id)
+      if (!node) continue
+      this.cohortStarts.set(id, { ...this.host.planeFromPosition(node.transform.position) })
+    }
+    const nodePlane = this.cohortStarts.get(anchor.id) ?? this.host.planeFromPosition(anchor.transform.position)
+    this.dragNodeId = anchor.id
+    this.dragOrigin = { ...nodePlane }
+    this.dragAxisLock = null
+    this.dragOffset = { u: nodePlane.u - plane.u, v: nodePlane.v - plane.v }
+    this.dragGhost = { ...nodePlane }
+    this.dragColliding = false
+    this.dragMoved = false
+    this.alignGuides = []
+    this.host.requestRender()
+  }
+
+  private snapCohort(
+    ids: string[],
+    du: number,
+    dv: number
+  ): { du: number; dv: number; guides: AlignGuide[] } {
+    let minU = Infinity
+    let maxU = -Infinity
+    let minV = Infinity
+    let maxV = -Infinity
+    for (const id of ids) {
+      const node = this.host.doc.getNode(id)
+      const start = node ? this.cohortStarts.get(id) : undefined
+      if (!node || !start) continue
+      const fp = this.host.footprintSize(this.host.itemFor(node))
+      const u = start.u + du
+      const v = start.v + dv
+      const cv = this.host.isElevation ? v + fp.wv / 2 : v
+      minU = Math.min(minU, u - fp.wu / 2)
+      maxU = Math.max(maxU, u + fp.wu / 2)
+      minV = Math.min(minV, cv - fp.wv / 2)
+      maxV = Math.max(maxV, cv + fp.wv / 2)
+    }
+    const moving = {
+      u: (minU + maxU) / 2,
+      v: (minV + maxV) / 2,
+      wu: maxU - minU,
+      wv: maxV - minV
+    }
+    const skip = new Set(ids)
+    const targets = this.host.doc
+      .getNodes()
+      .filter(n => !skip.has(n.id))
+      .map(n => {
+        const fp = this.host.footprintSize(this.host.itemFor(n))
+        const p = this.host.planeFromPosition(n.transform.position)
+        return {
+          u: p.u,
+          v: this.host.isElevation ? p.v + fp.wv / 2 : p.v,
+          wu: fp.wu,
+          wv: fp.wv
+        }
+      })
+    const snapped = snapWithAlignGuides({
+      moving,
+      targets,
+      walls: this.host.isElevation ? [] : this.host.doc.getWalls(),
+      threshold: Math.max(0.08, 10 / this.host.scale)
+    })
+    return {
+      du: du + (snapped.u - moving.u),
+      dv: dv + (snapped.v - moving.v),
+      guides: snapped.guides
+    }
+  }
+
+  private cohortCollides(ids: string[]): boolean {
+    const proposed = ids.flatMap(id => {
+      const node = this.host.doc.getNode(id)
+      const at = this.previewPlane(id)
+      if (!node || !at) return []
+      return [
+        {
+          id,
+          transform: {
+            position: this.host.positionFromPlane(at.u, at.v, node.transform),
+            rotation: [...node.transform.rotation] as [number, number, number],
+            scale: [...node.transform.scale] as [number, number, number]
+          }
+        }
+      ]
+    })
+    return Boolean(this.host.doc.checkProposedTransforms(proposed, { rigid: true }))
+  }
+
   private beginNodeDrag(
     node: EditorNodeJSON,
     plane: PlanePoint,
     axisLock: 'v' | null = null
   ): void {
+    this.dragCohort = []
+    this.cohortStarts.clear()
     this.host.doc.selection.set(node.id)
     const nodePlane = this.host.planeFromPosition(node.transform.position)
     this.dragNodeId = node.id

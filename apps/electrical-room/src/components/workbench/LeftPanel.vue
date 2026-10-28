@@ -11,12 +11,13 @@ const props = defineProps<{
   mineItems: CatalogItem[]
   nodes: LayerTreeItem[]
   selectedId: string
+  selectedIds?: string[]
 }>()
 
 const emit = defineEmits<{
   'drag-start': [event: DragEvent, item: CatalogItem]
   'drag-end': []
-  'select-layer': [id: string]
+  'select-layer': [id: string, additive: boolean]
   'toggle-visible': [id: string, visible: boolean]
   import: []
   'edit-draft': [item: CatalogItem]
@@ -83,7 +84,8 @@ watch(
         <LayerTreePanel
           :nodes="nodes"
           :selected-id="selectedId"
-          @select="emit('select-layer', $event)"
+          :selected-ids="selectedIds"
+          @select="(id, additive) => emit('select-layer', id, additive)"
           @toggle-visible="(id, visible) => emit('toggle-visible', id, visible)"
         />
       </el-tab-pane>

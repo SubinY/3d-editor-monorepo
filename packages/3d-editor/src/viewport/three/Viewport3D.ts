@@ -17,6 +17,7 @@ import { ThreeRuntime } from './runtime/ThreeRuntime'
 import { EnvironmentService } from './services/environment'
 import { SelectionService } from './services/selection'
 import { HoverHighlight } from './services/hover-highlight'
+import { SelectionOutlines } from './services/selection-outlines'
 import {
   resolveWallAppearance,
   wallAppearanceCacheKey
@@ -132,6 +133,7 @@ export class Viewport3D {
   private readonly pulseHighlight = new THREE.Color()
   private selection: SelectionService
   private hoverHighlight: HoverHighlight
+  private selectionOutlines!: SelectionOutlines
   private environment: EnvironmentService
   /** 上次已写入的位姿键；仅 type/position/target 变化时才重置 Orbit */
   private lastCameraPoseKey: string | null = null
@@ -196,6 +198,7 @@ export class Viewport3D {
     void this.buildAllNodes()
 
     this.hoverHighlight = new HoverHighlight(this.runtime.renderer)
+    this.selectionOutlines = new SelectionOutlines(this.runtime.renderer)
     const hoverOutline = options.hoverOutline ?? false
     this.selection = new SelectionService({
       doc: this.doc,
@@ -206,6 +209,7 @@ export class Viewport3D {
       pathObjects: this.pathObjects,
       hoverOutline,
       hoverHighlight: this.hoverHighlight,
+      selectionOutlines: this.selectionOutlines,
       emitInteraction: (event) => {
         for (const handler of this.interactionHandlers) handler(event)
       }
@@ -555,8 +559,8 @@ export class Viewport3D {
 
     // placeItem 会先 selection.set 再异步 build；GLTF 未就绪时 syncGizmo 挂空。
     // 构建完成后若仍选中该节点，补挂 XYZ。
-    if (this.doc.selection.first() === node.id && node.visible !== false) {
-      this.selection.syncGizmo([node.id])
+    if (this.doc.selection.isSelected(node.id)) {
+      this.selection.syncGizmo(this.doc.selection.get())
     }
   }
 
@@ -848,10 +852,8 @@ export class Viewport3D {
     this.applyTransformToObject(root, node.transform)
     root.visible = node.visible !== false
     // 隐藏时立刻卸掉 gizmo（visible 变更不会走 selection:changed）
-    if (node.visible === false && this.doc.selection.first() === node.id) {
-      this.selection.syncGizmo([])
-    } else if (node.visible !== false && this.doc.selection.first() === node.id) {
-      this.selection.syncGizmo([node.id])
+    if (this.doc.selection.isSelected(node.id)) {
+      this.selection.syncGizmo(this.doc.selection.get())
     }
     // transform / visible 变化后刷新阴影（Tier0: autoUpdate=false，按需 needsUpdate）
     this.runtime.markShadowNeedsUpdate()
@@ -960,6 +962,18 @@ export class Viewport3D {
    * persist 仅 `at:'indoor'` 且显式 true 时写回 defaultView。
    */
   look(target: CameraLookTarget, options?: CameraLookOptions): void {
+    if (target.at === 'selection') {
+      const ids = this.doc.selection.get().filter(id => this.doc.getNode(id)?.visible !== false)
+      if (ids.length > 1) {
+        const objects = ids
+          .map(id => this.pathObjects.get(id) ?? this.nodeRoots.get(id))
+          .filter((object): object is THREE.Object3D => Boolean(object))
+        if (objects.length === 0) return
+        if (options?.projection) this.runtime.setProjection(options.projection)
+        this.runtime.focusObjects(objects, options?.padding ?? 1.4)
+        return
+      }
+    }
     const pose = this.runtime.getCameraPose()
     const dom = this.runtime.domElement
     const intent = resolveLookIntent(
@@ -1273,6 +1287,7 @@ export class Viewport3D {
     const width = this.runtime.domElement.clientWidth
     const height = this.runtime.domElement.clientHeight
     this.hoverHighlight.setSize(width, height)
+    this.selectionOutlines.setSize(width, height)
   }
 }
 

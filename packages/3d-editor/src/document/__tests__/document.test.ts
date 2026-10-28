@@ -361,4 +361,84 @@ describe('序列化与加载', () => {
     expect(warnings).toHaveLength(0) // 加载时尚未注册约束
     expect(revalidated.length).toBeGreaterThanOrEqual(0)
   })
+
+  it('transformNodes 整批碰撞失败时不写任何节点，成功时只记一条历史', () => {
+    const doc = createSceneDoc()
+    const a = doc.commands.placeItem(cabinetItem, { position: [0, 0, 0] }).node!
+    const b = doc.commands.placeItem(cabinetItem, { position: [5, 0, 0], select: false }).node!
+    const denied = doc.commands.transformNodes([
+      { id: a.id, next: { position: [1, 0, 0] } },
+      { id: b.id, next: { position: [1.2, 0, 0] } }
+    ])
+    expect(denied.ok).toBe(false)
+    expect(doc.getNode(a.id)!.transform.position).toEqual([0, 0, 0])
+    expect(doc.getNode(b.id)!.transform.position).toEqual([5, 0, 0])
+
+    const ok = doc.commands.transformNodes([
+      { id: a.id, next: { position: [0, 0, 2] } },
+      { id: b.id, next: { position: [5, 0, 2] } }
+    ])
+    expect(ok.ok).toBe(true)
+    expect(doc.history.undo()).toBe(true)
+    expect(doc.getNode(a.id)!.transform.position).toEqual([0, 0, 0])
+    expect(doc.getNode(b.id)!.transform.position).toEqual([5, 0, 0])
+  })
+
+  it('刚体平移忽略同批重叠，仍拒绝撞上批外节点', () => {
+    const doc = createSceneDoc()
+    doc.collisionEnabled = false
+    const a = doc.commands.placeItem(cabinetItem, { position: [0, 0, 0] }).node!
+    const b = doc.commands.placeItem(cabinetItem, { position: [0.2, 0, 0], select: false }).node!
+    doc.collisionEnabled = true
+
+    const blocked = doc.commands.transformNodes([
+      { id: a.id, next: { position: [0, 0, 2] } },
+      { id: b.id, next: { position: [0.2, 0, 2] } }
+    ])
+    expect(blocked.ok).toBe(false)
+
+    const moved = doc.commands.transformNodes(
+      [
+        { id: a.id, next: { position: [0, 0, 2] } },
+        { id: b.id, next: { position: [0.2, 0, 2] } }
+      ],
+      { rigid: true }
+    )
+    expect(moved.ok).toBe(true)
+
+    doc.commands.placeItem(cabinetItem, { position: [0, 0, 6], select: false })
+    const hitOutsider = doc.commands.transformNodes(
+      [
+        { id: a.id, next: { position: [0, 0, 6] } },
+        { id: b.id, next: { position: [0.2, 0, 6] } }
+      ],
+      { rigid: true }
+    )
+    expect(hitOutsider.ok).toBe(false)
+    expect(hitOutsider.denied?.startsWith('collision:')).toBe(true)
+    expect(doc.getNode(a.id)!.transform.position).toEqual([0, 0, 2])
+  })
+
+  it('removeNodes 一次撤销恢复全部', () => {
+    const doc = createSceneDoc()
+    const a = doc.commands.placeItem(cabinetItem, { position: [0, 0, 0] }).node!
+    const b = doc.commands.placeItem(cabinetItem, { position: [4, 0, 0], select: false }).node!
+    doc.selection.set([a.id, b.id])
+    expect(doc.commands.removeNodes([a.id, b.id])).toBe(true)
+    expect(doc.getNodes()).toHaveLength(0)
+    expect(doc.history.undo()).toBe(true)
+    expect(doc.getNodes()).toHaveLength(2)
+  })
+
+  it('alignNodes 参照 primary 只移动其余节点', () => {
+    const doc = createSceneDoc()
+    doc.collisionEnabled = false
+    const a = doc.commands.placeItem(cabinetItem, { position: [0, 0, 0] }).node!
+    const b = doc.commands.placeItem(cabinetItem, { position: [4, 0, 1], select: false }).node!
+    const result = doc.commands.alignNodes([a.id, b.id], 'left', { reference: 'primary' })
+    expect(result.ok).toBe(true)
+    expect(doc.getNode(a.id)!.transform.position[0]).toBe(0)
+    expect(doc.getNode(b.id)!.transform.position[0]).toBe(0)
+    expect(doc.getNode(b.id)!.transform.position[2]).toBe(1)
+  })
 })

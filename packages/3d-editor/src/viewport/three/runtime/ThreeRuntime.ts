@@ -410,6 +410,17 @@ export class ThreeRuntime {
   /** 沿当前视线方向框住物体（透视调距离；正交调 orthoSize） */
   focusObject(object: THREE.Object3D, padding = 1.4): void {
     const box = new THREE.Box3().setFromObject(object)
+    this.focusBox(box, padding)
+  }
+
+  /** 框住多个物体的联合包围盒 */
+  focusObjects(objects: THREE.Object3D[], padding = 1.4): void {
+    const box = new THREE.Box3()
+    for (const object of objects) box.expandByObject(object)
+    this.focusBox(box, padding)
+  }
+
+  private focusBox(box: THREE.Box3, padding: number): void {
     if (box.isEmpty()) return
 
     const center = new THREE.Vector3()

@@ -2,18 +2,23 @@
 import { View, Hide } from '@element-plus/icons-vue'
 import type { LayerTreeItem } from './types'
 
-defineProps<{
+const props = defineProps<{
   nodes: LayerTreeItem[]
   selectedId: string
+  selectedIds?: string[]
 }>()
 
 const emit = defineEmits<{
-  select: [id: string]
+  select: [id: string, additive: boolean]
   'toggle-visible': [id: string, visible: boolean]
 }>()
 
-function onNodeClick(data: LayerTreeItem) {
-  emit('select', data.selectId)
+function onNodeClick(data: LayerTreeItem, _node: unknown, _comp: unknown, event?: MouseEvent) {
+  emit('select', data.selectId, Boolean(event?.ctrlKey || event?.metaKey))
+}
+
+function isSelected(id: string): boolean {
+  return props.selectedIds?.includes(id) || props.selectedId === id
 }
 
 function onToggleVisible(event: MouseEvent, data: LayerTreeItem) {
@@ -38,7 +43,7 @@ function onToggleVisible(event: MouseEvent, data: LayerTreeItem) {
       <template #default="{ data }">
         <div
           class="tree-row"
-          :class="{ hidden: !data.visible, projection: !data.editable }"
+          :class="{ hidden: !data.visible, projection: !data.editable, selected: isSelected(data.selectId) }"
         >
           <span class="tree-main">
             <span class="tree-name">{{ data.name }}</span>
@@ -92,6 +97,10 @@ function onToggleVisible(event: MouseEvent, data: LayerTreeItem) {
   gap: 6px;
   min-width: 0;
   padding-right: 2px;
+}
+
+.tree-row.selected .tree-name {
+  color: #fff;
 }
 
 .tree-row.hidden .tree-name {
